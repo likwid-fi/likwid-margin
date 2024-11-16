@@ -227,10 +227,10 @@ contract MarginHook is BaseHook, ERC20 {
 
     // given an input amount of an asset and pair reserves, returns the maximum output amount of the other asset
     function _getAmountOut(bool zeroForOne, uint256 amountIn) internal view returns (uint256 amountOut) {
-        require(amountIn > 0, "UniswapV2Library: INSUFFICIENT_INPUT_AMOUNT");
+        require(amountIn > 0, "MarginHook: INSUFFICIENT_INPUT_AMOUNT");
 
         (uint256 reservesIn, uint256 reservesOut) = zeroForOne ? (reserves0, reserves1) : (reserves1, reserves0);
-        require(reserves0 > 0 && reserves1 > 0, "UniswapV2Library: INSUFFICIENT_LIQUIDITY");
+        require(reserves0 > 0 && reserves1 > 0, "MarginHook: INSUFFICIENT_LIQUIDITY");
 
         uint256 amountInWithFee = amountIn * 997;
         uint256 numerator = amountInWithFee * reservesOut;
@@ -240,10 +240,10 @@ contract MarginHook is BaseHook, ERC20 {
 
     // given an output amount of an asset and pair reserves, returns a required input amount of the other asset
     function _getAmountIn(bool zeroForOne, uint256 amountOut) internal view returns (uint256 amountIn) {
-        require(amountOut > 0, "UniswapV2Library: INSUFFICIENT_OUTPUT_AMOUNT");
+        require(amountOut > 0, "MarginHook: INSUFFICIENT_OUTPUT_AMOUNT");
 
         (uint256 reservesIn, uint256 reservesOut) = zeroForOne ? (reserves0, reserves1) : (reserves1, reserves0);
-        require(reservesIn > 0 && reservesOut > 0, "UniswapV2Library: INSUFFICIENT_LIQUIDITY");
+        require(reservesIn > 0 && reservesOut > 0, "MarginHook: INSUFFICIENT_LIQUIDITY");
 
         uint256 numerator = reservesIn * amountOut * 1000;
         uint256 denominator = (reservesOut - amountOut) * 997;

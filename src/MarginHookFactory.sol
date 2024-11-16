@@ -66,7 +66,7 @@ contract MarginHookFactory is IMarginHookFactory {
         if (tokenA == tokenB) revert IdenticalAddresses();
 
         // Validate tokenA and tokenB are not the zero address
-        if (tokenA == address(0) || tokenB == address(0)) revert ZeroAddress();
+        if (tokenA == address(0) && tokenB == address(0)) revert ZeroAddress();
 
         // sort the tokens
         (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
