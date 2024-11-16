@@ -5,17 +5,23 @@ pragma solidity ^0.8.26;
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 // Local
 import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
+import {CurrencySettleTake} from "./libraries/CurrencySettleTake.sol";
 import {MarginHook} from "./MarginHook.sol";
 
 contract MarginHookFactory is IMarginHookFactory {
+    using CurrencySettleTake for Currency;
+    using CurrencyLibrary for Currency;
+
     error InvalidPermissions();
     error IdenticalAddresses();
     error ZeroAddress();
     error PairExists();
+    error PairNotExists();
 
+    uint160 public constant SQRT_RATIO_1_1 = 79228162514264337593543950336;
     bytes32 constant TOKEN_0_SLOT = 0x3cad5d3ec16e143a33da68c00099116ef328a882b65607bec5b2431267934a20;
     bytes32 constant TOKEN_1_SLOT = 0x5b610e8e1835afecdd154863369b91f55612defc17933f83f4425533c435a248;
 
@@ -52,7 +58,7 @@ contract MarginHookFactory is IMarginHookFactory {
         }
     }
 
-    function createHook(string memory _name, string memory _symbol, address tokenA, address tokenB)
+    function createHook(bytes32 salt, string memory _name, string memory _symbol, address tokenA, address tokenB)
         external
         returns (IHooks hook)
     {
@@ -70,11 +76,10 @@ contract MarginHookFactory is IMarginHookFactory {
         // write to transient storage: token0, token1
         _setParameters(token0, token1);
 
-        bytes32 salt = keccak256(abi.encode(_name, _symbol, token0, token1));
-
         // deploy hook (expect callback to parameters)
         hook = new MarginHook{salt: salt}(poolManager, _name, _symbol);
         address hookAddress = address(hook);
+
         // only write the tokens in order
         _pairs[token0][token1] = hookAddress;
 
@@ -88,7 +93,7 @@ contract MarginHookFactory is IMarginHookFactory {
             hooks: hook
         });
 
-        poolManager.initialize(key, 1);
+        poolManager.initialize(key, SQRT_RATIO_1_1);
 
         emit HookCreated(token0, token1, hookAddress);
     }

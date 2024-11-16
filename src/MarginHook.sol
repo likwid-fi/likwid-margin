@@ -62,8 +62,7 @@ contract MarginHook is BaseHook, ERC20 {
 
     // ******************** V2 FUNCTIONS ********************
 
-    // this low-level function should be called from a contract which performs important safety checks
-    function mint(address to) external returns (uint256 liquidity) {
+    function mint(address to) internal returns (uint256 liquidity) {
         (uint128 _reserves0, uint128 _reserves1) = getReserves();
         uint256 _totalSupply = totalSupply;
 
@@ -87,24 +86,30 @@ contract MarginHook is BaseHook, ERC20 {
         emit Mint(msg.sender, amount0, amount1);
     }
 
-    // this low-level function should be called from a contract which performs important safety checks
-    function burn(address to) external returns (uint256 amount0, uint256 amount1) {
+    function burn(address from, uint256 _liquidity) internal returns (uint256 amount0, uint256 amount1) {
         uint256 balance0 = poolManager.balanceOf(address(this), CurrencyLibrary.toId(currency0));
         uint256 balance1 = poolManager.balanceOf(address(this), CurrencyLibrary.toId(currency1));
-        uint256 liquidity = balanceOf[address(this)];
+        uint256 liquidity = balanceOf[from];
+        if (_liquidity < liquidity) {
+            liquidity = _liquidity;
+        }
 
         amount0 = (liquidity * balance0).unsafeDiv(totalSupply); // using balances ensures pro-rata distribution
         amount1 = (liquidity * balance1).unsafeDiv(totalSupply); // using balances ensures pro-rata distribution
         if (amount0 == 0 || amount1 == 0) revert InsufficientLiquidityBurnt();
 
-        _burn(address(this), liquidity);
+        _burn(from, liquidity);
 
-        _burn6909s(amount0, amount1, to);
+        // burn 6909s
+        poolManager.burn(address(this), CurrencyLibrary.toId(currency0), amount0);
+        poolManager.burn(address(this), CurrencyLibrary.toId(currency1), amount1);
+        currency0.take(poolManager, from, amount0, false);
+        currency1.take(poolManager, from, amount1, false);
+
         balance0 -= amount0;
         balance1 -= amount1;
-
         _update(balance0, balance1);
-        emit Burn(msg.sender, amount0, amount1, to);
+        emit Burn(msg.sender, amount0, amount1, from);
     }
 
     // force balances to match reserves
@@ -253,17 +258,36 @@ contract MarginHook is BaseHook, ERC20 {
         (input, output) = zeroForOne ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
     }
 
-    // ******************** 6909 BURNING ********************
+    // ******************** SELF CALL ********************
 
-    function _burn6909s(uint256 amount0, uint256 amount1, address to) internal {
-        poolManager.unlock(abi.encodeCall(this.handleBurn6909s, (amount0, amount1, to)));
+    function addLiquidity(uint256 amount0, uint256 amount1) external payable returns (uint256 liquidity) {
+        bytes memory result =
+            poolManager.unlock(abi.encodeCall(this.handleAddLiquidity, (amount0, amount1, msg.sender)));
+        liquidity = abi.decode(result, (uint256));
     }
 
-    function handleBurn6909s(uint256 amount0, uint256 amount1, address to) external selfOnly returns (bytes memory) {
-        poolManager.burn(address(this), CurrencyLibrary.toId(currency0), amount0);
-        poolManager.burn(address(this), CurrencyLibrary.toId(currency1), amount1);
-        currency0.take(poolManager, to, amount0, false);
-        currency1.take(poolManager, to, amount1, false);
+    /// @dev Handle liquidity addition by taking tokens from the sender and claiming ERC6909 to the hook address
+    function handleAddLiquidity(uint256 amount0, uint256 amount1, address sender)
+        external
+        selfOnly
+        returns (bytes memory)
+    {
+        currency0.settle(poolManager, sender, amount0, false);
+        currency0.take(poolManager, address(this), amount0, true);
+
+        currency1.settle(poolManager, sender, amount1, false);
+        currency1.take(poolManager, address(this), amount1, true);
+        uint256 liquidity = mint(sender);
+        return abi.encode(liquidity);
+    }
+
+    function removeLiquidity(uint256 _liquidity) external payable returns (uint256 liquidity) {
+        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRemoveLiquidity, (msg.sender, _liquidity)));
+        liquidity = abi.decode(result, (uint256));
+    }
+
+    function handleRemoveLiquidity(address to, uint256 _liquidity) external selfOnly returns (bytes memory) {
+        (uint256 amount0, uint256 amount1) = burn(to, _liquidity);
 
         return abi.encode(amount0, amount1);
     }

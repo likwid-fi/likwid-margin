@@ -8,7 +8,7 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 interface IMarginHookFactory {
     event HookCreated(address indexed token0, address indexed token1, address pair);
 
-    function createHook(string memory _name, string memory _symbol, address tokenA, address tokenB)
+    function createHook(bytes32 salt, string memory _name, string memory _symbol, address tokenA, address tokenB)
         external
         returns (IHooks hook);
     function getPair(address tokenA, address tokenB) external returns (address hook);
