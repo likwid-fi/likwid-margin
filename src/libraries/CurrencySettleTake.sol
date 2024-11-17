@@ -41,4 +41,19 @@ library CurrencySettleTake {
     function take(Currency currency, IPoolManager manager, address recipient, uint256 amount, bool claims) internal {
         claims ? manager.mint(recipient, currency.toId(), amount) : manager.take(currency, recipient, amount);
     }
+
+    function transfer(Currency currency, address payer, address recipient, uint256 amount)
+        external
+        returns (bool success)
+    {
+        if (currency.isAddressZero()) {
+            (success,) = recipient.call{value: amount}("");
+        } else {
+            if (recipient != address(this)) {
+                IERC20Minimal(Currency.unwrap(currency)).transferFrom(payer, recipient, amount);
+            } else {
+                IERC20Minimal(Currency.unwrap(currency)).transfer(recipient, amount);
+            }
+        }
+    }
 }

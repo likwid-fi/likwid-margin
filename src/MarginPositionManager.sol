@@ -2,8 +2,11 @@
 pragma solidity ^0.8.26;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
+import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 // Local
+import {CurrencySettleTake} from "./libraries/CurrencySettleTake.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
 import {IMarginHook} from "./interfaces/IMarginHook.sol";
@@ -11,6 +14,9 @@ import {MarginPosition} from "./types/MarginPosition.sol";
 import {BorrowParams} from "./types/BorrowParams.sol";
 
 contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
+    using CurrencySettleTake for Currency;
+    using CurrencyLibrary for Currency;
+
     error NotHook();
 
     uint256 private _nextId = 1;
@@ -25,14 +31,14 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         _position = _positions[positionId];
     }
 
-    function borrowToken(IMarginHookFactory factory, BorrowParams memory params) external payable {
+    function borrow(IMarginHookFactory factory, BorrowParams memory params) external payable {
         address hook = factory.getHookPair(params.borrowToken, params.marginToken);
         require(hook != address(0), "HOOK_NOT_EXISTS");
         address zeroToken = params.borrowToken < params.marginToken ? params.borrowToken : params.marginToken;
         if (zeroToken == address(0)) {
             require(msg.value >= params.marginSell, "NATIVE_AMOUNT_ERR");
         }
-        params = IMarginHook(hook).borrowToken{value: msg.value}(params);
+        params = IMarginHook(hook).borrow{value: msg.value}(params);
         (, uint24 _liquidationLTV) = IMarginHook(hook).ltvParameters();
         uint256 positionId = _borrowPositions[hook][params.borrowToken][msg.sender];
         if (positionId == 0) {
@@ -61,23 +67,26 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
     }
 
-    function returnToken(IMarginHookFactory factory, uint256 positionId, uint256 returnAmount) external payable {
+    function repay(IMarginHookFactory factory, uint256 positionId, uint256 repayAmount) external payable {
         require(ownerOf(positionId) != msg.sender, "AUTH_ERROR");
         MarginPosition storage _position = _positions[positionId];
         address hook = factory.getHookPair(_position.borrowToken, _position.marginToken);
         require(hook != address(0), "HOOK_NOT_EXISTS");
-        address zeroToken =
-            _position.borrowToken < _position.marginToken ? _position.borrowToken : _position.marginToken;
-        if (zeroToken == address(0)) {
-            require(msg.value >= returnAmount, "NATIVE_AMOUNT_ERR");
+        if (_position.borrowToken == address(0)) {
+            require(msg.value >= repayAmount, "NATIVE_AMOUNT_ERR");
+        } else {
+            require(
+                IERC20Minimal(_position.borrowToken).allowance(msg.sender, hook) >= repayAmount, "ALLOWANCE_AMOUNT_ERR"
+            );
         }
-        (uint256 releaseSell, uint256 releaseTotal) =
-            IMarginHook(hook).returnToken{value: msg.value}(msg.sender, positionId, returnAmount);
+        IMarginHook(hook).repay{value: msg.value}(msg.sender, _position.borrowToken, repayAmount);
         // update position
-        _position.marginSell -= releaseSell;
+        uint256 releaseTotal = repayAmount * _position.marginTotal / _position.borrowAmount;
+        _position.nonce++;
         _position.marginTotal -= releaseTotal;
-        _position.borrowAmount -= returnAmount;
-        _position.nonce += 1;
+        _position.borrowAmount -= repayAmount;
+        _position.liquidationAmount -= releaseTotal;
+        Currency.wrap(_position.marginToken).transfer(address(this), msg.sender, releaseTotal);
         if (_position.borrowAmount == 0) {
             _burn(positionId);
         }

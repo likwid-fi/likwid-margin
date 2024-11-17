@@ -157,14 +157,6 @@ contract MarginHookTest is Test {
     }
 
     function test_hook_swap() public {
-        // PoolKey memory key = PoolKey({
-        //     currency0: Currency.wrap(address(0)),
-        //     currency1: Currency.wrap(address(tokenB)),
-        //     fee: 0,
-        //     tickSpacing: 1,
-        //     hooks: nativeHook
-        // });
-        // manager.initialize(key, SQRT_RATIO_1_1);
         vm.startPrank(user);
         tokenB.approve(address(nativeHook), 1e18);
         nativeHook.addLiquidity{value: 1e18}(1e18, 1e18);

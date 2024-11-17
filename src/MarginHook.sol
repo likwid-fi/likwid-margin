@@ -322,20 +322,20 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
 
     // ******************** MARGIN FUNCTIONS ********************
 
-    function borrowToken(BorrowParams memory params) external payable positionOnly returns (BorrowParams memory) {
+    function borrow(BorrowParams memory params) external payable positionOnly returns (BorrowParams memory) {
         require(
             params.borrowToken == Currency.unwrap(currency0) && params.marginToken == Currency.unwrap(currency1)
                 || params.borrowToken == Currency.unwrap(currency1) && params.marginToken == Currency.unwrap(currency0),
             "ERROR_HOOK"
         );
         bytes memory result = poolManager.unlock(
-            abi.encodeCall(this.handleBorrowToken, (params.marginSell, params.leverage, params.borrowToken))
+            abi.encodeCall(this.handleBorrow, (params.marginSell, params.leverage, params.borrowToken))
         );
         (params.marginTotal, params.borrowAmount) = abi.decode(result, (uint256, uint256));
         return params;
     }
 
-    function handleBorrowToken(uint256 marginSell, uint24 leverage, address _borrowToken)
+    function handleBorrow(uint256 marginSell, uint24 leverage, address _borrowToken)
         external
         selfOnly
         returns (bytes memory)
@@ -358,33 +358,27 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         return abi.encode(marginTotal, borrowAmount);
     }
 
-    function returnToken(address payer, uint256 positionId, uint256 returnAmount)
+    function repay(address payer, address borrowToken, uint256 repayAmount)
         external
         payable
         positionOnly
-        returns (uint256 releaseSell, uint256 releaseTotal)
+        returns (uint256)
     {
-        require(marginPositionManager.ownerOf(positionId) == payer, "AUTH_ERROR");
-        bytes memory result =
-            poolManager.unlock(abi.encodeCall(this.handleReturnToken, (payer, positionId, returnAmount)));
-        (releaseSell, releaseTotal) = abi.decode(result, (uint256, uint256));
+        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRepay, (payer, borrowToken, repayAmount)));
+        return abi.decode(result, (uint256));
     }
 
-    function handleReturnToken(address payer, uint256 positionId, uint256 returnAmount)
+    function handleRepay(address payer, address borrowToken, uint256 repayAmount)
         external
         selfOnly
-        returns (uint256 releaseSell, uint256 releaseTotal)
+        returns (bytes memory)
     {
-        MarginPosition memory _position = marginPositionManager.getPosition(positionId);
-        require(returnAmount > 0 && returnAmount <= _position.borrowAmount, "amount err");
-        // return borrow
-        Currency borrowCurrency = Currency.wrap(_position.borrowToken);
-        borrowCurrency.settle(poolManager, payer, returnAmount, false);
-        borrowCurrency.take(poolManager, address(this), returnAmount, true);
+        // repay borrow
+        Currency borrowCurrency = Currency.wrap(borrowToken);
+        borrowCurrency.settle(poolManager, payer, repayAmount, false);
+        borrowCurrency.take(poolManager, address(this), repayAmount, true);
         // burn mirror token
-        mirrorTokenManager.burn(borrowCurrency.toId(), returnAmount);
-        // Release margin
-        releaseSell = returnAmount * _position.marginSell / _position.borrowAmount;
-        releaseTotal = returnAmount * _position.marginTotal / _position.borrowAmount;
+        mirrorTokenManager.burn(borrowCurrency.toId(), repayAmount);
+        return abi.encode(repayAmount);
     }
 }
