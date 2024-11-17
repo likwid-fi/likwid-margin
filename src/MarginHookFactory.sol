@@ -8,6 +8,9 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 // Local
 import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
+import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
+import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
+
 import {CurrencySettleTake} from "./libraries/CurrencySettleTake.sol";
 import {MarginHook} from "./MarginHook.sol";
 
@@ -18,28 +21,44 @@ contract MarginHookFactory is IMarginHookFactory {
     error InvalidPermissions();
     error IdenticalAddresses();
     error ZeroAddress();
-    error PairExists();
-    error PairNotExists();
 
     uint160 public constant SQRT_RATIO_1_1 = 79228162514264337593543950336;
     bytes32 constant TOKEN_0_SLOT = 0x3cad5d3ec16e143a33da68c00099116ef328a882b65607bec5b2431267934a20;
     bytes32 constant TOKEN_1_SLOT = 0x5b610e8e1835afecdd154863369b91f55612defc17933f83f4425533c435a248;
 
     IPoolManager public immutable poolManager;
+    IMirrorTokenManager public immutable mirrorTokenManager;
+    IMarginPositionManager public immutable marginPositionManager;
 
     // pairs, always stored token0 -> token1 -> pair, where token0 < token1
     mapping(address => mapping(address => address)) internal _pairs;
 
-    constructor(IPoolManager _poolManager) {
+    constructor(
+        IPoolManager _poolManager,
+        IMirrorTokenManager _mirrorTokenManager,
+        IMarginPositionManager _marginPositionManager
+    ) {
         poolManager = _poolManager;
+        mirrorTokenManager = _mirrorTokenManager;
+        marginPositionManager = _marginPositionManager;
     }
 
-    function parameters() external view returns (Currency currency0, Currency currency1, IPoolManager _poolManager) {
+    function parameters()
+        external
+        view
+        returns (
+            Currency currency0,
+            Currency currency1,
+            IMirrorTokenManager _mirrorTokenManager,
+            IMarginPositionManager _marginPositionManager
+        )
+    {
         (currency0, currency1) = _getParameters();
-        _poolManager = poolManager;
+        _mirrorTokenManager = mirrorTokenManager;
+        _marginPositionManager = marginPositionManager;
     }
 
-    function getPair(address tokenA, address tokenB) external view returns (address) {
+    function getHookPair(address tokenA, address tokenB) external view returns (address) {
         (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
         return _pairs[token0][token1];
     }

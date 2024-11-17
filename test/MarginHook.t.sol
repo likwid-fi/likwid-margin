@@ -4,6 +4,8 @@ pragma solidity ^0.8.24;
 // Local
 import {MarginHook} from "../src/MarginHook.sol";
 import {MarginHookFactory} from "../src/MarginHookFactory.sol";
+import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
+import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
@@ -41,6 +43,8 @@ contract MarginHookTest is Test {
     Currency currency1;
     PoolManager manager;
     MarginHookFactory factory;
+    MirrorTokenManager mirrorTokenManager;
+    MarginPositionManager marginPositionManager;
     MarginRouter swapRouter;
 
     function parameters() external view returns (Currency, Currency, IPoolManager) {
@@ -94,7 +98,9 @@ contract MarginHookTest is Test {
         (bool success,) = user.call{value: 10e18}("");
         assertTrue(success);
         manager = new PoolManager(vm.addr(1));
-        factory = new MarginHookFactory(manager);
+        mirrorTokenManager = new MirrorTokenManager(vm.addr(1));
+        marginPositionManager = new MarginPositionManager(vm.addr(1));
+        factory = new MarginHookFactory(manager, mirrorTokenManager, marginPositionManager);
 
         deployMintAndApprove2Currencies();
 
@@ -104,7 +110,7 @@ contract MarginHookTest is Test {
     function test_hook_liquidity() public {
         hook.addLiquidity(1e18, 1e18);
         uint256 liquidity = hook.balanceOf(address(this));
-        (uint128 _reserves0, uint128 _reserves1) = hook.getReserves();
+        (uint256 _reserves0, uint256 _reserves1) = hook.getReserves();
         assertEq(_reserves0, _reserves1);
         hook.removeLiquidity(liquidity / 2);
         uint256 liquidityHelf = hook.balanceOf(address(this));
@@ -126,7 +132,7 @@ contract MarginHookTest is Test {
             liquidity,
             nativeHook.balanceOf(address(this))
         );
-        (uint128 _reserves0, uint128 _reserves1) = nativeHook.getReserves();
+        (uint256 _reserves0, uint256 _reserves1) = nativeHook.getReserves();
         assertEq(_reserves0, _reserves1);
         nativeHook.removeLiquidity(liquidity / 2);
         uint256 liquidityHelf = nativeHook.balanceOf(user);
@@ -134,9 +140,9 @@ contract MarginHookTest is Test {
         vm.stopPrank();
     }
 
-    function _getAmountOut(bool zeroForOne, uint256 amountIn, uint128 reserves0, uint128 reserves1)
+    function _getAmountOut(bool zeroForOne, uint256 amountIn, uint256 reserves0, uint256 reserves1)
         internal
-        view
+        pure
         returns (uint256 amountOut)
     {
         require(amountIn > 0, "MarginHook: INSUFFICIENT_INPUT_AMOUNT");
@@ -162,7 +168,7 @@ contract MarginHookTest is Test {
         vm.startPrank(user);
         tokenB.approve(address(nativeHook), 1e18);
         nativeHook.addLiquidity{value: 1e18}(1e18, 1e18);
-        (uint128 _reserves0, uint128 _reserves1) = nativeHook.getReserves();
+        (uint256 _reserves0, uint256 _reserves1) = nativeHook.getReserves();
         assertEq(_reserves0, _reserves1);
         uint256 amountOut = _getAmountOut(true, 100, _reserves0, _reserves1);
         console.log("_reserves0:%s, _reserves1:%s, _reserves1:%s", _reserves0, _reserves1, amountOut);

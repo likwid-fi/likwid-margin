@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
-interface IMarginPositionManager {}
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {MarginPosition} from "../types/MarginPosition.sol";
+
+interface IMarginPositionManager is IERC721 {
+    function getPosition(uint256 positionId) external view returns (MarginPosition memory _position);
+}
