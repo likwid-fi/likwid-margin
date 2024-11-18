@@ -50,9 +50,9 @@ library CurrencySettleTake {
             (success,) = recipient.call{value: amount}("");
         } else {
             if (recipient != address(this)) {
-                IERC20Minimal(Currency.unwrap(currency)).transferFrom(payer, recipient, amount);
+                success = IERC20Minimal(Currency.unwrap(currency)).transferFrom(payer, recipient, amount);
             } else {
-                IERC20Minimal(Currency.unwrap(currency)).transfer(recipient, amount);
+                success = IERC20Minimal(Currency.unwrap(currency)).transfer(recipient, amount);
             }
         }
     }

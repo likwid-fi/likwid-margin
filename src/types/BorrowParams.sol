@@ -8,6 +8,6 @@ struct BorrowParams {
     uint256 marginSell;
     uint256 marginTotal;
     uint256 borrowAmount;
-    address recipient;
+    uint256 borrowMinAmount;
     uint256 deadline;
 }

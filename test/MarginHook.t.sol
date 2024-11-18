@@ -7,6 +7,8 @@ import {MarginHookFactory} from "../src/MarginHookFactory.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
+import {HookParams} from "../src/types/HookParams.sol";
+import {BorrowParams} from "../src/types/BorrowParams.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
@@ -68,15 +70,31 @@ contract MarginHookTest is Test {
         // Mine a salt that will produce a hook address with the correct flags
         (address hookAddress, bytes32 salt) =
             HookMiner.find(address(factory), flags, type(MarginHook).creationCode, constructorArgs);
-        IHooks createHookAddress = factory.createHook(salt, "TEST HOOK", "TH", address(tokenA), address(tokenB));
+        HookParams memory params = HookParams({
+            salt: salt,
+            name: "TEST HOOK",
+            symbol: "TH",
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
+            fee: 3000
+        });
+        IHooks createHookAddress = factory.createHook(params);
         // deployCodeTo("MarginHook.sol:MarginHook", constructorArgs, hookAddress);
         assertEq(address(createHookAddress), hookAddress);
         console.log("createHookAddress:%s, hookAddress:%s", address(createHookAddress), hookAddress);
         hook = MarginHook(hookAddress);
 
-        constructorArgs = abi.encode(manager, "TEST NATIVE", "TH");
+        constructorArgs = abi.encode(manager, "TEST NATIVE HOOK", "TNH");
         (hookAddress, salt) = HookMiner.find(address(factory), flags, type(MarginHook).creationCode, constructorArgs);
-        createHookAddress = factory.createHook(salt, "TEST NATIVE", "TH", address(0), address(tokenB));
+        params = HookParams({
+            salt: salt,
+            name: "TEST NATIVE HOOK",
+            symbol: "TNH",
+            tokenA: address(0),
+            tokenB: address(tokenB),
+            fee: 3000
+        });
+        createHookAddress = factory.createHook(params);
         assertEq(address(createHookAddress), hookAddress);
         console.log("native createHookAddress:%s, hookAddress:%s", address(createHookAddress), hookAddress);
         nativeHook = MarginHook(hookAddress);
@@ -100,7 +118,7 @@ contract MarginHookTest is Test {
         manager = new PoolManager(vm.addr(1));
         mirrorTokenManager = new MirrorTokenManager(vm.addr(1));
         marginPositionManager = new MarginPositionManager(vm.addr(1));
-        factory = new MarginHookFactory(manager, mirrorTokenManager, marginPositionManager);
+        factory = new MarginHookFactory(vm.addr(1), manager, mirrorTokenManager, marginPositionManager);
 
         deployMintAndApprove2Currencies();
 
@@ -162,16 +180,49 @@ contract MarginHookTest is Test {
         nativeHook.addLiquidity{value: 1e18}(1e18, 1e18);
         (uint256 _reserves0, uint256 _reserves1) = nativeHook.getReserves();
         assertEq(_reserves0, _reserves1);
+        console.log("reserves0:%s,reserves1:%s", _reserves0, _reserves1);
         uint256 amountOut = _getAmountOut(true, 100, _reserves0, _reserves1);
-        console.log("_reserves0:%s, _reserves1:%s, _reserves1:%s", _reserves0, _reserves1, amountOut);
+        console.log("_reserves0:%s, _reserves1:%s, amountOut:%s", _reserves0, _reserves1, amountOut);
         // swap
         address[] memory _path = new address[](2);
         _path[0] = address(0);
         _path[1] = address(tokenB);
-        uint256 balance1 = manager.balanceOf(address(nativeHook), CurrencyLibrary.toId(currency1));
-        console.log("before swap user.balance:%s,tokenB:%s,balance1:%s", user.balance, tokenB.balanceOf(user), balance1);
+        uint256 balance0 = manager.balanceOf(address(nativeHook), 0);
+        uint256 balance1 = manager.balanceOf(address(nativeHook), uint160(address(tokenB)));
+        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        console.log("before swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
         swapRouter.swapExactETHForTokens{value: 100}(_path, user, 0, type(uint256).max);
         console.log("after swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
+        (_reserves0, _reserves1) = nativeHook.getReserves();
+        console.log("reserves0:%s,reserves1:%s", _reserves0, _reserves1);
+        vm.stopPrank();
+    }
+
+    function test_hook_borrow() public {
+        vm.startPrank(user);
+        tokenB.approve(address(nativeHook), 1e18);
+        nativeHook.addLiquidity{value: 1e18}(1e18, 1e18);
+        (uint256 _reserves0, uint256 _reserves1) = nativeHook.getReserves();
+        assertEq(_reserves0, _reserves1);
+        uint256 rate = nativeHook.getBorrowRate(Currency.wrap(address(0)));
+        assertEq(rate, 50000);
+        BorrowParams memory params = BorrowParams({
+            marginToken: address(0),
+            borrowToken: address(tokenB),
+            leverage: 3,
+            marginSell: 0.5e18,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMinAmount: 0,
+            deadline: block.timestamp + 1000
+        });
+        uint256 payValue = 0.5e18;
+        marginPositionManager.borrow{value: payValue}(factory, params);
+        console.log(
+            "nativeHook:%s,marginPositionManager:%s",
+            address(nativeHook).balance,
+            address(marginPositionManager).balance
+        );
         vm.stopPrank();
     }
 }

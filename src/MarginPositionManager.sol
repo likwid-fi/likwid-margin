@@ -19,6 +19,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
 
     error NotHook();
 
+    uint256 public constant ONE_MILLION = 10 ** 6;
     uint256 private _nextId = 1;
 
     mapping(uint256 => MarginPosition) private _positions;
@@ -27,18 +28,23 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
 
     constructor(address initialOwner) ERC721("LIKWIDMarginPositionManager", "LMPM") Owned(initialOwner) {}
 
+    modifier ensure(uint256 deadline) {
+        require(deadline >= block.timestamp, "MarginPositionManager: EXPIRED");
+        _;
+    }
+
     function getPosition(uint256 positionId) external view returns (MarginPosition memory _position) {
         _position = _positions[positionId];
     }
 
-    function borrow(IMarginHookFactory factory, BorrowParams memory params) external payable {
+    function borrow(IMarginHookFactory factory, BorrowParams memory params) external payable ensure(params.deadline) {
         address hook = factory.getHookPair(params.borrowToken, params.marginToken);
         require(hook != address(0), "HOOK_NOT_EXISTS");
-        address zeroToken = params.borrowToken < params.marginToken ? params.borrowToken : params.marginToken;
-        if (zeroToken == address(0)) {
-            require(msg.value >= params.marginSell, "NATIVE_AMOUNT_ERR");
-        }
-        params = IMarginHook(hook).borrow{value: msg.value}(params);
+        bool success = Currency.wrap(params.marginToken).transfer(msg.sender, address(this), params.marginSell);
+        require(success, "MARGIN_SELL_ERR");
+        uint256 rateLast;
+        (rateLast, params) = IMarginHook(hook).borrow(params);
+        require(params.borrowAmount >= params.borrowMinAmount, "UNDERFLOW_MIN");
         (, uint24 _liquidationLTV) = IMarginHook(hook).ltvParameters();
         uint256 positionId = _borrowPositions[hook][params.borrowToken][msg.sender];
         if (positionId == 0) {
@@ -51,15 +57,18 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
                 marginTotal: params.marginTotal,
                 borrowToken: params.borrowToken,
                 borrowAmount: params.borrowAmount,
-                liquidationAmount: params.marginSell * _liquidationLTV / 10 ** 4 + params.marginTotal
+                liquidationAmount: params.marginSell * _liquidationLTV / ONE_MILLION + params.marginTotal,
+                rateCumulativeLast: rateLast
             });
         } else {
             MarginPosition storage _position = _positions[positionId];
             _position.nonce++;
             _position.marginSell += params.marginSell;
             _position.marginTotal += params.marginTotal;
+            _position.borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
             _position.borrowAmount += params.borrowAmount;
-            _position.liquidationAmount += params.marginSell * _liquidationLTV / 10 ** 4 + params.marginTotal;
+            _position.liquidationAmount += params.marginSell * _liquidationLTV / ONE_MILLION + params.marginTotal;
+            _position.rateCumulativeLast = rateLast;
         }
 
         if (!isApprovedForAll(msg.sender, address(this))) {
@@ -75,9 +84,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (_position.borrowToken == address(0)) {
             require(msg.value >= repayAmount, "NATIVE_AMOUNT_ERR");
         } else {
-            require(
-                IERC20Minimal(_position.borrowToken).allowance(msg.sender, hook) >= repayAmount, "ALLOWANCE_AMOUNT_ERR"
-            );
+            bool allowanceFlag = IERC20Minimal(_position.borrowToken).allowance(msg.sender, hook) >= repayAmount;
+            require(allowanceFlag, "ALLOWANCE_AMOUNT_ERR");
         }
         IMarginHook(hook).repay{value: msg.value}(msg.sender, _position.borrowToken, repayAmount);
         // update position
@@ -88,7 +96,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         _position.liquidationAmount -= releaseTotal;
         Currency.wrap(_position.marginToken).transfer(address(this), msg.sender, releaseTotal);
         if (_position.borrowAmount == 0) {
+            Currency.wrap(_position.marginToken).transfer(address(this), msg.sender, _position.marginSell);
             _burn(positionId);
         }
     }
+
+    receive() external payable {}
 }

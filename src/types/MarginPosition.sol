@@ -11,4 +11,5 @@ struct MarginPosition {
     uint256 borrowAmount;
     // (marginSell1 * liquidationLTV1 + marginTotal1) + ... +  (marginSelln * liquidationLTVn + marginTotaln)
     uint256 liquidationAmount;
+    uint256 rateCumulativeLast;
 }
