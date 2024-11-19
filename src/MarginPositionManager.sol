@@ -37,7 +37,12 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         _position = _positions[positionId];
     }
 
-    function borrow(IMarginHookFactory factory, BorrowParams memory params) external payable ensure(params.deadline) {
+    function borrow(IMarginHookFactory factory, BorrowParams memory params)
+        external
+        payable
+        ensure(params.deadline)
+        returns (uint256, uint256)
+    {
         address hook = factory.getHookPair(params.borrowToken, params.marginToken);
         require(hook != address(0), "HOOK_NOT_EXISTS");
         bool success = Currency.wrap(params.marginToken).transfer(msg.sender, address(this), params.marginSell);
@@ -60,6 +65,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
                 liquidationAmount: params.marginSell * _liquidationLTV / ONE_MILLION + params.marginTotal,
                 rateCumulativeLast: rateLast
             });
+            _borrowPositions[hook][params.borrowToken][msg.sender] = positionId;
         } else {
             MarginPosition storage _position = _positions[positionId];
             _position.nonce++;
@@ -74,6 +80,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (!isApprovedForAll(msg.sender, address(this))) {
             _setApprovalForAll(msg.sender, address(this), true);
         }
+        return (positionId, params.borrowAmount);
     }
 
     function repay(IMarginHookFactory factory, uint256 positionId, uint256 repayAmount) external payable {

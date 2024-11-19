@@ -9,6 +9,7 @@ import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
 import {HookParams} from "../src/types/HookParams.sol";
 import {BorrowParams} from "../src/types/BorrowParams.sol";
+import {MarginPosition} from "../src/types/MarginPosition.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
@@ -206,22 +207,65 @@ contract MarginHookTest is Test {
         assertEq(_reserves0, _reserves1);
         uint256 rate = nativeHook.getBorrowRate(Currency.wrap(address(0)));
         assertEq(rate, 50000);
+        uint256 positionId;
+        uint256 borrowAmount;
+        uint256 payValue = 0.1e18;
         BorrowParams memory params = BorrowParams({
             marginToken: address(0),
             borrowToken: address(tokenB),
             leverage: 3,
-            marginSell: 0.5e18,
+            marginSell: payValue,
             marginTotal: 0,
             borrowAmount: 0,
             borrowMinAmount: 0,
             deadline: block.timestamp + 1000
         });
-        uint256 payValue = 0.5e18;
-        marginPositionManager.borrow{value: payValue}(factory, params);
+
+        (positionId, borrowAmount) = marginPositionManager.borrow{value: payValue}(factory, params);
         console.log(
             "nativeHook:%s,marginPositionManager:%s",
             address(nativeHook).balance,
             address(marginPositionManager).balance
+        );
+        console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
+        MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        console.log(
+            "positionId:%s,.position.borrowAmount:%s,rateCumulativeLast:%s",
+            positionId,
+            position.borrowAmount,
+            position.rateCumulativeLast
+        );
+        rate = nativeHook.getBorrowRate(Currency.wrap(address(tokenB)));
+        console.log("rate:%s", rate);
+        vm.warp(3600 * 10);
+        uint256 q = rate * 3600 * 10 / 24 / 365 / 3600;
+        console.log("q:%s", q);
+        uint256 borrowAmountLast = borrowAmount + borrowAmount * rate / 24 / 365 / 10 ** 5;
+        payValue = 0.2e18;
+        params = BorrowParams({
+            marginToken: address(0),
+            borrowToken: address(tokenB),
+            leverage: 3,
+            marginSell: payValue,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMinAmount: 0,
+            deadline: block.timestamp + 1000
+        });
+
+        (positionId, borrowAmount) = marginPositionManager.borrow{value: payValue}(factory, params);
+        console.log(
+            "nativeHook:%s,marginPositionManager:%s",
+            address(nativeHook).balance,
+            address(marginPositionManager).balance
+        );
+        console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
+        position = marginPositionManager.getPosition(positionId);
+        console.log(
+            "positionId:%s,.position.borrowAmount:%s,all:%s",
+            positionId,
+            position.borrowAmount,
+            borrowAmountLast + borrowAmount
         );
         vm.stopPrank();
     }

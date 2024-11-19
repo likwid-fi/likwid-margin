@@ -57,6 +57,8 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
 
     uint256 private reserve0;
     uint256 private reserve1;
+    uint256 private mirrorReserve0;
+    uint256 private mirrorReserve1;
     uint256 private blockTimestampLast; // uses single storage slot, accessible via getReserves
     uint256 public rate0CumulativeLast;
     uint256 public rate1CumulativeLast;
@@ -88,8 +90,8 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
     }
 
     function getReserves() public view returns (uint256 _reserve0, uint256 _reserve1) {
-        _reserve0 = reserve0 + mirrorTokenManager.balanceOf(address(this), currency0.toId());
-        _reserve1 = reserve1 + mirrorTokenManager.balanceOf(address(this), currency1.toId());
+        _reserve0 = reserve0 + mirrorReserve0;
+        _reserve1 = reserve1 + mirrorReserve1;
     }
 
     function ltvParameters() external view returns (uint24 _initialLTV, uint24 _liquidationLTV) {
@@ -100,7 +102,8 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
     function getBorrowRate(Currency borrowToken) external view returns (uint256) {
         require(borrowToken == currency0 || borrowToken == currency1, "TOKEN_ERROR");
         uint256 tokenReserve = borrowToken == currency0 ? reserve0 : reserve1;
-        return _getBorrowRate(borrowToken, tokenReserve);
+        uint256 mirrorReserve = mirrorTokenManager.balanceOf(address(this), borrowToken.toId());
+        return _getBorrowRate(tokenReserve, mirrorReserve);
     }
 
     // ******************** V2 FUNCTIONS ********************
@@ -277,28 +280,41 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
 
     // ******************** INTERNAL FUNCTIONS ********************
 
-    function _update(uint256 balance0, uint256 balance1) private {
+    function _update(uint256 balance0, uint256 balance1, uint256 mirrorBalance0, uint256 mirrorBalance1) private {
         if (balance0 > type(uint128).max || balance1 > type(uint128).max) revert BalanceOverflow();
-        reserve0 = balance0;
-        reserve1 = balance1;
+        if (mirrorBalance0 == 0) {
+            mirrorBalance0 = mirrorTokenManager.balanceOf(address(this), currency0.toId());
+        }
+        if (mirrorBalance1 == 0) {
+            mirrorBalance1 = mirrorTokenManager.balanceOf(address(this), currency1.toId());
+        }
         uint256 timeElapsed = block.timestamp - blockTimestampLast;
-        uint256 rate0 = ONE_MILLION + _getBorrowRate(currency0, reserve0) * timeElapsed / YEAR_SECONDS;
-        uint256 rate1 = ONE_MILLION + _getBorrowRate(currency1, reserve1) * timeElapsed / YEAR_SECONDS;
+        uint256 rate0Last = ONE_MILLION + _getBorrowRate(reserve0, mirrorReserve0) * timeElapsed / YEAR_SECONDS;
+        uint256 rate1Last = ONE_MILLION + _getBorrowRate(reserve1, mirrorReserve1) * timeElapsed / YEAR_SECONDS;
 
         if (rate0CumulativeLast == 0) {
-            rate0CumulativeLast = rate0;
+            rate0CumulativeLast = rate0Last;
         } else {
-            rate0CumulativeLast = rate0CumulativeLast * rate0 / ONE_MILLION;
+            rate0CumulativeLast = rate0CumulativeLast * rate0Last / ONE_MILLION;
         }
 
         if (rate1CumulativeLast == 0) {
-            rate1CumulativeLast = rate1;
+            rate1CumulativeLast = rate1Last;
         } else {
-            rate1CumulativeLast = rate1CumulativeLast * rate1 / ONE_MILLION;
+            rate1CumulativeLast = rate1CumulativeLast * rate1Last / ONE_MILLION;
         }
 
         blockTimestampLast = block.timestamp;
+
+        reserve0 = balance0;
+        reserve1 = balance1;
+        mirrorReserve0 = mirrorBalance0;
+        mirrorReserve1 = mirrorBalance1;
         emit Sync(reserve0, reserve1);
+    }
+
+    function _update(uint256 balance0, uint256 balance1) private {
+        _update(balance0, balance1, 0, 0);
     }
 
     // given an input amount of an asset and pair reserve, returns the maximum output amount of the other asset
@@ -334,8 +350,11 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         (input, output) = zeroForOne ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
     }
 
-    function _getBorrowRate(Currency borrowToken, uint256 tokenReserve) internal view returns (uint256) {
-        uint256 mirrorReserve = mirrorTokenManager.balanceOf(address(this), borrowToken.toId());
+    function _getBorrowRate(uint256 tokenReserve, uint256 mirrorReserve) internal view returns (uint256) {
+        if (tokenReserve == 0) {
+            return rateStatus.rateBase;
+        }
+        // uint256 mirrorReserve = mirrorTokenManager.balanceOf(address(this), borrowToken.toId());
         uint256 useLevel = mirrorReserve * ONE_MILLION / (mirrorReserve + tokenReserve);
         if (useLevel >= rateStatus.useHighLevel) {
             return rateStatus.rateBase + rateStatus.useHighLevel * rateStatus.mLow
@@ -356,15 +375,14 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
     function handleAddLiquidity(uint256 amount0, uint256 amount1, address sender)
         external
         selfOnly
-        returns (bytes memory)
+        returns (uint256 liquidity)
     {
         currency0.settle(poolManager, sender, amount0, false);
         currency0.take(poolManager, address(this), amount0, true);
 
         currency1.settle(poolManager, sender, amount1, false);
         currency1.take(poolManager, address(this), amount1, true);
-        uint256 liquidity = mint(sender);
-        return abi.encode(liquidity);
+        liquidity = mint(sender);
     }
 
     function removeLiquidity(uint256 _liquidity) external payable returns (uint256 amount0, uint256 amount1) {
@@ -372,10 +390,12 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         (amount0, amount1) = abi.decode(result, (uint256, uint256));
     }
 
-    function handleRemoveLiquidity(address to, uint256 _liquidity) external selfOnly returns (bytes memory) {
-        (uint256 amount0, uint256 amount1) = burn(to, _liquidity);
-
-        return abi.encode(amount0, amount1);
+    function handleRemoveLiquidity(address to, uint256 _liquidity)
+        external
+        selfOnly
+        returns (uint256 amount0, uint256 amount1)
+    {
+        (amount0, amount1) = burn(to, _liquidity);
     }
 
     // ******************** FACTORY CALL ********************
@@ -402,30 +422,30 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         (params.marginTotal, params.borrowAmount) = abi.decode(result, (uint256, uint256));
         uint256 _rateCumulativeLast =
             params.borrowToken == Currency.unwrap(currency0) ? rate0CumulativeLast : rate1CumulativeLast;
+
         return (_rateCumulativeLast, params);
     }
 
     function handleBorrow(uint256 marginSell, uint24 leverage, address _borrowToken)
         external
         selfOnly
-        returns (bytes memory)
+        returns (uint256 marginTotal, uint256 borrowAmount)
     {
         Currency borrowCurrency = Currency.wrap(_borrowToken);
         require(currency0 == borrowCurrency || currency1 == borrowCurrency, "borrow token err");
         bool zeroForOne = currency0 == borrowCurrency;
         Currency marginCurrency = zeroForOne ? currency1 : currency0;
         uint256 borrowReserves = zeroForOne ? reserve0 : reserve1;
-        uint256 marginTotal = marginSell * leverage * initialLTV / (10 ** 6);
-        uint256 borrowAmount = _getAmountOut(zeroForOne, marginTotal);
+        marginTotal = marginSell * leverage * initialLTV / (10 ** 6);
+        borrowAmount = _getAmountOut(zeroForOne, marginTotal);
         require(borrowReserves > borrowAmount, "token not enough");
         marginTotal = _getAmountIn(zeroForOne, borrowAmount);
         // send total token
-        poolManager.burn(address(this), CurrencyLibrary.toId(marginCurrency), marginTotal);
+        marginCurrency.settle(poolManager, address(this), marginTotal, true);
         marginCurrency.take(poolManager, address(marginPositionManager), marginTotal, false);
         // mint mirror token
         mirrorTokenManager.mint(borrowCurrency.toId(), borrowAmount);
         sync();
-        return abi.encode(marginTotal, borrowAmount);
     }
 
     function repay(address payer, address borrowToken, uint256 repayAmount)
@@ -438,11 +458,7 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         return abi.decode(result, (uint256));
     }
 
-    function handleRepay(address payer, address borrowToken, uint256 repayAmount)
-        external
-        selfOnly
-        returns (bytes memory)
-    {
+    function handleRepay(address payer, address borrowToken, uint256 repayAmount) external selfOnly returns (uint256) {
         // repay borrow
         Currency borrowCurrency = Currency.wrap(borrowToken);
         borrowCurrency.settle(poolManager, payer, repayAmount, false);
@@ -450,6 +466,6 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         // burn mirror token
         mirrorTokenManager.burn(borrowCurrency.toId(), repayAmount);
         sync();
-        return abi.encode(repayAmount);
+        return repayAmount;
     }
 }
