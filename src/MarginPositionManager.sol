@@ -13,6 +13,8 @@ import {IMarginHook} from "./interfaces/IMarginHook.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
 import {BorrowParams} from "./types/BorrowParams.sol";
 
+import {console} from "forge-std/console.sol";
+
 contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     using CurrencySettleTake for Currency;
     using CurrencyLibrary for Currency;
@@ -35,6 +37,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
 
     function getPosition(uint256 positionId) external view returns (MarginPosition memory _position) {
         _position = _positions[positionId];
+    }
+
+    function getPositionId(address hookAddress, address borrowToken) external view returns (uint256 _positionId) {
+        _positionId = _borrowPositions[hookAddress][borrowToken][msg.sender];
     }
 
     function borrow(IMarginHookFactory factory, BorrowParams memory params)
@@ -84,7 +90,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     }
 
     function repay(IMarginHookFactory factory, uint256 positionId, uint256 repayAmount) external payable {
-        require(ownerOf(positionId) != msg.sender, "AUTH_ERROR");
+        require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
         MarginPosition storage _position = _positions[positionId];
         address hook = factory.getHookPair(_position.borrowToken, _position.marginToken);
         require(hook != address(0), "HOOK_NOT_EXISTS");

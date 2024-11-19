@@ -37,7 +37,6 @@ contract MarginHookFactory is IMarginHookFactory, Owned {
     // pairs, always stored token0 -> token1 -> pair, where token0 < token1
     mapping(address => mapping(address => address)) internal _pairs;
     address public feeTo;
-    uint24 public feeTh = 3000; // nk: n=1 => 1/2 n=2 => 1/3 ... 5 => 1/6 n=m => 1/(1+m)
 
     constructor(
         address initialOwner,
@@ -69,16 +68,6 @@ contract MarginHookFactory is IMarginHookFactory, Owned {
     function setFeeTo(address _feeTo) external onlyOwner {
         require(_feeTo != address(0), "ZeroAddress");
         feeTo = _feeTo;
-    }
-
-    function setFeeTh(uint24 _feeTh) external onlyOwner {
-        require(feeTh > 0, "ZeroNumber");
-        feeTh = _feeTh;
-    }
-
-    function feeParameters() external view returns (address _feeTo, uint24 _feeTh) {
-        _feeTo = feeTo;
-        _feeTh = feeTh;
     }
 
     function getHookPair(address tokenA, address tokenB) external view returns (address) {
@@ -139,4 +128,6 @@ contract MarginHookFactory is IMarginHookFactory, Owned {
 
         emit HookCreated(token0, token1, hookAddress);
     }
+
+    receive() external payable {}
 }

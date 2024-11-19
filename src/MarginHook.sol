@@ -25,6 +25,8 @@ import {MarginPosition} from "./types/MarginPosition.sol";
 import {BorrowParams} from "./types/BorrowParams.sol";
 import {RateStatus} from "./types/RateStatus.sol";
 
+import {Test, console2} from "forge-std/Test.sol";
+
 contract MarginHook is IMarginHook, BaseHook, ERC20 {
     using UnsafeMath for uint256;
     using SafeCast for uint256;
@@ -51,7 +53,7 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
 
     Currency public immutable currency0;
     Currency public immutable currency1;
-    address public immutable factory;
+    IMarginHookFactory public immutable factory;
     IMirrorTokenManager public immutable mirrorTokenManager;
     IMarginPositionManager public immutable marginPositionManager;
 
@@ -62,11 +64,11 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
     uint256 private blockTimestampLast; // uses single storage slot, accessible via getReserves
     uint256 public rate0CumulativeLast;
     uint256 public rate1CumulativeLast;
-    uint256 public kLast; // reserve0 * reserve1, as of immediately after the most recent liquidity event
 
     uint24 public initialLTV = 500000; // 50%
     uint24 public liquidationLTV = 900000; // 90%
-    uint24 public fee = 6000; // 0.6%
+    uint24 public fee; // 0.6%
+    uint24 public protocolFee = 3000; // 0.3%
     RateStatus public rateStatus;
 
     constructor(IPoolManager _manager, string memory _name, string memory _symbol)
@@ -75,7 +77,7 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
     {
         (currency0, currency1, fee, mirrorTokenManager, marginPositionManager) =
             IMarginHookFactory(msg.sender).parameters();
-        factory = msg.sender;
+        factory = IMarginHookFactory(msg.sender);
         rateStatus = RateStatus({rateBase: 50000, useHighLevel: 700000, mLow: 10, mHigh: 50});
     }
 
@@ -106,33 +108,25 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         return _getBorrowRate(tokenReserve, mirrorReserve);
     }
 
+    function getAmountIn(Currency payToken, uint256 amountOut) external view returns (uint256 amountIn) {
+        require(payToken == currency0 || payToken == currency1, "TOKEN_ERROR");
+        (amountIn,) = _getAmountIn(payToken == currency0, amountOut);
+    }
+
+    function getAmountOut(Currency payToken, uint256 amountInt) external view returns (uint256 amountOut) {
+        require(payToken == currency0 || payToken == currency1, "TOKEN_ERROR");
+        (amountOut,) = _getAmountOut(payToken == currency0, amountInt);
+    }
+
     // ******************** V2 FUNCTIONS ********************
 
-    // if fee is on, mint liquidity equivalent to 1/(feeTh+1)th of the growth in sqrt(k)
-    function _mintFee(uint256 _reserve0, uint256 _reserve1) private returns (bool feeOn) {
-        (address feeTo, uint24 feeTh) = IMarginHookFactory(factory).feeParameters();
-        feeOn = feeTo != address(0);
-        uint256 _kLast = kLast; // gas savings
-        if (feeOn) {
-            if (_kLast != 0) {
-                uint256 rootK = Math.sqrt(_reserve0 * _reserve1);
-                uint256 rootKLast = Math.sqrt(_kLast);
-                if (rootK > rootKLast) {
-                    uint256 numerator = totalSupply * (rootK - rootKLast);
-                    uint256 denominator = rootK * feeTh / 10 ** 3 + rootKLast;
-                    uint256 liquidity = numerator / denominator;
-                    if (liquidity > 0) _mint(feeTo, liquidity);
-                }
-            }
-        } else if (_kLast != 0) {
-            kLast = 0;
-        }
+    function checkFeeOn() public view returns (bool feeOn) {
+        feeOn = factory.feeTo() != address(0) && protocolFee > 0;
     }
 
     function mint(address to) internal returns (uint256 liquidity) {
         (uint256 _reserve0, uint256 _reserve1) = getReserves();
         uint256 _totalSupply = totalSupply;
-        bool feeOn = _mintFee(_reserve0, _reserve1);
         // The caller has already minted 6909s on the PoolManager to this address
         uint256 balance0 = poolManager.balanceOf(address(this), CurrencyLibrary.toId(currency0));
         uint256 balance1 = poolManager.balanceOf(address(this), CurrencyLibrary.toId(currency1));
@@ -150,7 +144,6 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         _mint(to, liquidity);
 
         _update(balance0, balance1);
-        if (feeOn) kLast = reserve0 * reserve1; // reserve0 and reserve1 are up-to-date
         emit Mint(msg.sender, amount0, amount1);
     }
 
@@ -205,7 +198,7 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
 
     function beforeInitialize(address sender, PoolKey calldata key, uint160) external view override returns (bytes4) {
         if (
-            sender != factory || key.fee != 0 || key.tickSpacing != 1
+            sender != address(factory) || key.fee != 0 || key.tickSpacing != 1
                 || Currency.unwrap(key.currency0) != Currency.unwrap(currency0)
                 || Currency.unwrap(key.currency1) != Currency.unwrap(currency1)
         ) revert InvalidInitialization();
@@ -226,23 +219,29 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
 
         uint256 specifiedAmount = exactInput ? uint256(-params.amountSpecified) : uint256(params.amountSpecified);
         uint256 unspecifiedAmount;
+        uint256 protocolFeeAmount;
         BeforeSwapDelta returnDelta;
         if (exactInput) {
             // in exact-input swaps, the specified token is a debt that gets paid down by the swapper
             // the unspecified token is credited to the PoolManager, that is claimed by the swapper
-            unspecifiedAmount = _getAmountOut(params.zeroForOne, specifiedAmount);
-            specified.take(poolManager, address(this), specifiedAmount, true);
+            (unspecifiedAmount, protocolFeeAmount) = _getAmountOut(params.zeroForOne, specifiedAmount);
+            specified.take(poolManager, address(this), specifiedAmount - protocolFeeAmount, true);
             unspecified.settle(poolManager, address(this), unspecifiedAmount, true);
+            if (protocolFeeAmount > 0) {
+                specified.take(poolManager, factory.feeTo(), protocolFeeAmount, true);
+            }
 
             returnDelta = toBeforeSwapDelta(specifiedAmount.toInt128(), -unspecifiedAmount.toInt128());
         } else {
             // exactOutput
             // in exact-output swaps, the unspecified token is a debt that gets paid down by the swapper
             // the specified token is credited to the PoolManager, that is claimed by the swapper
-            unspecifiedAmount = _getAmountIn(params.zeroForOne, specifiedAmount);
-            unspecified.take(poolManager, address(this), unspecifiedAmount, true);
+            (unspecifiedAmount, protocolFeeAmount) = _getAmountIn(params.zeroForOne, specifiedAmount);
+            unspecified.take(poolManager, address(this), unspecifiedAmount - protocolFeeAmount, true);
             specified.settle(poolManager, address(this), specifiedAmount, true);
-
+            if (protocolFeeAmount > 0) {
+                unspecified.take(poolManager, factory.feeTo(), protocolFeeAmount, true);
+            }
             returnDelta = toBeforeSwapDelta(-specifiedAmount.toInt128(), unspecifiedAmount.toInt128());
         }
         sync();
@@ -318,36 +317,45 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
     }
 
     // given an input amount of an asset and pair reserve, returns the maximum output amount of the other asset
-    function _getAmountOut(bool zeroForOne, uint256 amountIn) internal view returns (uint256 amountOut) {
+    function _getAmountOut(bool zeroForOne, uint256 amountIn)
+        internal
+        view
+        returns (uint256 amountOut, uint256 feeAmount)
+    {
         require(amountIn > 0, "MarginHook: INSUFFICIENT_INPUT_AMOUNT");
 
         (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (reserve0, reserve1) : (reserve1, reserve0);
         require(reserve0 > 0 && reserve1 > 0, "MarginHook: INSUFFICIENT_LIQUIDITY");
-
-        uint256 amountInWithFee = amountIn * (ONE_MILLION - fee);
+        uint256 ratio = ONE_MILLION - fee;
+        if (checkFeeOn()) {
+            feeAmount = amountIn * protocolFee / ONE_MILLION;
+            ratio -= protocolFee;
+        }
+        uint256 amountInWithFee = amountIn * ratio;
         uint256 numerator = amountInWithFee * reserveOut;
         uint256 denominator = (reserveIn * ONE_MILLION) + amountInWithFee;
         amountOut = numerator / denominator;
     }
 
     // given an output amount of an asset and pair reserve, returns a required input amount of the other asset
-    function _getAmountIn(bool zeroForOne, uint256 amountOut) internal view returns (uint256 amountIn) {
+    function _getAmountIn(bool zeroForOne, uint256 amountOut)
+        internal
+        view
+        returns (uint256 amountIn, uint256 feeAmount)
+    {
         require(amountOut > 0, "MarginHook: INSUFFICIENT_OUTPUT_AMOUNT");
 
         (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (reserve0, reserve1) : (reserve1, reserve0);
         require(reserveIn > 0 && reserveOut > 0, "MarginHook: INSUFFICIENT_LIQUIDITY");
-
+        uint256 ratio = ONE_MILLION - fee;
         uint256 numerator = reserveIn * amountOut * ONE_MILLION;
-        uint256 denominator = (reserveOut - amountOut) * (ONE_MILLION - fee);
+        uint256 denominator = (reserveOut - amountOut) * ratio;
         amountIn = (numerator / denominator) + 1;
-    }
-
-    function _getInputOutput(PoolKey calldata key, bool zeroForOne)
-        internal
-        pure
-        returns (Currency input, Currency output)
-    {
-        (input, output) = zeroForOne ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
+        if (checkFeeOn()) {
+            ratio -= protocolFee;
+            denominator = (reserveOut - amountOut) * ratio;
+            feeAmount = amountIn - ((numerator / denominator) + 1);
+        }
     }
 
     function _getBorrowRate(uint256 tokenReserve, uint256 mirrorReserve) internal view returns (uint256) {
@@ -400,6 +408,10 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
 
     // ******************** FACTORY CALL ********************
 
+    function setProtocolFee(uint24 _fee) external factoryOnly {
+        protocolFee = _fee;
+    }
+
     function skimReserves(address to) external factoryOnly {
         poolManager.unlock(abi.encodeCall(this.handleSkim, (to)));
     }
@@ -437,9 +449,9 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         Currency marginCurrency = zeroForOne ? currency1 : currency0;
         uint256 borrowReserves = zeroForOne ? reserve0 : reserve1;
         marginTotal = marginSell * leverage * initialLTV / (10 ** 6);
-        borrowAmount = _getAmountOut(zeroForOne, marginTotal);
+        (borrowAmount,) = _getAmountOut(zeroForOne, marginTotal);
         require(borrowReserves > borrowAmount, "token not enough");
-        marginTotal = _getAmountIn(zeroForOne, borrowAmount);
+        (marginTotal,) = _getAmountIn(zeroForOne, borrowAmount);
         // send total token
         marginCurrency.settle(poolManager, address(this), marginTotal, true);
         marginCurrency.take(poolManager, address(marginPositionManager), marginTotal, false);

@@ -28,29 +28,19 @@ contract MarginRouter is Test, IUnlockCallback {
         poolManager = _manager;
     }
 
-    error NoSwapOccurred();
-
-    struct CallbackData {
-        address sender;
-        PoolKey key;
-        IPoolManager.SwapParams params;
-    }
-
     modifier ensure(uint256 deadline) {
         require(deadline >= block.timestamp, "MarginRouter: EXPIRED");
         _;
     }
 
-    function swapExactETHForTokens(address[] calldata path, address to, uint256 amountOutMin, uint256 deadline)
+    function exactInput(address[] calldata path, address to, uint256 amountIn, uint256 amountOutMin, uint256 deadline)
         external
         payable
         ensure(deadline)
-        returns (uint256[] memory amounts)
+        returns (uint256 amountOut)
     {
-        require(path[0] == address(0));
-        uint256 amountOut = abi.decode(poolManager.unlock(abi.encode(path, to, msg.value, amountOutMin)), (uint256));
-        amounts = new uint256[](1);
-        amounts[0] = amountOut;
+        require(path.length == 2, "PATH_ERROR");
+        amountOut = abi.decode(poolManager.unlock(abi.encode(path, to, amountIn, amountOutMin)), (uint256));
     }
 
     function unlockCallback(bytes calldata rawData) external returns (bytes memory) {
@@ -58,8 +48,6 @@ contract MarginRouter is Test, IUnlockCallback {
 
         (address[] memory path, address to, uint256 amountIn, uint256 amountOutMin) =
             abi.decode(rawData, (address[], address, uint256, uint256));
-
-        require(path.length == 2);
 
         bool zeroForOne = path[0] < path[1];
         (Currency currency0, Currency currency1) = zeroForOne
@@ -76,8 +64,8 @@ contract MarginRouter is Test, IUnlockCallback {
         uint256 amountOut = uint256(int256(delta.amount1()));
         if (amountOut < amountOutMin) revert InsufficientOutputReceived();
 
-        currency0.settle(poolManager, address(this), amountIn, false);
-        currency1.take(poolManager, to, amountOut, false);
+        Currency.wrap(path[0]).settle(poolManager, address(this), amountIn, false);
+        Currency.wrap(path[1]).take(poolManager, to, amountOut, false);
         return abi.encode(amountOut);
     }
 }

@@ -119,7 +119,7 @@ contract MarginHookTest is Test {
         manager = new PoolManager(vm.addr(1));
         mirrorTokenManager = new MirrorTokenManager(vm.addr(1));
         marginPositionManager = new MarginPositionManager(vm.addr(1));
-        factory = new MarginHookFactory(vm.addr(1), manager, mirrorTokenManager, marginPositionManager);
+        factory = new MarginHookFactory(user, manager, mirrorTokenManager, marginPositionManager);
 
         deployMintAndApprove2Currencies();
 
@@ -159,22 +159,6 @@ contract MarginHookTest is Test {
         vm.stopPrank();
     }
 
-    function _getAmountOut(bool zeroForOne, uint256 amountIn, uint256 reserves0, uint256 reserves1)
-        internal
-        pure
-        returns (uint256 amountOut)
-    {
-        require(amountIn > 0, "MarginHook: INSUFFICIENT_INPUT_AMOUNT");
-
-        (uint256 reservesIn, uint256 reservesOut) = zeroForOne ? (reserves0, reserves1) : (reserves1, reserves0);
-        require(reserves0 > 0 && reserves1 > 0, "MarginHook: INSUFFICIENT_LIQUIDITY");
-
-        uint256 amountInWithFee = amountIn * 997;
-        uint256 numerator = amountInWithFee * reservesOut;
-        uint256 denominator = (reservesIn * 1000) + amountInWithFee;
-        amountOut = numerator / denominator;
-    }
-
     function test_hook_swap() public {
         vm.startPrank(user);
         tokenB.approve(address(nativeHook), 1e18);
@@ -182,8 +166,9 @@ contract MarginHookTest is Test {
         (uint256 _reserves0, uint256 _reserves1) = nativeHook.getReserves();
         assertEq(_reserves0, _reserves1);
         console.log("reserves0:%s,reserves1:%s", _reserves0, _reserves1);
-        uint256 amountOut = _getAmountOut(true, 100, _reserves0, _reserves1);
-        console.log("_reserves0:%s, _reserves1:%s, amountOut:%s", _reserves0, _reserves1, amountOut);
+        uint256 amountIn = 100000;
+        uint256 amountOut = nativeHook.getAmountOut(Currency.wrap(address(0)), amountIn);
+        console.log("amountIn:%s,amountOut:%s", amountIn, amountOut);
         // swap
         address[] memory _path = new address[](2);
         _path[0] = address(0);
@@ -192,10 +177,58 @@ contract MarginHookTest is Test {
         uint256 balance1 = manager.balanceOf(address(nativeHook), uint160(address(tokenB)));
         console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
         console.log("before swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
-        swapRouter.swapExactETHForTokens{value: 100}(_path, user, 0, type(uint256).max);
+        swapRouter.exactInput{value: amountIn}(_path, user, amountIn, 0, type(uint256).max);
+        console.log("swapRouter.balance:%s", manager.balanceOf(address(swapRouter), 0));
         console.log("after swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
         (_reserves0, _reserves1) = nativeHook.getReserves();
         console.log("reserves0:%s,reserves1:%s", _reserves0, _reserves1);
+        uint256 liquidity = nativeHook.balanceOf(user);
+        nativeHook.removeLiquidity(liquidity);
+        (_reserves0, _reserves1) = nativeHook.getReserves();
+        console.log("reserves0:%s,reserves1:%s", _reserves0, _reserves1);
+        console.log("after removeLiquidity user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
+        vm.stopPrank();
+    }
+
+    function test_hook_swapWithFee() public {
+        vm.startPrank(user);
+        //factory.setFeeTo(address(user));
+        tokenB.approve(address(nativeHook), 1e18);
+        nativeHook.addLiquidity{value: 1e18}(1e18, 1e18);
+        (uint256 _reserves0, uint256 _reserves1) = nativeHook.getReserves();
+        assertEq(_reserves0, _reserves1);
+        console.log("reserves0:%s,reserves1:%s", _reserves0, _reserves1);
+        uint256 amountIn = 100000;
+        uint256 amountOut = nativeHook.getAmountOut(Currency.wrap(address(0)), amountIn);
+        console.log("swapWithFee.amountIn:%s,amountOut:%s,checkFee:%s", amountIn, amountOut, nativeHook.checkFeeOn());
+        // swap
+        address[] memory _path = new address[](2);
+        _path[0] = address(0);
+        _path[1] = address(tokenB);
+        uint256 balance0 = manager.balanceOf(address(nativeHook), 0);
+        uint256 balance1 = manager.balanceOf(address(nativeHook), uint160(address(tokenB)));
+        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        console.log("before swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
+        swapRouter.exactInput{value: amountIn}(_path, user, amountIn, 0, type(uint256).max);
+        console.log("user.PoolManager.balance:%s", manager.balanceOf(address(user), 0));
+        console.log("after swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
+        (_reserves0, _reserves1) = nativeHook.getReserves();
+        console.log("reserves0:%s,reserves1:%s", _reserves0, _reserves1);
+
+        console.log("before swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
+        swapRouter.exactInput{value: amountIn}(_path, user, amountIn, 0, type(uint256).max);
+        console.log("user.PoolManager.balance:%s", manager.balanceOf(address(user), 0));
+        console.log("after swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
+        (_reserves0, _reserves1) = nativeHook.getReserves();
+        console.log("reserves0:%s,reserves1:%s", _reserves0, _reserves1);
+        console.log("before take user.balance:%s", user.balance);
+        manager.take(Currency.wrap(address(0)), user, manager.balanceOf(address(user), 0));
+        console.log("after take user.balance:%s", user.balance);
+        uint256 liquidity = nativeHook.balanceOf(user);
+        nativeHook.removeLiquidity(liquidity);
+        (_reserves0, _reserves1) = nativeHook.getReserves();
+        console.log("reserves0:%s,reserves1:%s", _reserves0, _reserves1);
+        console.log("after removeLiquidity user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
         vm.stopPrank();
     }
 
@@ -223,24 +256,22 @@ contract MarginHookTest is Test {
 
         (positionId, borrowAmount) = marginPositionManager.borrow{value: payValue}(factory, params);
         console.log(
-            "nativeHook:%s,marginPositionManager:%s",
+            "nativeHook.balance:%s,marginPositionManager.balance:%s",
             address(nativeHook).balance,
             address(marginPositionManager).balance
         );
         console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
         console.log(
-            "positionId:%s,.position.borrowAmount:%s,rateCumulativeLast:%s",
+            "positionId:%s,position.borrowAmount:%s,rateCumulativeLast:%s",
             positionId,
             position.borrowAmount,
             position.rateCumulativeLast
         );
         rate = nativeHook.getBorrowRate(Currency.wrap(address(tokenB)));
-        console.log("rate:%s", rate);
         vm.warp(3600 * 10);
         uint256 q = rate * 3600 * 10 / 24 / 365 / 3600;
-        console.log("q:%s", q);
-        uint256 borrowAmountLast = borrowAmount + borrowAmount * rate / 24 / 365 / 10 ** 5;
+        uint256 borrowAmountLast = borrowAmount * (10 ** 6 + q) / 10 ** 6;
         payValue = 0.2e18;
         params = BorrowParams({
             marginToken: address(0),
@@ -252,21 +283,41 @@ contract MarginHookTest is Test {
             borrowMinAmount: 0,
             deadline: block.timestamp + 1000
         });
-
         (positionId, borrowAmount) = marginPositionManager.borrow{value: payValue}(factory, params);
         console.log(
-            "nativeHook:%s,marginPositionManager:%s",
+            "nativeHook.balance:%s,marginPositionManager.balance:%s",
             address(nativeHook).balance,
             address(marginPositionManager).balance
         );
         console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
         position = marginPositionManager.getPosition(positionId);
+        assertEq(position.borrowAmount / 100, (borrowAmountLast + borrowAmount) / 100);
         console.log(
-            "positionId:%s,.position.borrowAmount:%s,all:%s",
+            "positionId:%s,position.borrowAmount:%s,all:%s",
             positionId,
             position.borrowAmount,
             borrowAmountLast + borrowAmount
         );
+        vm.stopPrank();
+    }
+
+    function test_hook_repay() public {
+        test_hook_borrow();
+        vm.startPrank(user);
+        uint256 positionId = marginPositionManager.getPositionId(address(nativeHook), address(tokenB));
+        assertGt(positionId, 0);
+        MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        uint256 userBalance = user.balance;
+        console.log("before repay positionId:%s,position.borrowAmount:%s", positionId, position.borrowAmount);
+        console.log("before repay balance:%s tokenB.balance:%s", user.balance, tokenB.balanceOf(user));
+        uint256 repay = 0.01e18;
+        tokenB.approve(address(nativeHook), repay);
+        marginPositionManager.repay(factory, positionId, repay);
+        MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
+        console.log("after repay balance:%s tokenB.balance:%s", user.balance, tokenB.balanceOf(user));
+        console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
+        assertEq(position.borrowAmount - newPosition.borrowAmount, repay);
+        assertEq(position.marginTotal - newPosition.marginTotal, user.balance - userBalance);
         vm.stopPrank();
     }
 }

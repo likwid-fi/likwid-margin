@@ -17,8 +17,6 @@ interface IMarginHookFactory {
 
     function feeTo() external view returns (address);
 
-    function feeParameters() external view returns (address, uint24);
-
     function createHook(HookParams calldata params) external returns (IHooks hook);
     function getHookPair(address tokenA, address tokenB) external returns (address hook);
     function parameters()
