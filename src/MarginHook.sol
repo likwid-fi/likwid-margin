@@ -228,9 +228,8 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
             specified.take(poolManager, address(this), specifiedAmount - protocolFeeAmount, true);
             unspecified.settle(poolManager, address(this), unspecifiedAmount, true);
             if (protocolFeeAmount > 0) {
-                specified.take(poolManager, factory.feeTo(), protocolFeeAmount, true);
+                specified.take(poolManager, factory.feeTo(), protocolFeeAmount, false);
             }
-
             returnDelta = toBeforeSwapDelta(specifiedAmount.toInt128(), -unspecifiedAmount.toInt128());
         } else {
             // exactOutput
@@ -240,7 +239,7 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
             unspecified.take(poolManager, address(this), unspecifiedAmount - protocolFeeAmount, true);
             specified.settle(poolManager, address(this), specifiedAmount, true);
             if (protocolFeeAmount > 0) {
-                unspecified.take(poolManager, factory.feeTo(), protocolFeeAmount, true);
+                unspecified.take(poolManager, factory.feeTo(), protocolFeeAmount, false);
             }
             returnDelta = toBeforeSwapDelta(-specifiedAmount.toInt128(), unspecifiedAmount.toInt128());
         }

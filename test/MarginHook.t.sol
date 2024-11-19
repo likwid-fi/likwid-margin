@@ -177,7 +177,15 @@ contract MarginHookTest is Test {
         uint256 balance1 = manager.balanceOf(address(nativeHook), uint160(address(tokenB)));
         console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
         console.log("before swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
-        swapRouter.exactInput{value: amountIn}(_path, user, amountIn, 0, type(uint256).max);
+        MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+            path: _path,
+            to: user,
+            amountIn: amountIn,
+            amountOut: 0,
+            amountOutMin: 0,
+            deadline: type(uint256).max
+        });
+        swapRouter.exactInput{value: amountIn}(swapParams);
         console.log("swapRouter.balance:%s", manager.balanceOf(address(swapRouter), 0));
         console.log("after swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
         (_reserves0, _reserves1) = nativeHook.getReserves();
@@ -209,21 +217,24 @@ contract MarginHookTest is Test {
         uint256 balance1 = manager.balanceOf(address(nativeHook), uint160(address(tokenB)));
         console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
         console.log("before swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
-        swapRouter.exactInput{value: amountIn}(_path, user, amountIn, 0, type(uint256).max);
-        console.log("user.PoolManager.balance:%s", manager.balanceOf(address(user), 0));
+        MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+            path: _path,
+            to: user,
+            amountIn: amountIn,
+            amountOut: 0,
+            amountOutMin: 0,
+            deadline: type(uint256).max
+        });
+        swapRouter.exactInput{value: amountIn}(swapParams);
         console.log("after swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
         (_reserves0, _reserves1) = nativeHook.getReserves();
         console.log("reserves0:%s,reserves1:%s", _reserves0, _reserves1);
 
         console.log("before swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
-        swapRouter.exactInput{value: amountIn}(_path, user, amountIn, 0, type(uint256).max);
-        console.log("user.PoolManager.balance:%s", manager.balanceOf(address(user), 0));
+        swapRouter.exactInput{value: amountIn}(swapParams);
         console.log("after swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
         (_reserves0, _reserves1) = nativeHook.getReserves();
         console.log("reserves0:%s,reserves1:%s", _reserves0, _reserves1);
-        console.log("before take user.balance:%s", user.balance);
-        manager.take(Currency.wrap(address(0)), user, manager.balanceOf(address(user), 0));
-        console.log("after take user.balance:%s", user.balance);
         uint256 liquidity = nativeHook.balanceOf(user);
         nativeHook.removeLiquidity(liquidity);
         (_reserves0, _reserves1) = nativeHook.getReserves();
