@@ -113,8 +113,8 @@ contract MarginRouter is SafeCallback {
                 return amountOut;
             } else if (params.amountOut > 0) {
                 uint256 amountIn = uint256(int256(delta.amount1()));
-                Currency.wrap(params.path[0]).take(poolManager, params.to, amountIn, false);
-                Currency.wrap(params.path[1]).settle(poolManager, address(this), params.amountOut, false);
+                Currency.wrap(params.path[0]).settle(poolManager, address(this), amountIn, false);
+                Currency.wrap(params.path[1]).take(poolManager, params.to, params.amountOut, false);
                 return amountIn;
             }
         }
