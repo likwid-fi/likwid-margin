@@ -116,10 +116,12 @@ contract MarginHookTest is Test {
         user = vm.addr(2);
         (bool success,) = user.call{value: 10e18}("");
         assertTrue(success);
-        manager = new PoolManager(vm.addr(1));
-        mirrorTokenManager = new MirrorTokenManager(vm.addr(1));
-        marginPositionManager = new MarginPositionManager(vm.addr(1));
+        manager = new PoolManager(user);
+        mirrorTokenManager = new MirrorTokenManager(user);
+        marginPositionManager = new MarginPositionManager(user);
         factory = new MarginHookFactory(user, manager, mirrorTokenManager, marginPositionManager);
+        vm.prank(user);
+        marginPositionManager.setFactory(address(factory));
 
         deployMintAndApprove2Currencies();
 
@@ -265,7 +267,7 @@ contract MarginHookTest is Test {
             deadline: block.timestamp + 1000
         });
 
-        (positionId, borrowAmount) = marginPositionManager.borrow{value: payValue}(factory, params);
+        (positionId, borrowAmount) = marginPositionManager.borrow{value: payValue}(params);
         console.log(
             "nativeHook.balance:%s,marginPositionManager.balance:%s",
             address(nativeHook).balance,
@@ -294,7 +296,7 @@ contract MarginHookTest is Test {
             borrowMinAmount: 0,
             deadline: block.timestamp + 1000
         });
-        (positionId, borrowAmount) = marginPositionManager.borrow{value: payValue}(factory, params);
+        (positionId, borrowAmount) = marginPositionManager.borrow{value: payValue}(params);
         console.log(
             "nativeHook.balance:%s,marginPositionManager.balance:%s",
             address(nativeHook).balance,
@@ -323,7 +325,7 @@ contract MarginHookTest is Test {
         console.log("before repay balance:%s tokenB.balance:%s", user.balance, tokenB.balanceOf(user));
         uint256 repay = 0.01e18;
         tokenB.approve(address(nativeHook), repay);
-        marginPositionManager.repay(factory, positionId, repay);
+        marginPositionManager.repay(positionId, repay);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
         console.log("after repay balance:%s tokenB.balance:%s", user.balance, tokenB.balanceOf(user));
         console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);

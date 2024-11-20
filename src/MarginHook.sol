@@ -45,7 +45,7 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
     event Mint(address indexed sender, uint256 amount0, uint256 amount1);
     event Burn(address indexed sender, uint256 amount0, uint256 amount1, address indexed to);
     event Swap(uint256 amountIn, uint256 amountOut);
-    event Sync(uint256 reserve0, uint256 reserve1);
+    event Sync(uint256 reserve0, uint256 reserve1, uint256 mirrorReserve0, uint256 mirrorReserve1);
 
     uint256 public constant MINIMUM_LIQUIDITY = 10 ** 3;
     uint256 public constant ONE_MILLION = 10 ** 6;
@@ -101,6 +101,19 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         _liquidationLTV = liquidationLTV;
     }
 
+    function checkFeeOn() public view returns (bool feeOn) {
+        feeOn = factory.feeTo() != address(0) && protocolFee > 0;
+    }
+
+    function checkInPair(address token) public view returns (bool fit) {
+        fit = Currency.wrap(token) == currency0 || Currency.wrap(token) == currency1;
+    }
+
+    function checkPair(address tokenA, address tokenB) public view returns (bool fit) {
+        (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
+        fit = Currency.wrap(token0) == currency0 && Currency.wrap(token1) == currency1;
+    }
+
     function getBorrowRate(Currency borrowToken) external view returns (uint256) {
         require(borrowToken == currency0 || borrowToken == currency1, "TOKEN_ERROR");
         uint256 tokenReserve = borrowToken == currency0 ? reserve0 : reserve1;
@@ -113,16 +126,12 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         (amountIn,) = _getAmountIn(payToken == currency0, amountOut);
     }
 
-    function getAmountOut(Currency payToken, uint256 amountInt) external view returns (uint256 amountOut) {
+    function getAmountOut(Currency payToken, uint256 amountIn) external view returns (uint256 amountOut) {
         require(payToken == currency0 || payToken == currency1, "TOKEN_ERROR");
-        (amountOut,) = _getAmountOut(payToken == currency0, amountInt);
+        (amountOut,) = _getAmountOut(payToken == currency0, amountIn);
     }
 
     // ******************** V2 FUNCTIONS ********************
-
-    function checkFeeOn() public view returns (bool feeOn) {
-        feeOn = factory.feeTo() != address(0) && protocolFee > 0;
-    }
 
     function mint(address to) internal returns (uint256 liquidity) {
         (uint256 _reserve0, uint256 _reserve1) = getReserves();
@@ -308,7 +317,7 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         reserve1 = balance1;
         mirrorReserve0 = mirrorBalance0;
         mirrorReserve1 = mirrorBalance1;
-        emit Sync(reserve0, reserve1);
+        emit Sync(reserve0, reserve1, mirrorReserve0, mirrorReserve1);
     }
 
     function _update(uint256 balance0, uint256 balance1) private {
@@ -353,7 +362,8 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         if (checkFeeOn()) {
             ratio -= protocolFee;
             denominator = (reserveOut - amountOut) * ratio;
-            feeAmount = amountIn - ((numerator / denominator) + 1);
+            feeAmount = ((numerator / denominator) + 1) - amountIn;
+            amountIn += feeAmount;
         }
     }
 
@@ -361,7 +371,6 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         if (tokenReserve == 0) {
             return rateStatus.rateBase;
         }
-        // uint256 mirrorReserve = mirrorTokenManager.balanceOf(address(this), borrowToken.toId());
         uint256 useLevel = mirrorReserve * ONE_MILLION / (mirrorReserve + tokenReserve);
         if (useLevel >= rateStatus.useHighLevel) {
             return rateStatus.rateBase + rateStatus.useHighLevel * rateStatus.mLow
@@ -422,11 +431,7 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
     // ******************** MARGIN FUNCTIONS ********************
 
     function borrow(BorrowParams memory params) external positionOnly returns (uint256, BorrowParams memory) {
-        require(
-            params.borrowToken == Currency.unwrap(currency0) && params.marginToken == Currency.unwrap(currency1)
-                || params.borrowToken == Currency.unwrap(currency1) && params.marginToken == Currency.unwrap(currency0),
-            "ERROR_HOOK"
-        );
+        require(checkPair(params.borrowToken, params.marginToken), "ERROR_HOOK");
         bytes memory result = poolManager.unlock(
             abi.encodeCall(this.handleBorrow, (params.marginSell, params.leverage, params.borrowToken))
         );
@@ -443,14 +448,13 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         returns (uint256 marginTotal, uint256 borrowAmount)
     {
         Currency borrowCurrency = Currency.wrap(_borrowToken);
-        require(currency0 == borrowCurrency || currency1 == borrowCurrency, "borrow token err");
         bool zeroForOne = currency0 == borrowCurrency;
         Currency marginCurrency = zeroForOne ? currency1 : currency0;
         uint256 borrowReserves = zeroForOne ? reserve0 : reserve1;
-        marginTotal = marginSell * leverage * initialLTV / (10 ** 6);
-        (borrowAmount,) = _getAmountOut(zeroForOne, marginTotal);
+        marginTotal = marginSell * leverage * initialLTV / ONE_MILLION;
+        (borrowAmount,) = _getAmountIn(zeroForOne, marginTotal);
         require(borrowReserves > borrowAmount, "token not enough");
-        (marginTotal,) = _getAmountIn(zeroForOne, borrowAmount);
+        (marginTotal,) = _getAmountOut(zeroForOne, borrowAmount);
         // send total token
         marginCurrency.settle(poolManager, address(this), marginTotal, true);
         marginCurrency.take(poolManager, address(marginPositionManager), marginTotal, false);
@@ -465,6 +469,7 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         positionOnly
         returns (uint256)
     {
+        require(checkInPair(borrowToken), "ERROR_TOKEN");
         bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRepay, (payer, borrowToken, repayAmount)));
         return abi.decode(result, (uint256));
     }

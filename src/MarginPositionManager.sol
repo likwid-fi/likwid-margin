@@ -19,10 +19,13 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     using CurrencySettleTake for Currency;
     using CurrencyLibrary for Currency;
 
-    error NotHook();
+    error PairNotExists();
+    error InsufficientBorrowReceived();
 
     uint256 public constant ONE_MILLION = 10 ** 6;
     uint256 private _nextId = 1;
+
+    IMarginHookFactory public factory;
 
     mapping(uint256 => MarginPosition) private _positions;
     mapping(address => uint256) private _hookPositions;
@@ -35,27 +38,26 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         _;
     }
 
+    function setFactory(address _factory) external onlyOwner {
+        factory = IMarginHookFactory(_factory);
+    }
+
     function getPosition(uint256 positionId) external view returns (MarginPosition memory _position) {
         _position = _positions[positionId];
     }
 
-    function getPositionId(address hookAddress, address borrowToken) external view returns (uint256 _positionId) {
-        _positionId = _borrowPositions[hookAddress][borrowToken][msg.sender];
+    function getPositionId(address hook, address borrowToken) external view returns (uint256 _positionId) {
+        _positionId = _borrowPositions[hook][borrowToken][msg.sender];
     }
 
-    function borrow(IMarginHookFactory factory, BorrowParams memory params)
-        external
-        payable
-        ensure(params.deadline)
-        returns (uint256, uint256)
-    {
+    function borrow(BorrowParams memory params) external payable ensure(params.deadline) returns (uint256, uint256) {
         address hook = factory.getHookPair(params.borrowToken, params.marginToken);
-        require(hook != address(0), "HOOK_NOT_EXISTS");
+        if (hook == address(0)) revert PairNotExists();
         bool success = Currency.wrap(params.marginToken).transfer(msg.sender, address(this), params.marginSell);
         require(success, "MARGIN_SELL_ERR");
         uint256 rateLast;
         (rateLast, params) = IMarginHook(hook).borrow(params);
-        require(params.borrowAmount >= params.borrowMinAmount, "UNDERFLOW_MIN");
+        if (params.borrowAmount < params.borrowMinAmount) revert InsufficientBorrowReceived();
         (, uint24 _liquidationLTV) = IMarginHook(hook).ltvParameters();
         uint256 positionId = _borrowPositions[hook][params.borrowToken][msg.sender];
         if (positionId == 0) {
@@ -89,11 +91,11 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         return (positionId, params.borrowAmount);
     }
 
-    function repay(IMarginHookFactory factory, uint256 positionId, uint256 repayAmount) external payable {
+    function repay(uint256 positionId, uint256 repayAmount) external payable {
         require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
         MarginPosition storage _position = _positions[positionId];
         address hook = factory.getHookPair(_position.borrowToken, _position.marginToken);
-        require(hook != address(0), "HOOK_NOT_EXISTS");
+        if (hook == address(0)) revert PairNotExists();
         if (_position.borrowToken == address(0)) {
             require(msg.value >= repayAmount, "NATIVE_AMOUNT_ERR");
         } else {
@@ -113,6 +115,14 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             _burn(positionId);
         }
     }
+
+    function checkLiquidate(uint256 positionId) public view returns (bool) {
+        MarginPosition memory _position = _positions[positionId];
+        address hook = factory.getHookPair(_position.borrowToken, _position.marginToken);
+        if (hook == address(0)) revert PairNotExists();
+    }
+
+    function liquidate(uint256 positionId) external payable {}
 
     receive() external payable {}
 }
