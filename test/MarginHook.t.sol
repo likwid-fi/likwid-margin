@@ -169,7 +169,7 @@ contract MarginHookTest is Test {
         assertEq(_reserves0, _reserves1);
         console.log("reserves0:%s,reserves1:%s", _reserves0, _reserves1);
         uint256 amountIn = 100000;
-        uint256 amountOut = nativeHook.getAmountOut(Currency.wrap(address(0)), amountIn);
+        uint256 amountOut = nativeHook.getAmountOut(address(0), amountIn);
         console.log("amountIn:%s,amountOut:%s", amountIn, amountOut);
         // swap
         address[] memory _path = new address[](2);
@@ -209,7 +209,7 @@ contract MarginHookTest is Test {
         assertEq(_reserves0, _reserves1);
         console.log("reserves0:%s,reserves1:%s", _reserves0, _reserves1);
         uint256 amountIn = 100000;
-        uint256 amountOut = nativeHook.getAmountOut(Currency.wrap(address(0)), amountIn);
+        uint256 amountOut = nativeHook.getAmountOut(address(0), amountIn);
         console.log("swapWithFee.amountIn:%s,amountOut:%s,checkFee:%s", amountIn, amountOut, nativeHook.checkFeeOn());
         // swap
         address[] memory _path = new address[](2);

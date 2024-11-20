@@ -121,14 +121,14 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         return _getBorrowRate(tokenReserve, mirrorReserve);
     }
 
-    function getAmountIn(Currency payToken, uint256 amountOut) external view returns (uint256 amountIn) {
-        require(payToken == currency0 || payToken == currency1, "TOKEN_ERROR");
-        (amountIn,) = _getAmountIn(payToken == currency0, amountOut);
+    function getAmountIn(address tokenIn, uint256 amountOut) external view returns (uint256 amountIn) {
+        require(checkInPair(tokenIn), "TOKEN_ERROR");
+        (amountIn,) = _getAmountIn(Currency.wrap(tokenIn) == currency0, amountOut);
     }
 
-    function getAmountOut(Currency payToken, uint256 amountIn) external view returns (uint256 amountOut) {
-        require(payToken == currency0 || payToken == currency1, "TOKEN_ERROR");
-        (amountOut,) = _getAmountOut(payToken == currency0, amountIn);
+    function getAmountOut(address tokenIn, uint256 amountIn) external view returns (uint256 amountOut) {
+        require(checkInPair(tokenIn), "TOKEN_ERROR");
+        (amountOut,) = _getAmountOut(Currency.wrap(tokenIn) == currency0, amountIn);
     }
 
     // ******************** V2 FUNCTIONS ********************
@@ -331,8 +331,9 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         returns (uint256 amountOut, uint256 feeAmount)
     {
         require(amountIn > 0, "MarginHook: INSUFFICIENT_INPUT_AMOUNT");
-
-        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+        (uint256 _reserve0, uint256 _reserve1) = getReserves();
+        (, uint256 amountMaxOut) = zeroForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
         require(reserve0 > 0 && reserve1 > 0, "MarginHook: INSUFFICIENT_LIQUIDITY");
         uint256 ratio = ONE_MILLION - fee;
         if (checkFeeOn()) {
@@ -343,6 +344,7 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         uint256 numerator = amountInWithFee * reserveOut;
         uint256 denominator = (reserveIn * ONE_MILLION) + amountInWithFee;
         amountOut = numerator / denominator;
+        require(amountOut < amountMaxOut, "MarginHook: NOT_ENOUGH");
     }
 
     // given an output amount of an asset and pair reserve, returns a required input amount of the other asset
@@ -352,8 +354,10 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         returns (uint256 amountIn, uint256 feeAmount)
     {
         require(amountOut > 0, "MarginHook: INSUFFICIENT_OUTPUT_AMOUNT");
-
-        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+        (uint256 _reserve0, uint256 _reserve1) = getReserves();
+        (, uint256 amountMaxOut) = zeroForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+        require(amountOut < amountMaxOut, "MarginHook: NOT_ENOUGH");
+        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
         require(reserveIn > 0 && reserveOut > 0, "MarginHook: INSUFFICIENT_LIQUIDITY");
         uint256 ratio = ONE_MILLION - fee;
         uint256 numerator = reserveIn * amountOut * ONE_MILLION;

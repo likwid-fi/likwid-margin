@@ -116,10 +116,12 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
     }
 
-    function checkLiquidate(uint256 positionId) public view returns (bool) {
+    function checkLiquidate(uint256 positionId) public view returns (bool liquided, uint256 amountIn) {
         MarginPosition memory _position = _positions[positionId];
         address hook = factory.getHookPair(_position.borrowToken, _position.marginToken);
         if (hook == address(0)) revert PairNotExists();
+        amountIn = IMarginHook(hook).getAmountIn(_position.marginToken, _position.borrowAmount);
+        liquided = amountIn > _position.liquidationAmount;
     }
 
     function liquidate(uint256 positionId) external payable {}
