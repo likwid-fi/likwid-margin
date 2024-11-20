@@ -14,7 +14,6 @@ import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 
 import {IMarginHook} from "./interfaces/IMarginHook.sol";
 import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
-import {console} from "forge-std/console.sol";
 
 contract MarginRouter is SafeCallback, Owned {
     using CurrencyLibrary for Currency;
@@ -46,7 +45,6 @@ contract MarginRouter is SafeCallback, Owned {
     }
 
     function _unlockCallback(bytes calldata data) internal virtual override returns (bytes memory) {
-        console.log("sender:%s,address(this):%s", msg.sender, address(this));
         (bool success, bytes memory returnData) = address(this).call(data);
         if (success) return returnData;
         if (returnData.length == 0) revert LockFailure();

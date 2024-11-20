@@ -15,8 +15,6 @@ import {MarginPosition} from "./types/MarginPosition.sol";
 import {BorrowParams} from "./types/BorrowParams.sol";
 import {Math} from "./libraries/Math.sol";
 
-import {console} from "forge-std/console.sol";
-
 contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     using CurrencySettleTake for Currency;
     using CurrencyLibrary for Currency;

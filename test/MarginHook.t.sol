@@ -360,9 +360,19 @@ contract MarginHookTest is Test {
             (liquided, releaseAmount) = marginPositionManager.checkLiquidate(positionId);
             console.log("releaseAmount:%s,liquidationAmount:%s", releaseAmount, position.liquidationAmount);
         }
+        console.log(
+            "before liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
+            address(nativeHook).balance,
+            address(marginPositionManager).balance
+        );
         marginPositionManager.liquidate(positionId);
         position = marginPositionManager.getPosition(positionId);
         assertEq(position.operator, address(0));
+        console.log(
+            "after liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
+            address(nativeHook).balance,
+            address(marginPositionManager).balance
+        );
         vm.stopPrank();
     }
 }

@@ -18,14 +18,6 @@ contract MirrorTokenManager is IMirrorTokenManager, ERC6909Claims, Owned {
 
     constructor(address initialOwner) Owned(initialOwner) {}
 
-    function getTokenId(PoolId poolId, Currency currency) public returns (uint256 _tokenId) {
-        _tokenId = _poolTokenId[currency][poolId];
-        if (_tokenId == 0) {
-            _tokenId = _id++;
-            _poolTokenId[currency][poolId] = _tokenId;
-        }
-    }
-
     function mint(uint256 id, uint256 amount) external {
         unchecked {
             _mint(msg.sender, id, amount);

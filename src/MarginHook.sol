@@ -27,8 +27,6 @@ import {MarginPosition} from "./types/MarginPosition.sol";
 import {BorrowParams} from "./types/BorrowParams.sol";
 import {RateStatus} from "./types/RateStatus.sol";
 
-import {console2} from "forge-std/Test.sol";
-
 contract MarginHook is IMarginHook, BaseHook, ERC20, Owned {
     using UnsafeMath for uint256;
     using SafeCast for uint256;
@@ -544,11 +542,6 @@ contract MarginHook is IMarginHook, BaseHook, ERC20, Owned {
         marginCurrency.take(poolManager, address(this), releaseAmount, true);
         // burn mirror token
         Currency borrowCurrency = marginCurrency == currency0 ? currency1 : currency0;
-        console2.log(
-            "balanceOf:%s,borrowAmount:%s",
-            mirrorTokenManager.balanceOf(address(this), borrowCurrency.toId()),
-            borrowAmount
-        );
         mirrorTokenManager.burnScale(borrowCurrency.toId(), borrowAmount, repayAmount);
         sync();
         return releaseAmount;
