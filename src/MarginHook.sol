@@ -27,7 +27,7 @@ import {MarginPosition} from "./types/MarginPosition.sol";
 import {BorrowParams} from "./types/BorrowParams.sol";
 import {RateStatus} from "./types/RateStatus.sol";
 
-import {Test, console2} from "forge-std/Test.sol";
+import {console2} from "forge-std/Test.sol";
 
 contract MarginHook is IMarginHook, BaseHook, ERC20, Owned {
     using UnsafeMath for uint256;
@@ -493,41 +493,47 @@ contract MarginHook is IMarginHook, BaseHook, ERC20, Owned {
         sync();
     }
 
-    function repay(address payer, address borrowToken, uint256 repayAmount)
+    function repay(address payer, address borrowToken, uint256 borrowAmount, uint256 repayAmount)
         external
         payable
         positionOnly
         returns (uint256)
     {
         require(checkInPair(borrowToken), "ERROR_TOKEN");
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRepay, (payer, borrowToken, repayAmount)));
+        bytes memory result =
+            poolManager.unlock(abi.encodeCall(this.handleRepay, (payer, borrowToken, borrowAmount, repayAmount)));
         return abi.decode(result, (uint256));
     }
 
-    function handleRepay(address payer, address borrowToken, uint256 repayAmount) external selfOnly returns (uint256) {
+    function handleRepay(address payer, address borrowToken, uint256 borrowAmount, uint256 repayAmount)
+        external
+        selfOnly
+        returns (uint256)
+    {
         // repay borrow
         Currency borrowCurrency = Currency.wrap(borrowToken);
         borrowCurrency.settle(poolManager, payer, repayAmount, false);
         borrowCurrency.take(poolManager, address(this), repayAmount, true);
         // burn mirror token
-        mirrorTokenManager.burn(borrowCurrency.toId(), repayAmount);
+        mirrorTokenManager.burnScale(borrowCurrency.toId(), borrowAmount, repayAmount);
         sync();
         return repayAmount;
     }
 
-    function liquidate(address marginToken, uint256 releaseAmount, uint256 borrowAmount)
+    function liquidate(address marginToken, uint256 releaseAmount, uint256 borrowAmount, uint256 repayAmount)
         external
         payable
         positionOnly
         returns (uint256)
     {
         require(checkInPair(marginToken), "ERROR_TOKEN");
-        bytes memory result =
-            poolManager.unlock(abi.encodeCall(this.handleLiquidate, (marginToken, releaseAmount, borrowAmount)));
+        bytes memory result = poolManager.unlock(
+            abi.encodeCall(this.handleLiquidate, (marginToken, releaseAmount, borrowAmount, repayAmount))
+        );
         return abi.decode(result, (uint256));
     }
 
-    function handleLiquidate(address marginToken, uint256 releaseAmount, uint256 borrowAmount)
+    function handleLiquidate(address marginToken, uint256 releaseAmount, uint256 borrowAmount, uint256 repayAmount)
         external
         selfOnly
         returns (uint256)
@@ -538,7 +544,12 @@ contract MarginHook is IMarginHook, BaseHook, ERC20, Owned {
         marginCurrency.take(poolManager, address(this), releaseAmount, true);
         // burn mirror token
         Currency borrowCurrency = marginCurrency == currency0 ? currency1 : currency0;
-        mirrorTokenManager.burn(borrowCurrency.toId(), borrowAmount);
+        console2.log(
+            "balanceOf:%s,borrowAmount:%s",
+            mirrorTokenManager.balanceOf(address(this), borrowCurrency.toId()),
+            borrowAmount
+        );
+        mirrorTokenManager.burnScale(borrowCurrency.toId(), borrowAmount, repayAmount);
         sync();
         return releaseAmount;
     }

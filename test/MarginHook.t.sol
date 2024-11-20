@@ -257,7 +257,7 @@ contract MarginHookTest is Test {
         assertEq(rate, 50000);
         uint256 positionId;
         uint256 borrowAmount;
-        uint256 payValue = 0.1e18;
+        uint256 payValue = 0.01e18;
         BorrowParams memory params = BorrowParams({
             marginToken: address(0),
             borrowToken: address(tokenB),
@@ -287,7 +287,7 @@ contract MarginHookTest is Test {
         vm.warp(3600 * 10);
         uint256 q = rate * 3600 * 10 / 24 / 365 / 3600;
         uint256 borrowAmountLast = borrowAmount * (10 ** 6 + q) / 10 ** 6;
-        payValue = 0.2e18;
+        payValue = 0.02e18;
         params = BorrowParams({
             marginToken: address(0),
             borrowToken: address(tokenB),
@@ -333,6 +333,36 @@ contract MarginHookTest is Test {
         console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
         assertEq(position.borrowAmount - newPosition.borrowAmount, repay);
         assertEq(position.marginTotal - newPosition.marginTotal, user.balance - userBalance);
+        vm.stopPrank();
+    }
+
+    function test_hook_liquidate() public {
+        test_hook_borrow();
+        vm.startPrank(user);
+        uint256 positionId = marginPositionManager.getPositionId(address(nativeHook), address(tokenB));
+        assertGt(positionId, 0);
+        MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        (bool liquided, uint256 releaseAmount) = marginPositionManager.checkLiquidate(positionId);
+        uint256 amountIn = 0.1 ether;
+        address[] memory _path = new address[](2);
+        _path[0] = address(0);
+        _path[1] = address(tokenB);
+        while (!liquided) {
+            MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+                path: _path,
+                to: user,
+                amountIn: amountIn,
+                amountOut: 0,
+                amountOutMin: 0,
+                deadline: type(uint256).max
+            });
+            swapRouter.exactInput{value: amountIn}(swapParams);
+            (liquided, releaseAmount) = marginPositionManager.checkLiquidate(positionId);
+            console.log("releaseAmount:%s,liquidationAmount:%s", releaseAmount, position.liquidationAmount);
+        }
+        marginPositionManager.liquidate(positionId);
+        position = marginPositionManager.getPosition(positionId);
+        assertEq(position.operator, address(0));
         vm.stopPrank();
     }
 }

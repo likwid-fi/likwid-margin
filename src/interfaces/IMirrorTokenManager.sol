@@ -11,4 +11,6 @@ interface IMirrorTokenManager is IERC6909Claims {
     function mint(uint256 id, uint256 amount) external;
 
     function burn(uint256 id, uint256 amount) external;
+
+    function burnScale(uint256 id, uint256 total, uint256 amount) external;
 }

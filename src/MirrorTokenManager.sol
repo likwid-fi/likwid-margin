@@ -37,4 +37,11 @@ contract MirrorTokenManager is IMirrorTokenManager, ERC6909Claims, Owned {
             _burn(msg.sender, id, amount);
         }
     }
+
+    function burnScale(uint256 id, uint256 total, uint256 amount) external {
+        unchecked {
+            uint256 burnAmount = amount * balanceOf[msg.sender][id] / total;
+            _burn(msg.sender, id, burnAmount);
+        }
+    }
 }

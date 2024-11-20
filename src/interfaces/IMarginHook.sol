@@ -16,9 +16,12 @@ interface IMarginHook {
 
     function borrow(BorrowParams memory params) external returns (uint256, BorrowParams memory);
 
-    function repay(address payer, address borrowToken, uint256 repayAmount) external payable returns (uint256);
+    function repay(address payer, address borrowToken, uint256 borrowAmount, uint256 repayAmount)
+        external
+        payable
+        returns (uint256);
 
-    function liquidate(address marginToken, uint256 releaseAmount, uint256 borrowAmount)
+    function liquidate(address marginToken, uint256 releaseAmount, uint256 borrowAmount, uint256 repayAmount)
         external
         payable
         returns (uint256);
