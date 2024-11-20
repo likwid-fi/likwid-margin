@@ -8,4 +8,5 @@ struct HookParams {
     address tokenA;
     address tokenB;
     uint24 fee;
+    uint24 marginFee;
 }

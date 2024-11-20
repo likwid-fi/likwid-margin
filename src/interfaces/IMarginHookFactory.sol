@@ -26,6 +26,7 @@ interface IMarginHookFactory {
             Currency currency0,
             Currency currency1,
             uint24 fee,
+            uint24 marginFee,
             IMirrorTokenManager _mirrorTokenManager,
             IMarginPositionManager _marginPositionManager
         );

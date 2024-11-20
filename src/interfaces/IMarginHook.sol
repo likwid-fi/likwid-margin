@@ -10,11 +10,16 @@ import {BorrowParams} from "../types/BorrowParams.sol";
 interface IMarginHook {
     function ltvParameters() external view returns (uint24, uint24);
 
-    function getAmountIn(address payToken, uint256 amountOut) external view returns (uint256 amountIn);
+    function getAmountIn(address tokenIn, uint256 amountOut) external view returns (uint256 amountIn);
 
-    function getAmountOut(address payToken, uint256 amountIn) external view returns (uint256 amountOut);
+    function getAmountOut(address tokenIn, uint256 amountIn) external view returns (uint256 amountOut);
 
     function borrow(BorrowParams memory params) external returns (uint256, BorrowParams memory);
 
     function repay(address payer, address borrowToken, uint256 repayAmount) external payable returns (uint256);
+
+    function liquidate(address marginToken, uint256 releaseAmount, uint256 borrowAmount)
+        external
+        payable
+        returns (uint256);
 }

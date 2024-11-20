@@ -5,6 +5,7 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
+import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 // Local
 import {CurrencySettleTake} from "./libraries/CurrencySettleTake.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
@@ -12,6 +13,7 @@ import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
 import {IMarginHook} from "./interfaces/IMarginHook.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
 import {BorrowParams} from "./types/BorrowParams.sol";
+import {Math} from "./libraries/Math.sol";
 
 import {console} from "forge-std/console.sol";
 
@@ -116,15 +118,43 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
     }
 
-    function checkLiquidate(uint256 positionId) public view returns (bool liquided, uint256 amountIn) {
+    function checkLiquidate(uint256 positionId) public view returns (bool liquided, uint256 releaseAmount) {
         MarginPosition memory _position = _positions[positionId];
         address hook = factory.getHookPair(_position.borrowToken, _position.marginToken);
         if (hook == address(0)) revert PairNotExists();
-        amountIn = IMarginHook(hook).getAmountIn(_position.marginToken, _position.borrowAmount);
+        uint256 amountIn = IMarginHook(hook).getAmountIn(_position.marginToken, _position.borrowAmount);
         liquided = amountIn > _position.liquidationAmount;
+        releaseAmount = Math.min(amountIn, _position.marginSell + _position.marginTotal);
     }
 
-    function liquidate(uint256 positionId) external payable {}
+    function liquidate(uint256 positionId) external returns (uint256 profit) {
+        (bool liquided, uint256 releaseAmount) = checkLiquidate(positionId);
+        if (!liquided) {
+            return profit;
+        }
+        MarginPosition memory _position = _positions[positionId];
+        address hook = factory.getHookPair(_position.borrowToken, _position.marginToken);
+        if (hook == address(0)) revert PairNotExists();
+        Currency.wrap(_position.marginToken).transfer(address(this), hook, releaseAmount);
+        IMarginHook(hook).liquidate(_position.marginToken, releaseAmount, _position.borrowAmount);
+        profit = _position.marginSell + _position.marginTotal - releaseAmount;
+        if (profit > 0) {
+            Currency.wrap(_position.marginToken).transfer(address(this), msg.sender, profit);
+        }
+        _burn(positionId);
+    }
+
+    function withdrawFee(address to, uint256 amount) external onlyOwner returns (bool) {
+        (bool success,) = to.call{value: amount}("");
+        return success;
+    }
+
+    function withdrawToken(address to, address tokenAddr) external onlyOwner {
+        uint256 balance = IERC20Minimal(tokenAddr).balanceOf(address(this));
+        if (balance > 0) {
+            IERC20Minimal(tokenAddr).transfer(to, balance);
+        }
+    }
 
     receive() external payable {}
 }

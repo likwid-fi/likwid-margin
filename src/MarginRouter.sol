@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.26;
 
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
@@ -7,27 +7,31 @@ import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockC
 import {BalanceDelta, BalanceDeltaLibrary} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {CurrencySettleTake} from "./libraries/CurrencySettleTake.sol";
 import {SafeCallback} from "v4-periphery/src/base/SafeCallback.sol";
+import {Owned} from "solmate/src/auth/Owned.sol";
+import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 
-import {MarginHook} from "./MarginHook.sol";
+import {IMarginHook} from "./interfaces/IMarginHook.sol";
+import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
 import {console} from "forge-std/console.sol";
 
-contract MarginRouter is SafeCallback {
+contract MarginRouter is SafeCallback, Owned {
     using CurrencyLibrary for Currency;
     using CurrencySettleTake for Currency;
-    using Hooks for IHooks;
 
     error LockFailure();
     error NotSelf();
 
-    MarginHook public immutable hook;
+    IMarginHookFactory public immutable factory;
 
     error InsufficientOutputReceived();
 
-    constructor(IPoolManager _manager, MarginHook _hook) SafeCallback(_manager) {
-        hook = _hook;
+    constructor(address initialOwner, IPoolManager _manager, IMarginHookFactory _factory)
+        Owned(initialOwner)
+        SafeCallback(_manager)
+    {
+        factory = _factory;
         poolManager = _manager;
     }
 
@@ -89,7 +93,9 @@ contract MarginRouter is SafeCallback {
             ? (Currency.wrap(params.path[0]), Currency.wrap(params.path[1]))
             : (Currency.wrap(params.path[1]), Currency.wrap(params.path[0]));
 
-        PoolKey memory key = PoolKey({currency0: currency0, currency1: currency1, fee: 0, tickSpacing: 1, hooks: hook});
+        address hook = factory.getHookPair(params.path[0], params.path[1]);
+        PoolKey memory key =
+            PoolKey({currency0: currency0, currency1: currency1, fee: 0, tickSpacing: 1, hooks: IHooks(hook)});
         int256 amountSpecified;
         if (params.amountIn > 0) {
             amountSpecified = -int256(params.amountIn);
@@ -120,4 +126,18 @@ contract MarginRouter is SafeCallback {
         }
         return 0;
     }
+
+    function withdrawFee(address to, uint256 amount) external onlyOwner returns (bool) {
+        (bool success,) = to.call{value: amount}("");
+        return success;
+    }
+
+    function withdrawToken(address to, address tokenAddr) external onlyOwner {
+        uint256 balance = IERC20Minimal(tokenAddr).balanceOf(address(this));
+        if (balance > 0) {
+            IERC20Minimal(tokenAddr).transfer(to, balance);
+        }
+    }
+
+    receive() external payable {}
 }

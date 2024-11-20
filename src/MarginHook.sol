@@ -11,8 +11,10 @@ import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {SafeCast} from "v4-core/libraries/SafeCast.sol";
+import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 // Solmate
 import {ERC20} from "solmate/src/Tokens/ERC20.sol";
+import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
 import {CurrencySettleTake} from "./libraries/CurrencySettleTake.sol";
 import {Math} from "./libraries/Math.sol";
@@ -27,7 +29,7 @@ import {RateStatus} from "./types/RateStatus.sol";
 
 import {Test, console2} from "forge-std/Test.sol";
 
-contract MarginHook is IMarginHook, BaseHook, ERC20 {
+contract MarginHook is IMarginHook, BaseHook, ERC20, Owned {
     using UnsafeMath for uint256;
     using SafeCast for uint256;
     using CurrencySettleTake for Currency;
@@ -67,23 +69,21 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
 
     uint24 public initialLTV = 500000; // 50%
     uint24 public liquidationLTV = 900000; // 90%
-    uint24 public fee; // 0.6%
+    uint24 public fee; // 3000 = 0.3%
+    uint24 public marginFee; // 15000 = 1.5%
     uint24 public protocolFee = 3000; // 0.3%
+    uint24 public protocolMarginFee = 5000; // 0.5%
     RateStatus public rateStatus;
 
-    constructor(IPoolManager _manager, string memory _name, string memory _symbol)
+    constructor(address initialOwner, IPoolManager _manager, string memory _name, string memory _symbol)
+        Owned(initialOwner)
         BaseHook(_manager)
         ERC20(_name, _symbol, 18)
     {
-        (currency0, currency1, fee, mirrorTokenManager, marginPositionManager) =
+        (currency0, currency1, fee, marginFee, mirrorTokenManager, marginPositionManager) =
             IMarginHookFactory(msg.sender).parameters();
         factory = IMarginHookFactory(msg.sender);
         rateStatus = RateStatus({rateBase: 50000, useHighLevel: 700000, mLow: 10, mHigh: 50});
-    }
-
-    modifier factoryOnly() {
-        if (msg.sender != address(factory)) revert NotFactory();
-        _;
     }
 
     modifier positionOnly() {
@@ -103,6 +103,10 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
 
     function checkFeeOn() public view returns (bool feeOn) {
         feeOn = factory.feeTo() != address(0) && protocolFee > 0;
+    }
+
+    function checkMarginFeeOn() public view returns (bool feeOn) {
+        feeOn = factory.feeTo() != address(0) && protocolMarginFee > 0;
     }
 
     function checkInPair(address token) public view returns (bool fit) {
@@ -418,13 +422,29 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         (amount0, amount1) = burn(to, _liquidity);
     }
 
-    // ******************** FACTORY CALL ********************
+    // ******************** OWNER CALL ********************
 
-    function setProtocolFee(uint24 _fee) external factoryOnly {
+    function setProtocolFee(uint24 _fee) external onlyOwner {
         protocolFee = _fee;
     }
 
-    function skimReserves(address to) external factoryOnly {
+    function setProtocolMarginFee(uint24 _fee) external onlyOwner {
+        protocolMarginFee = _fee;
+    }
+
+    function withdrawFee(address to, uint256 amount) external onlyOwner returns (bool) {
+        (bool success,) = to.call{value: amount}("");
+        return success;
+    }
+
+    function withdrawToken(address to, address tokenAddr) external onlyOwner {
+        uint256 balance = IERC20Minimal(tokenAddr).balanceOf(address(this));
+        if (balance > 0) {
+            IERC20Minimal(tokenAddr).transfer(to, balance);
+        }
+    }
+
+    function skimReserves(address to) external onlyOwner {
         poolManager.unlock(abi.encodeCall(this.handleSkim, (to)));
     }
 
@@ -449,19 +469,25 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
     function handleBorrow(uint256 marginSell, uint24 leverage, address _borrowToken)
         external
         selfOnly
-        returns (uint256 marginTotal, uint256 borrowAmount)
+        returns (uint256 marginWithoutFee, uint256 borrowAmount)
     {
         Currency borrowCurrency = Currency.wrap(_borrowToken);
         bool zeroForOne = currency0 == borrowCurrency;
         Currency marginCurrency = zeroForOne ? currency1 : currency0;
         uint256 borrowReserves = zeroForOne ? reserve0 : reserve1;
-        marginTotal = marginSell * leverage * initialLTV / ONE_MILLION;
+        uint256 marginTotal = marginSell * leverage * initialLTV / ONE_MILLION;
         (borrowAmount,) = _getAmountIn(zeroForOne, marginTotal);
         require(borrowReserves > borrowAmount, "token not enough");
         (marginTotal,) = _getAmountOut(zeroForOne, borrowAmount);
         // send total token
-        marginCurrency.settle(poolManager, address(this), marginTotal, true);
-        marginCurrency.take(poolManager, address(marginPositionManager), marginTotal, false);
+        marginWithoutFee = marginTotal * (ONE_MILLION - marginFee) / ONE_MILLION;
+        marginCurrency.settle(poolManager, address(this), marginWithoutFee, true);
+        if (checkMarginFeeOn()) {
+            uint256 protocolMarginFeeAmount = marginTotal * protocolMarginFee / ONE_MILLION;
+            marginCurrency.take(poolManager, factory.feeTo(), protocolMarginFeeAmount, false);
+            marginWithoutFee -= protocolMarginFeeAmount;
+        }
+        marginCurrency.take(poolManager, address(marginPositionManager), marginWithoutFee, false);
         // mint mirror token
         mirrorTokenManager.mint(borrowCurrency.toId(), borrowAmount);
         sync();
@@ -487,5 +513,33 @@ contract MarginHook is IMarginHook, BaseHook, ERC20 {
         mirrorTokenManager.burn(borrowCurrency.toId(), repayAmount);
         sync();
         return repayAmount;
+    }
+
+    function liquidate(address marginToken, uint256 releaseAmount, uint256 borrowAmount)
+        external
+        payable
+        positionOnly
+        returns (uint256)
+    {
+        require(checkInPair(marginToken), "ERROR_TOKEN");
+        bytes memory result =
+            poolManager.unlock(abi.encodeCall(this.handleLiquidate, (marginToken, releaseAmount, borrowAmount)));
+        return abi.decode(result, (uint256));
+    }
+
+    function handleLiquidate(address marginToken, uint256 releaseAmount, uint256 borrowAmount)
+        external
+        selfOnly
+        returns (uint256)
+    {
+        // release margin
+        Currency marginCurrency = Currency.wrap(marginToken);
+        marginCurrency.settle(poolManager, address(this), releaseAmount, false);
+        marginCurrency.take(poolManager, address(this), releaseAmount, true);
+        // burn mirror token
+        Currency borrowCurrency = marginCurrency == currency0 ? currency1 : currency0;
+        mirrorTokenManager.burn(borrowCurrency.toId(), borrowAmount);
+        sync();
+        return releaseAmount;
     }
 }

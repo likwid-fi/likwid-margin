@@ -67,7 +67,7 @@ contract MarginHookTest is Test {
         uint160 flags =
             uint160(Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
 
-        bytes memory constructorArgs = abi.encode(manager, "TEST HOOK", "TH"); //Add all the necessary constructor arguments from the hook
+        bytes memory constructorArgs = abi.encode(user, manager, "TEST HOOK", "TH"); //Add all the necessary constructor arguments from the hook
         // Mine a salt that will produce a hook address with the correct flags
         (address hookAddress, bytes32 salt) =
             HookMiner.find(address(factory), flags, type(MarginHook).creationCode, constructorArgs);
@@ -77,7 +77,8 @@ contract MarginHookTest is Test {
             symbol: "TH",
             tokenA: address(tokenA),
             tokenB: address(tokenB),
-            fee: 3000
+            fee: 3000,
+            marginFee: 15000
         });
         IHooks createHookAddress = factory.createHook(params);
         // deployCodeTo("MarginHook.sol:MarginHook", constructorArgs, hookAddress);
@@ -85,7 +86,7 @@ contract MarginHookTest is Test {
         console.log("createHookAddress:%s, hookAddress:%s", address(createHookAddress), hookAddress);
         hook = MarginHook(hookAddress);
 
-        constructorArgs = abi.encode(manager, "TEST NATIVE HOOK", "TNH");
+        constructorArgs = abi.encode(user, manager, "TEST NATIVE HOOK", "TNH");
         (hookAddress, salt) = HookMiner.find(address(factory), flags, type(MarginHook).creationCode, constructorArgs);
         params = HookParams({
             salt: salt,
@@ -93,7 +94,8 @@ contract MarginHookTest is Test {
             symbol: "TNH",
             tokenA: address(0),
             tokenB: address(tokenB),
-            fee: 3000
+            fee: 3000,
+            marginFee: 15000
         });
         createHookAddress = factory.createHook(params);
         assertEq(address(createHookAddress), hookAddress);
@@ -125,7 +127,7 @@ contract MarginHookTest is Test {
 
         deployMintAndApprove2Currencies();
 
-        swapRouter = new MarginRouter(manager, nativeHook);
+        swapRouter = new MarginRouter(user, manager, factory);
     }
 
     function test_hook_liquidity() public {
