@@ -49,6 +49,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
 
     function getPosition(uint256 positionId) external view returns (MarginPosition memory _position) {
         _position = _positions[positionId];
+        address hook = factory.getHookPair(_position.borrowToken, _position.marginToken);
+        if (hook == address(0)) revert PairNotExists();
+        uint256 rateLast = IMarginHook(hook).getBorrowRateCumulativeLast(_position.borrowToken);
+        _position.borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
     }
 
     function getPositionId(address hook, address borrowToken) external view returns (uint256 _positionId) {
@@ -107,14 +111,14 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             bool allowanceFlag = IERC20Minimal(_position.borrowToken).allowance(msg.sender, hook) >= repayAmount;
             require(allowanceFlag, "ALLOWANCE_AMOUNT_ERR");
         }
-        IMarginHook(hook).repay{value: msg.value}(
-            msg.sender, _position.borrowToken, _position.borrowAmount, repayAmount
-        );
+        uint256 rateLast = IMarginHook(hook).getBorrowRateCumulativeLast(_position.borrowToken);
+        uint256 borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
+        IMarginHook(hook).repay{value: msg.value}(msg.sender, _position.borrowToken, borrowAmount, repayAmount);
         // update position
-        uint256 releaseTotal = repayAmount * _position.marginTotal / _position.borrowAmount;
+        uint256 releaseTotal = repayAmount * _position.marginTotal / borrowAmount;
         _position.nonce++;
         _position.marginTotal -= releaseTotal;
-        _position.borrowAmount -= repayAmount;
+        _position.borrowAmount = borrowAmount - repayAmount;
         _position.liquidationAmount -= releaseTotal;
         Currency.wrap(_position.marginToken).transfer(address(this), msg.sender, releaseTotal);
         if (_position.borrowAmount == 0) {
@@ -127,7 +131,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         MarginPosition memory _position = _positions[positionId];
         address hook = factory.getHookPair(_position.borrowToken, _position.marginToken);
         if (hook == address(0)) revert PairNotExists();
-        uint256 amountIn = IMarginHook(hook).getAmountIn(_position.marginToken, _position.borrowAmount);
+        uint256 rateLast = IMarginHook(hook).getBorrowRateCumulativeLast(_position.borrowToken);
+        uint256 borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
+        uint256 amountIn = IMarginHook(hook).getAmountIn(_position.marginToken, borrowAmount);
         liquided = amountIn > _position.liquidationAmount;
         releaseAmount = Math.min(amountIn, _position.marginSell + _position.marginTotal);
     }
@@ -147,9 +153,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             bool success = Currency.wrap(_position.marginToken).transfer(address(this), hook, releaseAmount);
             require(success, "TRANSFER_ERR");
         }
-        IMarginHook(hook).liquidate{value: liquidateValue}(
-            _position.marginToken, releaseAmount, _position.borrowAmount, _position.borrowAmount
-        );
+        IMarginHook(hook).liquidate{value: liquidateValue}(_position.marginToken, releaseAmount);
         profit = _position.marginSell + _position.marginTotal - releaseAmount;
         if (profit > 0) {
             Currency.wrap(_position.marginToken).transfer(address(this), msg.sender, profit);
@@ -157,16 +161,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         _burnPosition(positionId);
     }
 
-    function withdrawFee(address to, uint256 amount) external onlyOwner returns (bool) {
-        (bool success,) = to.call{value: amount}("");
-        return success;
-    }
-
-    function withdrawToken(address to, address tokenAddr) external onlyOwner {
-        uint256 balance = IERC20Minimal(tokenAddr).balanceOf(address(this));
-        if (balance > 0) {
-            IERC20Minimal(tokenAddr).transfer(to, balance);
-        }
+    function withdrawFee(address token, address to, uint256 amount) external onlyOwner returns (bool success) {
+        success = Currency.wrap(token).transfer(to, address(this), amount);
     }
 
     receive() external payable {}

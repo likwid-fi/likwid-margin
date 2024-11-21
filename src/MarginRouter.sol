@@ -35,7 +35,7 @@ contract MarginRouter is SafeCallback, Owned {
     }
 
     modifier ensure(uint256 deadline) {
-        require(deadline >= block.timestamp, "MarginRouter: EXPIRED");
+        require(deadline >= block.timestamp, "EXPIRED");
         _;
     }
 
@@ -125,16 +125,8 @@ contract MarginRouter is SafeCallback, Owned {
         return 0;
     }
 
-    function withdrawFee(address to, uint256 amount) external onlyOwner returns (bool) {
-        (bool success,) = to.call{value: amount}("");
-        return success;
-    }
-
-    function withdrawToken(address to, address tokenAddr) external onlyOwner {
-        uint256 balance = IERC20Minimal(tokenAddr).balanceOf(address(this));
-        if (balance > 0) {
-            IERC20Minimal(tokenAddr).transfer(to, balance);
-        }
+    function withdrawFee(address token, address to, uint256 amount) external onlyOwner returns (bool success) {
+        success = Currency.wrap(token).transfer(to, address(this), amount);
     }
 
     receive() external payable {}
