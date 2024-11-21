@@ -24,9 +24,11 @@ import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
-import {BorrowParams} from "./types/BorrowParams.sol";
+import {MarginParams} from "./types/MarginParams.sol";
 import {RateStatus} from "./types/RateStatus.sol";
 import {LiquidityParams} from "./types/LiquidityParams.sol";
+
+import {console} from "forge-std/console.sol";
 
 contract MarginHook is IMarginHook, BaseHook, ERC20, Owned {
     using UnsafeMath for uint256;
@@ -313,10 +315,9 @@ contract MarginHook is IMarginHook, BaseHook, ERC20, Owned {
         uint256 timeElapsed = (block.timestamp - blockTimestampLast) * 10 ** 3;
         uint256 rate0Last = ONE_BILLION + _getBorrowRate(reserve0, mirrorReserve0) * timeElapsed / YEAR_SECONDS;
         uint256 rate1Last = ONE_BILLION + _getBorrowRate(reserve1, mirrorReserve1) * timeElapsed / YEAR_SECONDS;
-
+        console.log("_update.timeElapsed:%s,rate1Last:%s", timeElapsed, rate1Last);
         rate0CumulativeLast = rate0CumulativeLast * rate0Last / ONE_BILLION;
         rate1CumulativeLast = rate1CumulativeLast * rate1Last / ONE_BILLION;
-
         blockTimestampLast = block.timestamp;
 
         reserve0 = balance0;
@@ -462,19 +463,16 @@ contract MarginHook is IMarginHook, BaseHook, ERC20, Owned {
 
     // ******************** MARGIN FUNCTIONS ********************
 
-    function borrow(BorrowParams memory params) external positionOnly returns (uint256, BorrowParams memory) {
+    function borrow(MarginParams memory params) external positionOnly returns (MarginParams memory) {
         require(checkPair(params.borrowToken, params.marginToken), "ERROR_HOOK");
         bytes memory result = poolManager.unlock(
-            abi.encodeCall(this.handleBorrow, (params.marginSell, params.leverage, params.borrowToken))
+            abi.encodeCall(this.handleBorrow, (params.marginAmount, params.leverage, params.borrowToken))
         );
         (params.marginTotal, params.borrowAmount) = abi.decode(result, (uint256, uint256));
-        uint256 _rateCumulativeLast =
-            params.borrowToken == Currency.unwrap(currency0) ? rate0CumulativeLast : rate1CumulativeLast;
-
-        return (_rateCumulativeLast, params);
+        return params;
     }
 
-    function handleBorrow(uint256 marginSell, uint24 leverage, address _borrowToken)
+    function handleBorrow(uint256 marginAmount, uint24 leverage, address _borrowToken)
         external
         selfOnly
         returns (uint256 marginWithoutFee, uint256 borrowAmount)
@@ -483,7 +481,7 @@ contract MarginHook is IMarginHook, BaseHook, ERC20, Owned {
         bool zeroForOne = currency0 == borrowCurrency;
         Currency marginCurrency = zeroForOne ? currency1 : currency0;
         uint256 borrowReserves = zeroForOne ? reserve0 : reserve1;
-        uint256 marginTotal = marginSell * leverage * initialLTV / ONE_MILLION;
+        uint256 marginTotal = marginAmount * leverage * initialLTV / ONE_MILLION;
         (borrowAmount,) = _getAmountIn(zeroForOne, marginTotal);
         require(borrowReserves > borrowAmount, "token not enough");
         (marginTotal,) = _getAmountOut(zeroForOne, borrowAmount);

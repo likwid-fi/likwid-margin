@@ -5,7 +5,7 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 
-import {BorrowParams} from "../types/BorrowParams.sol";
+import {MarginParams} from "../types/MarginParams.sol";
 
 interface IMarginHook {
     function ltvParameters() external view returns (uint24, uint24);
@@ -16,7 +16,7 @@ interface IMarginHook {
 
     function getAmountOut(address tokenIn, uint256 amountIn) external view returns (uint256 amountOut);
 
-    function borrow(BorrowParams memory params) external returns (uint256, BorrowParams memory);
+    function borrow(MarginParams memory params) external returns (MarginParams memory);
 
     function repay(address payer, address borrowToken, uint256 borrowAmount, uint256 repayAmount)
         external

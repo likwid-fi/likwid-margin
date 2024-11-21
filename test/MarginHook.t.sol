@@ -8,7 +8,7 @@ import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
 import {HookParams} from "../src/types/HookParams.sol";
-import {BorrowParams} from "../src/types/BorrowParams.sol";
+import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {LiquidityParams} from "../src/types/LiquidityParams.sol";
 // Solmate
@@ -33,6 +33,10 @@ contract MarginHookTest is Test {
     using BalanceDeltaLibrary for BalanceDelta;
 
     uint160 public constant SQRT_RATIO_1_1 = 79228162514264337593543950336;
+    uint256 public constant MINIMUM_LIQUIDITY = 10 ** 3;
+    uint256 public constant ONE_MILLION = 10 ** 6;
+    uint256 public constant ONE_BILLION = 10 ** 9;
+    uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
 
     MarginHook hook;
     MarginHook nativeHook;
@@ -299,18 +303,19 @@ contract MarginHookTest is Test {
         uint256 positionId;
         uint256 borrowAmount;
         uint256 payValue = 0.01e18;
-        BorrowParams memory params = BorrowParams({
+        MarginParams memory params = MarginParams({
             marginToken: address(0),
             borrowToken: address(tokenB),
             leverage: 3,
-            marginSell: payValue,
+            marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
             borrowMinAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
 
-        (positionId, borrowAmount) = marginPositionManager.borrow{value: payValue}(params);
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         console.log(
             "nativeHook.balance:%s,marginPositionManager.balance:%s",
             address(nativeHook).balance,
@@ -325,23 +330,26 @@ contract MarginHookTest is Test {
             position.rateCumulativeLast
         );
         rate = nativeHook.getBorrowRate(Currency.wrap(address(tokenB)));
-        uint256 rateLast = nativeHook.getBorrowRateCumulativeLast(Currency.wrap(address(tokenB)));
+        uint256 rateLast = nativeHook.getBorrowRateCumulativeLast(address(tokenB));
         console.log("rate:%s,rateLast:%s", rate, rateLast);
         vm.warp(3600 * 10);
-        uint256 q = rate * 3600 * 10 / 24 / 365 / 3600 * 10 ** 3;
-        uint256 borrowAmountLast = borrowAmount * (10 ** 9 + q) / 10 ** 9;
+        uint256 timeElapsed = (3600 * 10 - 1) * 10 ** 3;
+        uint256 rateLastX = (ONE_BILLION + rate * timeElapsed / YEAR_SECONDS) * rateLast / ONE_BILLION;
+        console.log("timeElapsed:%s,rateLastX:%s", timeElapsed, rateLastX);
+        uint256 borrowAmountLast = borrowAmount;
         payValue = 0.02e18;
-        params = BorrowParams({
+        params = MarginParams({
             marginToken: address(0),
             borrowToken: address(tokenB),
             leverage: 3,
-            marginSell: payValue,
+            marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
             borrowMinAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
-        (positionId, borrowAmount) = marginPositionManager.borrow{value: payValue}(params);
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         console.log(
             "nativeHook.balance:%s,marginPositionManager.balance:%s",
             address(nativeHook).balance,
@@ -349,13 +357,40 @@ contract MarginHookTest is Test {
         );
         console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
         position = marginPositionManager.getPosition(positionId);
-        // assertEq(position.borrowAmount / 100, (borrowAmountLast + borrowAmount) / 100);
+        uint256 borrowAmountAll = borrowAmount + borrowAmountLast * rateLastX / rateLast;
+        assertEq(position.borrowAmount / 100, borrowAmountAll / 100);
+        console.log("positionId:%s,position.borrowAmount:%s,all:%s", positionId, position.borrowAmount, borrowAmountAll);
+
+        vm.warp(3600 * 20);
+        rate = nativeHook.getBorrowRate(Currency.wrap(address(tokenB)));
+        timeElapsed = (3600 * 10) * 10 ** 3;
+        rateLast = rateLastX;
+        rateLastX = (ONE_BILLION + rate * timeElapsed / YEAR_SECONDS) * rateLast / ONE_BILLION;
+        console.log("timeElapsed:%s,rateLast:%s,rateLastX:%s", timeElapsed, rateLast, rateLastX);
+
+        payValue = 0.02e18;
+        params = MarginParams({
+            marginToken: address(0),
+            borrowToken: address(tokenB),
+            leverage: 3,
+            marginAmount: payValue,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMinAmount: 0,
+            recipient: user,
+            deadline: block.timestamp + 1000
+        });
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         console.log(
-            "positionId:%s,position.borrowAmount:%s,all:%s",
-            positionId,
-            position.borrowAmount,
-            borrowAmountLast + borrowAmount
+            "nativeHook.balance:%s,marginPositionManager.balance:%s",
+            address(nativeHook).balance,
+            address(marginPositionManager).balance
         );
+        console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
+        position = marginPositionManager.getPosition(positionId);
+        borrowAmountAll = borrowAmount + borrowAmountAll * rateLastX / rateLast;
+        assertEq(position.borrowAmount / 100, borrowAmountAll / 100);
+        console.log("positionId:%s,position.borrowAmount:%s,all:%s", positionId, position.borrowAmount, borrowAmountAll);
         vm.stopPrank();
     }
 
@@ -401,7 +436,7 @@ contract MarginHookTest is Test {
             });
             swapRouter.exactInput{value: amountIn}(swapParams);
             (liquided, releaseAmount) = marginPositionManager.checkLiquidate(positionId);
-            console.log("releaseAmount:%s,liquidationAmount:%s", releaseAmount, position.liquidationAmount);
+            console.log("releaseAmount:%s", releaseAmount);
         }
         console.log(
             "before liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
@@ -410,7 +445,6 @@ contract MarginHookTest is Test {
         );
         marginPositionManager.liquidate(positionId);
         position = marginPositionManager.getPosition(positionId);
-        assertEq(position.operator, address(0));
         console.log(
             "after liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
             address(nativeHook).balance,
