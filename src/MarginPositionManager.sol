@@ -7,7 +7,7 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 // Local
-import {CurrencySettleTake} from "./libraries/CurrencySettleTake.sol";
+import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
 import {IMarginHook} from "./interfaces/IMarginHook.sol";
@@ -18,7 +18,7 @@ import {Math} from "./libraries/Math.sol";
 import {console} from "forge-std/console.sol";
 
 contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
-    using CurrencySettleTake for Currency;
+    using CurrencyUtils for Currency;
     using CurrencyLibrary for Currency;
 
     error PairNotExists();

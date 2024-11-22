@@ -4,8 +4,9 @@ pragma solidity ^0.8.20;
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
 
-library CurrencySettleTake {
+library CurrencyUtils {
     using CurrencyLibrary for Currency;
 
     /// @notice Settle (pay) a currency to the PoolManager
@@ -43,7 +44,7 @@ library CurrencySettleTake {
     }
 
     function transfer(Currency currency, address payer, address recipient, uint256 amount)
-        external
+        internal
         returns (bool success)
     {
         if (currency.isAddressZero()) {
@@ -55,5 +56,9 @@ library CurrencySettleTake {
                 success = IERC20Minimal(Currency.unwrap(currency)).transfer(recipient, amount);
             }
         }
+    }
+
+    function toKeyId(Currency currency, PoolKey memory key) internal pure returns (uint256) {
+        return uint256(keccak256(abi.encode(currency, key)));
     }
 }

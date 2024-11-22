@@ -12,3 +12,18 @@ struct MarginParams {
     address recipient;
     uint256 deadline;
 }
+
+struct RepayParams {
+    address marginToken;
+    address borrowToken;
+    address payer;
+    uint256 borrowAmount;
+    uint256 repayAmount;
+    uint256 deadline;
+}
+
+struct LiquidateParams {
+    address marginToken;
+    address borrowToken;
+    uint256 releaseAmount;
+}

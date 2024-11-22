@@ -9,11 +9,11 @@ import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {SafeCast} from "v4-core/libraries/SafeCast.sol";
-import {CurrencySettleTake} from "./CurrencySettleTake.sol";
+import {CurrencyUtils} from "./CurrencyUtils.sol";
 
 abstract contract CustomCurveBase is BaseHook {
     using CurrencyLibrary for Currency;
-    using CurrencySettleTake for Currency;
+    using CurrencyUtils for Currency;
     using SafeCast for uint256;
 
     constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}

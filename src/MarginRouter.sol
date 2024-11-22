@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
-import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
-import {BalanceDelta, BalanceDeltaLibrary} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {CurrencySettleTake} from "./libraries/CurrencySettleTake.sol";
+import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
+import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {IUnlockCallback} from "v4-core/interfaces/callback/IUnlockCallback.sol";
+import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {IHooks} from "v4-core/interfaces/IHooks.sol";
+import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {SafeCallback} from "v4-periphery/src/base/SafeCallback.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
@@ -17,7 +17,7 @@ import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
 
 contract MarginRouter is SafeCallback, Owned {
     using CurrencyLibrary for Currency;
-    using CurrencySettleTake for Currency;
+    using CurrencyUtils for Currency;
 
     error LockFailure();
     error NotSelf();

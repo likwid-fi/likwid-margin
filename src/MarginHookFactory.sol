@@ -2,10 +2,10 @@
 pragma solidity ^0.8.26;
 
 // V4 core
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
+import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {IHooks} from "v4-core/interfaces/IHooks.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 // solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
@@ -14,12 +14,12 @@ import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 
-import {CurrencySettleTake} from "./libraries/CurrencySettleTake.sol";
+import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {MarginHook} from "./MarginHook.sol";
 import {HookParams} from "./types/HookParams.sol";
 
 contract MarginHookFactory is IMarginHookFactory, Owned {
-    using CurrencySettleTake for Currency;
+    using CurrencyUtils for Currency;
     using CurrencyLibrary for Currency;
 
     error InvalidPermissions();

@@ -6,17 +6,28 @@ import {Currency} from "v4-core/types/Currency.sol";
 struct HookStatus {
     Currency currency0;
     Currency currency1;
-    uint256 reserve0;
-    uint256 reserve1;
-    uint256 mirrorReserve0;
-    uint256 mirrorReserve1;
-    uint256 blockTimestampLast; // uses single storage slot, accessible via getReserves
+    uint128 reserve0;
+    uint128 reserve1;
+    uint112 mirrorReserve0;
+    uint112 mirrorReserve1;
+    uint32 blockTimestampLast;
     uint256 rate0CumulativeLast;
     uint256 rate1CumulativeLast;
+    FeeStatus feeStatus;
+}
+
+struct FeeStatus {
     uint24 initialLTV; // 50%
     uint24 liquidationLTV; // 90%
     uint24 fee; // 3000 = 0.3%
     uint24 marginFee; // 15000 = 1.5%
     uint24 protocolFee; // 0.3%
     uint24 protocolMarginFee; // 0.5%
+}
+
+struct BalanceStatus {
+    uint256 balance0;
+    uint256 balance1;
+    uint256 mirrorBalance0;
+    uint256 mirrorBalance1;
 }

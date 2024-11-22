@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
-import {ERC6909Claims} from "@uniswap/v4-core/src/ERC6909Claims.sol";
+import {ERC6909Claims} from "v4-core/ERC6909Claims.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
-import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
-import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
+import {PoolId} from "v4-core/types/PoolId.sol";
+import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";

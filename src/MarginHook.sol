@@ -16,7 +16,7 @@ import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {ERC20} from "solmate/src/Tokens/ERC20.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
-import {CurrencySettleTake} from "./libraries/CurrencySettleTake.sol";
+import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {Math} from "./libraries/Math.sol";
 import {UnsafeMath} from "./libraries/UnsafeMath.sol";
 import {IMarginHook} from "./interfaces/IMarginHook.sol";
@@ -33,7 +33,7 @@ import {console} from "forge-std/console.sol";
 contract MarginHook is IMarginHook, BaseHook, ERC20, Owned {
     using UnsafeMath for uint256;
     using SafeCast for uint256;
-    using CurrencySettleTake for Currency;
+    using CurrencyUtils for Currency;
     using CurrencyLibrary for Currency;
 
     error BalanceOverflow();
@@ -65,7 +65,7 @@ contract MarginHook is IMarginHook, BaseHook, ERC20, Owned {
     uint256 private reserve1;
     uint256 private mirrorReserve0;
     uint256 private mirrorReserve1;
-    uint256 private blockTimestampLast; // uses single storage slot, accessible via getReserves
+    uint256 private blockTimestampLast;
     uint256 public rate0CumulativeLast = ONE_BILLION;
     uint256 public rate1CumulativeLast = ONE_BILLION;
 
