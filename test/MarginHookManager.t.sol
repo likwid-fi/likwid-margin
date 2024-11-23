@@ -28,7 +28,7 @@ import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol"
 
 import {HookMiner} from "./utils/HookMiner.sol";
 
-contract MarginHookTest is Test {
+contract MarginHookManagerTest is Test {
     using CurrencyLibrary for Currency;
     using BalanceDeltaLibrary for BalanceDelta;
 
@@ -113,6 +113,8 @@ contract MarginHookTest is Test {
         // swapRouter = new MarginRouter(user, manager, factory);
     }
 
+    receive() external payable {}
+
     function test_hook_liquidity_v2() public {
         AddLiquidityParams memory params = AddLiquidityParams({
             currency0: currency0,
@@ -140,5 +142,55 @@ contract MarginHookTest is Test {
         hookManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = hookManager.balanceOf(address(this), uPoolId);
         assertEq(liquidityHalf, liquidity - liquidity / 2);
+
+        params = AddLiquidityParams({
+            currency0: CurrencyLibrary.ADDRESS_ZERO,
+            currency1: currency1,
+            amount0: 1e18,
+            amount1: 1e18,
+            tickLower: 50000,
+            tickUpper: 50000,
+            to: address(this),
+            deadline: type(uint256).max
+        });
+        hookManager.addLiquidity{value: 1 ether}(params);
+        uPoolId = uint256(PoolId.unwrap(nativeKey.toId()));
+        liquidity = hookManager.balanceOf(address(this), uPoolId);
+        (_reserves0, _reserves1) = hookManager.getReserves(address(0), Currency.unwrap(currency1));
+        assertEq(_reserves0, _reserves1);
+        console.log("_reserves0:%s,_reserves1:%s", _reserves0, _reserves1);
+        removeParams = RemoveLiquidityParams({
+            currency0: CurrencyLibrary.ADDRESS_ZERO,
+            currency1: currency1,
+            liquidity: liquidity / 2,
+            deadline: type(uint256).max
+        });
+        hookManager.removeLiquidity(removeParams);
+        liquidityHalf = hookManager.balanceOf(address(this), uPoolId);
+        assertEq(liquidityHalf, liquidity - liquidity / 2);
+    }
+
+    function test_hook_swap_native() public {
+        test_hook_liquidity_v2();
+        uint256 amountIn = 0.01 ether;
+        // swap
+        address[] memory _path = new address[](2);
+        _path[0] = address(0);
+        _path[1] = address(tokenB);
+        uint256 balance0 = manager.balanceOf(address(hookManager), 0);
+        uint256 balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
+        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        console.log("before swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
+        MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+            path: _path,
+            to: user,
+            amountIn: amountIn,
+            amountOut: 0,
+            amountOutMin: 0,
+            deadline: type(uint256).max
+        });
+        swapRouter.exactInput{value: amountIn}(swapParams);
+        console.log("swapRouter.balance:%s", manager.balanceOf(address(swapRouter), 0));
+        console.log("after swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
     }
 }

@@ -36,4 +36,9 @@ contract StructTest is Test {
         Currency.wrap(address(0)) == Currency.wrap(address(1));
         // assertTrue(hookStatusStore[key.toId()].currency0 == key.currency0);
     }
+
+    function test_uint32() public {
+        uint32 timestamp = uint32((2 ** 32 + 1) % 2 ** 32);
+        console.log("timestamp:%s", timestamp);
+    }
 }

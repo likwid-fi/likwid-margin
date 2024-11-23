@@ -100,7 +100,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
 
     function _setBalances(PoolKey memory key) internal {
         uint256 balance0 = poolManager.balanceOf(address(this), key.currency0.toId());
-        uint256 balance1 = poolManager.balanceOf(address(this), key.currency0.toId());
+        uint256 balance1 = poolManager.balanceOf(address(this), key.currency1.toId());
         uint256 mirrorBalance0 = mirrorTokenManager.balanceOf(address(this), key.currency0.toKeyId(key));
         uint256 mirrorBalance1 = mirrorTokenManager.balanceOf(address(this), key.currency1.toKeyId(key));
         assembly {
@@ -109,6 +109,10 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
             tstore(MIRROR_BALANCE_0_SLOT, mirrorBalance0)
             tstore(MIRROR_BALANCE_1_SLOT, mirrorBalance1)
         }
+    }
+
+    function _blockTimestamp() internal view returns (uint32 timestamp) {
+        timestamp = uint32(block.timestamp % 2 ** 32);
     }
 
     function _getPoolKey(address tokenA, address tokenB) internal view returns (PoolKey memory key) {
@@ -127,12 +131,11 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
 
     function _getStatus(PoolId poolId) internal view returns (HookStatus memory _status) {
         _status = hookStatusStore[poolId];
-        if (_status.currency0 == CurrencyLibrary.ADDRESS_ZERO) revert PairNotExists();
+        if (_status.currency1 == CurrencyLibrary.ADDRESS_ZERO) revert PairNotExists();
     }
 
     function _getStatus(PoolKey memory key) internal view returns (HookStatus memory _status) {
-        _status = hookStatusStore[key.toId()];
-        if (_status.currency0 == CurrencyLibrary.ADDRESS_ZERO) revert PairNotExists();
+        _status = _getStatus(key.toId());
     }
 
     function _getStatus(address tokenA, address tokenB) internal view returns (HookStatus memory _status) {
@@ -211,7 +214,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         HookStatus memory status;
         status.currency0 = key.currency0;
         status.currency1 = key.currency1;
-        status.blockTimestampLast = uint32(block.timestamp % 2 ** 32);
+        status.blockTimestampLast = _blockTimestamp();
         hookStatusStore[key.toId()] = status;
         poolManager.initialize(key, SQRT_RATIO_1_1);
     }
@@ -320,7 +323,8 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
 
     function _update(PoolKey memory key) internal {
         HookStatus storage status = hookStatusStore[key.toId()];
-        uint256 timeElapsed = (block.timestamp - status.blockTimestampLast) * 10 ** 3;
+        uint32 blockTS = _blockTimestamp();
+        uint256 timeElapsed = (blockTS - status.blockTimestampLast) * 10 ** 3;
         uint256 rate0Last =
             ONE_BILLION + _getBorrowRate(status.reserve0, status.mirrorReserve0) * timeElapsed / YEAR_SECONDS;
         uint256 rate1Last =
@@ -328,7 +332,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         console.log("_update.timeElapsed:%s,rate1Last:%s", timeElapsed, rate1Last);
         status.rate0CumulativeLast = status.rate0CumulativeLast * rate0Last / ONE_BILLION;
         status.rate1CumulativeLast = status.rate1CumulativeLast * rate1Last / ONE_BILLION;
-        status.blockTimestampLast = uint32(block.timestamp % 2 ** 32);
+        status.blockTimestampLast = blockTS;
         BalanceStatus memory balanceStatus = _getBalances();
         BalanceStatus memory nowBalanceStatus = _getBalances(key);
 
