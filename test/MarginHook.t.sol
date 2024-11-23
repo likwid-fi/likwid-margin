@@ -128,11 +128,11 @@ contract MarginHookTest is Test {
         marginPositionManager = new MarginPositionManager(user);
         factory = new MarginHookFactory(user, manager, mirrorTokenManager, marginPositionManager);
         vm.prank(user);
-        marginPositionManager.setFactory(address(factory));
+        // marginPositionManager.setFactory(address(factory));
 
         deployMintAndApprove2Currencies();
 
-        swapRouter = new MarginRouter(user, manager, factory);
+        //swapRouter = new MarginRouter(user, manager, factory);
     }
 
     function test_hook_liquidity() public {
@@ -405,7 +405,7 @@ contract MarginHookTest is Test {
         console.log("before repay balance:%s tokenB.balance:%s", user.balance, tokenB.balanceOf(user));
         uint256 repay = 0.01e18;
         tokenB.approve(address(nativeHook), repay);
-        marginPositionManager.repay(positionId, repay);
+        marginPositionManager.repay(positionId, repay, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
         console.log("after repay balance:%s tokenB.balance:%s", user.balance, tokenB.balanceOf(user));
         console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);

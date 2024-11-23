@@ -14,6 +14,7 @@ import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 
 import {IMarginHook} from "./interfaces/IMarginHook.sol";
 import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
+import {MarginHookManager} from "./MarginHookManager.sol";
 
 contract MarginRouter is SafeCallback, Owned {
     using CurrencyLibrary for Currency;
@@ -21,16 +22,12 @@ contract MarginRouter is SafeCallback, Owned {
 
     error LockFailure();
     error NotSelf();
-
-    IMarginHookFactory public immutable factory;
-
     error InsufficientOutputReceived();
 
-    constructor(address initialOwner, IPoolManager _manager, IMarginHookFactory _factory)
-        Owned(initialOwner)
-        SafeCallback(_manager)
-    {
-        factory = _factory;
+    IHooks public immutable hook;
+
+    constructor(address initialOwner, IPoolManager _manager, IHooks _hook) Owned(initialOwner) SafeCallback(_manager) {
+        hook = _hook;
         poolManager = _manager;
     }
 
@@ -70,7 +67,7 @@ contract MarginRouter is SafeCallback, Owned {
         returns (uint256 amountOut)
     {
         require(params.path.length == 2, "PATH_ERROR");
-        require(params.amountIn > 0, "AMOUNTIN_ERROR");
+        require(params.amountIn > 0, "AMOUNT_IN_ERROR");
         amountOut = abi.decode(poolManager.unlock(abi.encodeCall(this.handelSwap, (params))), (uint256));
     }
 
@@ -81,7 +78,7 @@ contract MarginRouter is SafeCallback, Owned {
         returns (uint256 amountIn)
     {
         require(params.path.length == 2, "PATH_ERROR");
-        require(params.amountOut > 0, "AMOUNTOUT_ERROR");
+        require(params.amountOut > 0, "AMOUNT_OUT_ERROR");
         amountIn = abi.decode(poolManager.unlock(abi.encodeCall(this.handelSwap, (params))), (uint256));
     }
 
@@ -91,9 +88,7 @@ contract MarginRouter is SafeCallback, Owned {
             ? (Currency.wrap(params.path[0]), Currency.wrap(params.path[1]))
             : (Currency.wrap(params.path[1]), Currency.wrap(params.path[0]));
 
-        address hook = factory.getHookPair(params.path[0], params.path[1]);
-        PoolKey memory key =
-            PoolKey({currency0: currency0, currency1: currency1, fee: 0, tickSpacing: 1, hooks: IHooks(hook)});
+        PoolKey memory key = PoolKey({currency0: currency0, currency1: currency1, fee: 0, tickSpacing: 1, hooks: hook});
         int256 amountSpecified;
         if (params.amountIn > 0) {
             amountSpecified = -int256(params.amountIn);

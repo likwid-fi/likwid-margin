@@ -9,10 +9,9 @@ import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 // Local
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
-import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
-import {IMarginHook} from "./interfaces/IMarginHook.sol";
+import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
-import {MarginParams} from "./types/MarginParams.sol";
+import {MarginParams, RepayParams, LiquidateParams} from "./types/MarginParams.sol";
 import {Math} from "./libraries/Math.sol";
 
 import {console} from "forge-std/console.sol";
@@ -27,7 +26,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     uint256 public constant ONE_MILLION = 10 ** 6;
     uint256 private _nextId = 1;
 
-    IMarginHookFactory public factory;
+    IMarginHookManager public hook;
 
     mapping(uint256 => MarginPosition) private _positions;
     mapping(address => uint256) private _hookPositions;
@@ -45,32 +44,28 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         _;
     }
 
-    function setFactory(address _factory) external onlyOwner {
-        factory = IMarginHookFactory(_factory);
+    function setHook(address _hook) external onlyOwner {
+        hook = IMarginHookManager(_hook);
     }
 
     function getPosition(uint256 positionId) external view returns (MarginPosition memory _position) {
         _position = _positions[positionId];
-        address hook = factory.getHookPair(_position.borrowToken, _position.marginToken);
-        if (hook == address(0)) revert PairNotExists();
         if (_position.rateCumulativeLast > 0) {
-            uint256 rateLast = IMarginHook(hook).getBorrowRateCumulativeLast(_position.borrowToken);
+            uint256 rateLast = hook.getBorrowRateCumulativeLast(_position.marginToken, _position.borrowToken);
             _position.borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
         }
     }
 
-    function getPositionId(address hook, address borrowToken) external view returns (uint256 _positionId) {
-        _positionId = _borrowPositions[hook][borrowToken][msg.sender];
+    function getPositionId(address marginToken, address borrowToken) external view returns (uint256 _positionId) {
+        _positionId = _borrowPositions[marginToken][borrowToken][msg.sender];
     }
 
     function margin(MarginParams memory params) external payable ensure(params.deadline) returns (uint256, uint256) {
-        address hook = factory.getHookPair(params.borrowToken, params.marginToken);
-        if (hook == address(0)) revert PairNotExists();
         bool success = Currency.wrap(params.marginToken).transfer(msg.sender, address(this), params.marginAmount);
         require(success, "MARGIN_SELL_ERR");
-        uint256 positionId = _borrowPositions[hook][params.borrowToken][msg.sender];
-        params = IMarginHook(hook).borrow(params);
-        uint256 rateLast = IMarginHook(hook).getBorrowRateCumulativeLast(params.borrowToken);
+        uint256 positionId = _borrowPositions[params.marginToken][params.borrowToken][msg.sender];
+        params = hook.margin(params);
+        uint256 rateLast = hook.getBorrowRateCumulativeLast(params.marginToken, params.borrowToken);
         console.log("margin.rateLast:%s", rateLast);
         if (params.borrowAmount < params.borrowMinAmount) revert InsufficientBorrowReceived();
         if (positionId == 0) {
@@ -83,7 +78,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
                 borrowAmount: params.borrowAmount,
                 rateCumulativeLast: rateLast
             });
-            _borrowPositions[hook][params.borrowToken][msg.sender] = positionId;
+            _borrowPositions[params.marginToken][params.borrowToken][msg.sender] = positionId;
         } else {
             MarginPosition storage _position = _positions[positionId];
             uint256 borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
@@ -96,20 +91,26 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         return (positionId, params.borrowAmount);
     }
 
-    function repay(uint256 positionId, uint256 repayAmount) external payable {
+    function repay(uint256 positionId, uint256 repayAmount, uint256 deadline) external payable ensure(deadline) {
         require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
         MarginPosition storage _position = _positions[positionId];
-        address hook = factory.getHookPair(_position.borrowToken, _position.marginToken);
-        if (hook == address(0)) revert PairNotExists();
         if (_position.borrowToken == address(0)) {
             require(msg.value >= repayAmount, "NATIVE_AMOUNT_ERR");
         } else {
-            bool allowanceFlag = IERC20Minimal(_position.borrowToken).allowance(msg.sender, hook) >= repayAmount;
-            require(allowanceFlag, "ALLOWANCE_AMOUNT_ERR");
+            bool r = IERC20Minimal(_position.borrowToken).allowance(msg.sender, address(hook)) >= repayAmount;
+            require(r, "ALLOWANCE_AMOUNT_ERR");
         }
-        uint256 rateLast = IMarginHook(hook).getBorrowRateCumulativeLast(_position.borrowToken);
+        uint256 rateLast = hook.getBorrowRateCumulativeLast(_position.marginToken, _position.borrowToken);
         uint256 borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
-        IMarginHook(hook).repay{value: msg.value}(msg.sender, _position.borrowToken, borrowAmount, repayAmount);
+        RepayParams memory params = RepayParams({
+            marginToken: _position.marginToken,
+            borrowToken: _position.borrowToken,
+            payer: msg.sender,
+            borrowAmount: _position.borrowAmount,
+            repayAmount: repayAmount,
+            deadline: deadline
+        });
+        hook.repay{value: msg.value}(params);
         // update position
         uint256 releaseTotal = repayAmount * _position.marginTotal / borrowAmount;
         _position.marginTotal -= releaseTotal;
@@ -121,34 +122,36 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
     }
 
-    function checkLiquidate(uint256 positionId) public view returns (bool liquided, uint256 releaseAmount) {
+    function checkLiquidate(uint256 positionId) public view returns (bool liquidated, uint256 releaseAmount) {
         MarginPosition memory _position = _positions[positionId];
-        address hook = factory.getHookPair(_position.borrowToken, _position.marginToken);
-        if (hook == address(0)) revert PairNotExists();
-        uint256 rateLast = IMarginHook(hook).getBorrowRateCumulativeLast(_position.borrowToken);
+        uint256 rateLast = hook.getBorrowRateCumulativeLast(_position.marginToken, _position.borrowToken);
         uint256 borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
-        uint256 amountIn = IMarginHook(hook).getAmountIn(_position.marginToken, borrowAmount);
-        (, uint24 _liquidationLTV) = IMarginHook(hook).ltvParameters();
-        liquided = amountIn > (_position.marginAmount + _position.marginTotal) * _liquidationLTV / ONE_MILLION;
+        uint256 amountIn = hook.getAmountIn(_position.marginToken, _position.borrowToken, borrowAmount);
+        (, uint24 _liquidationLTV) = hook.ltvParameters(_position.marginToken, _position.borrowToken);
+        liquidated = amountIn > (_position.marginAmount + _position.marginTotal) * _liquidationLTV / ONE_MILLION;
         releaseAmount = Math.min(amountIn, _position.marginAmount + _position.marginTotal);
     }
 
     function liquidate(uint256 positionId) external returns (uint256 profit) {
-        (bool liquided, uint256 releaseAmount) = checkLiquidate(positionId);
-        if (!liquided) {
+        (bool liquidated, uint256 releaseAmount) = checkLiquidate(positionId);
+        if (!liquidated) {
             return profit;
         }
         MarginPosition memory _position = _positions[positionId];
-        address hook = factory.getHookPair(_position.borrowToken, _position.marginToken);
-        if (hook == address(0)) revert PairNotExists();
+
         uint256 liquidateValue = 0;
         if (_position.marginToken == address(0)) {
             liquidateValue = releaseAmount;
         } else {
-            bool success = Currency.wrap(_position.marginToken).transfer(address(this), hook, releaseAmount);
+            bool success = Currency.wrap(_position.marginToken).transfer(address(this), address(hook), releaseAmount);
             require(success, "TRANSFER_ERR");
         }
-        IMarginHook(hook).liquidate{value: liquidateValue}(_position.marginToken, releaseAmount);
+        LiquidateParams memory params = LiquidateParams({
+            marginToken: _position.marginToken,
+            borrowToken: _position.borrowToken,
+            releaseAmount: releaseAmount
+        });
+        hook.liquidate{value: liquidateValue}(params);
         profit = _position.marginAmount + _position.marginTotal - releaseAmount;
         if (profit > 0) {
             Currency.wrap(_position.marginToken).transfer(address(this), msg.sender, profit);

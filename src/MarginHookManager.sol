@@ -20,8 +20,7 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {Math} from "./libraries/Math.sol";
 import {UnsafeMath} from "./libraries/UnsafeMath.sol";
-import {IMarginHook} from "./interfaces/IMarginHook.sol";
-import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
+import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
@@ -32,7 +31,7 @@ import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams
 
 import {console} from "forge-std/console.sol";
 
-contract MarginHookManager is BaseHook, ERC6909Claims, Owned {
+contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned {
     using UnsafeMath for uint256;
     using SafeCast for uint256;
     using PoolIdLibrary for PoolKey;
@@ -58,6 +57,7 @@ contract MarginHookManager is BaseHook, ERC6909Claims, Owned {
     uint256 public constant ONE_MILLION = 10 ** 6;
     uint256 public constant ONE_BILLION = 10 ** 9;
     uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
+    uint160 public constant SQRT_RATIO_1_1 = 79228162514264337593543950336;
     bytes32 constant BALANCE_0_SLOT = 0x608a02038d3023ed7e79ffc2a87ce7ad8c0bc0c5b839ddbe438db934c7b5e0e2;
     bytes32 constant BALANCE_1_SLOT = 0xba598ef587ec4c4cf493fe15321596d40159e5c3c0cbf449810c8c6894b2e5e1;
     bytes32 constant MIRROR_BALANCE_0_SLOT = 0x63450183817719ccac1ebea450ccc19412314611d078d8a8cb3ac9a1ef4de386;
@@ -72,13 +72,20 @@ contract MarginHookManager is BaseHook, ERC6909Claims, Owned {
     RateStatus public rateStatus;
 
     address public feeTo;
-    uint24 fee; // 3000 = 0.3%
-    uint24 marginFee; // 15000 = 1.5%
-    uint24 protocolFee; // 0.3%
-    uint24 protocolMarginFee; // 0.5%
+    uint24 fee = 3000; // 3000 = 0.3%
+    uint24 marginFee = 15000; // 15000 = 1.5%
+    uint24 protocolFee = 3000; // 0.3%
+    uint24 protocolMarginFee = 5000; // 0.5%
 
-    constructor(address initialOwner, IPoolManager _manager) Owned(initialOwner) BaseHook(_manager) {
+    constructor(
+        address initialOwner,
+        IPoolManager _manager,
+        IMirrorTokenManager _mirrorTokenManager,
+        IMarginPositionManager _marginPositionManager
+    ) Owned(initialOwner) BaseHook(_manager) {
         rateStatus = RateStatus({rateBase: 50000, useHighLevel: 700000, mLow: 10, mHigh: 50});
+        mirrorTokenManager = _mirrorTokenManager;
+        marginPositionManager = _marginPositionManager;
     }
 
     modifier ensure(uint256 deadline) {
@@ -199,16 +206,20 @@ contract MarginHookManager is BaseHook, ERC6909Claims, Owned {
         (amountOut,) = _getAmountOut(key, tokenIn < tokenOut, amountIn);
     }
 
+    function initialize(PoolKey calldata key) external {
+        if (hookStatusStore[key.toId()].blockTimestampLast > 0) revert PoolAlreadyInitialized();
+        HookStatus memory status;
+        status.currency0 = key.currency0;
+        status.currency1 = key.currency1;
+        status.blockTimestampLast = uint32(block.timestamp % 2 ** 32);
+        hookStatusStore[key.toId()] = status;
+        poolManager.initialize(key, SQRT_RATIO_1_1);
+    }
+
     // ******************** HOOK FUNCTIONS ********************
 
     function beforeInitialize(address, PoolKey calldata key, uint160) external view override returns (bytes4) {
-        if (hookStatusStore[key.toId()].blockTimestampLast > 0) revert PoolAlreadyInitialized();
         if (address(key.hooks) != address(this)) revert InvalidInitialization();
-        // HookStatus memory status;
-        // status.currency0 = key.currency0;
-        // status.currency1 = key.currency1;
-        // status.blockTimestampLast = block.timestamp;
-        // hookStatusStore[key.toId()] = status;
         return BaseHook.beforeInitialize.selector;
     }
 
@@ -428,20 +439,23 @@ contract MarginHookManager is BaseHook, ERC6909Claims, Owned {
             );
         }
         if (liquidity == 0) revert InsufficientLiquidityMinted();
+
         _mint(address(this), uPoolId, liquidity);
         _mint(params.to, uPoolId, liquidity);
-        _update(key);
-        emit Mint(sender, uPoolId, params.amount0, params.amount1, params.to);
 
         params.currency0.settle(poolManager, sender, params.amount0, false);
         params.currency0.take(poolManager, address(this), params.amount0, true);
         params.currency1.settle(poolManager, sender, params.amount1, false);
         params.currency1.take(poolManager, address(this), params.amount1, true);
+
+        _update(key);
+        emit Mint(sender, uPoolId, params.amount0, params.amount1, params.to);
     }
 
     function removeLiquidity(RemoveLiquidityParams calldata params)
         external
         payable
+        ensure(params.deadline)
         returns (uint256 amount0, uint256 amount1)
     {
         bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRemoveLiquidity, (msg.sender, params)));
@@ -494,13 +508,13 @@ contract MarginHookManager is BaseHook, ERC6909Claims, Owned {
 
     // ******************** MARGIN FUNCTIONS ********************
 
-    function borrow(MarginParams memory params) external positionOnly returns (MarginParams memory) {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleBorrow, (params)));
+    function margin(MarginParams memory params) external positionOnly returns (MarginParams memory) {
+        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (params)));
         (params.marginTotal, params.borrowAmount) = abi.decode(result, (uint256, uint256));
         return params;
     }
 
-    function handleBorrow(MarginParams calldata params)
+    function handleMargin(MarginParams calldata params)
         external
         selfOnly
         returns (uint256 marginWithoutFee, uint256 borrowAmount)
@@ -531,7 +545,7 @@ contract MarginHookManager is BaseHook, ERC6909Claims, Owned {
         _update(key);
     }
 
-    function repay(RepayParams calldata params) external payable positionOnly returns (uint256) {
+    function repay(RepayParams memory params) external payable positionOnly returns (uint256) {
         bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRepay, (params)));
         return abi.decode(result, (uint256));
     }
@@ -549,7 +563,7 @@ contract MarginHookManager is BaseHook, ERC6909Claims, Owned {
         return params.repayAmount;
     }
 
-    function liquidate(LiquidateParams calldata params) external payable positionOnly returns (uint256) {
+    function liquidate(LiquidateParams memory params) external payable positionOnly returns (uint256) {
         bytes memory result = poolManager.unlock(abi.encodeCall(this.handleLiquidate, (params)));
         return abi.decode(result, (uint256));
     }
