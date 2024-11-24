@@ -123,7 +123,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
 
     function _getReserves(HookStatus memory status)
         internal
-        view
+        pure
         returns (uint256 _reserve0, uint256 _reserve1, FeeStatus memory feeStatus)
     {
         _reserve0 = status.reserve0 + status.mirrorReserve0;
@@ -216,6 +216,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
             if (protocolFeeAmount > 0) {
                 specified.take(poolManager, feeTo, protocolFeeAmount, false);
             }
+            console.log("unspecifiedAmount:%s", unspecifiedAmount);
             returnDelta = toBeforeSwapDelta(specifiedAmount.toInt128(), -unspecifiedAmount.toInt128());
         } else {
             // exactOutput

@@ -2,14 +2,13 @@
 pragma solidity ^0.8.24;
 
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 
 import {MarginParams, RepayParams, LiquidateParams} from "../types/MarginParams.sol";
 import {HookStatus} from "../types/HookStatus.sol";
 
-interface IMarginHookManager is IHooks {
+interface IMarginHookManager {
     function ltvParameters(PoolId poolId) external view returns (uint24, uint24);
 
     function getStatus(PoolId poolId) external view returns (HookStatus memory);

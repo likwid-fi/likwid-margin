@@ -71,8 +71,10 @@ contract MarginRouter is SafeCallback, Owned {
         returns (uint256 amountOut)
     {
         require(params.amountIn > 0, "AMOUNT_IN_ERROR");
-        amountOut = abi.decode(poolManager.unlock(abi.encodeCall(this.handelSwap, (params))), (uint256));
+        amountOut = abi.decode(poolManager.unlock(abi.encodeCall(this.handelSwap, (msg.sender, params))), (uint256));
     }
+
+    event BalanceDeltaTest(int128 amount0, int128 amount1);
 
     function exactOutput(SwapParams calldata params)
         external
@@ -81,10 +83,10 @@ contract MarginRouter is SafeCallback, Owned {
         returns (uint256 amountIn)
     {
         require(params.amountOut > 0, "AMOUNT_OUT_ERROR");
-        amountIn = abi.decode(poolManager.unlock(abi.encodeCall(this.handelSwap, (params))), (uint256));
+        amountIn = abi.decode(poolManager.unlock(abi.encodeCall(this.handelSwap, (msg.sender, params))), (uint256));
     }
 
-    function handelSwap(SwapParams calldata params) external selfOnly returns (uint256) {
+    function handelSwap(address sender, SwapParams calldata params) external selfOnly returns (uint256) {
         HookStatus memory _status = hook.getStatus(params.poolId);
         PoolKey memory key = _status.key;
         int256 amountSpecified;
@@ -104,15 +106,16 @@ contract MarginRouter is SafeCallback, Owned {
 
             BalanceDelta delta = poolManager.swap(key, swapParams, "");
             if (params.amountIn > 0) {
-                uint256 amountOut = uint256(int256(delta.amount1()));
+                uint256 amountOut =
+                    params.zeroForOne ? uint256(int256(delta.amount1())) : uint256(int256(delta.amount0()));
                 if (amountOut < params.amountOutMin) revert InsufficientOutputReceived();
-                if (params.zeroForOne) {}
-                inputCurrency.settle(poolManager, address(this), params.amountIn, false);
+                inputCurrency.settle(poolManager, sender, params.amountIn, false);
                 outputCurrency.take(poolManager, params.to, amountOut, false);
                 return amountOut;
             } else if (params.amountOut > 0) {
-                uint256 amountIn = uint256(int256(delta.amount1()));
-                inputCurrency.settle(poolManager, address(this), amountIn, false);
+                uint256 amountIn =
+                    params.zeroForOne ? uint256(-int256(delta.amount0())) : uint256(-int256(delta.amount1()));
+                inputCurrency.settle(poolManager, sender, amountIn, false);
                 outputCurrency.take(poolManager, params.to, params.amountOut, false);
                 return amountIn;
             }
