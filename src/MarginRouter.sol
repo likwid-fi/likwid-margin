@@ -6,15 +6,15 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IUnlockCallback} from "v4-core/interfaces/callback/IUnlockCallback.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {PoolId} from "v4-core/types/PoolId.sol";
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {SafeCallback} from "v4-periphery/src/base/SafeCallback.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 
-import {IMarginHook} from "./interfaces/IMarginHook.sol";
-import {IMarginHookFactory} from "./interfaces/IMarginHookFactory.sol";
-import {MarginHookManager} from "./MarginHookManager.sol";
+import {HookStatus} from "./types/HookStatus.sol";
+import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 
 contract MarginRouter is SafeCallback, Owned {
     using CurrencyLibrary for Currency;
@@ -24,9 +24,12 @@ contract MarginRouter is SafeCallback, Owned {
     error NotSelf();
     error InsufficientOutputReceived();
 
-    IHooks public immutable hook;
+    IMarginHookManager public immutable hook;
 
-    constructor(address initialOwner, IPoolManager _manager, IHooks _hook) Owned(initialOwner) SafeCallback(_manager) {
+    constructor(address initialOwner, IPoolManager _manager, IMarginHookManager _hook)
+        Owned(initialOwner)
+        SafeCallback(_manager)
+    {
         hook = _hook;
         poolManager = _manager;
     }
@@ -52,7 +55,8 @@ contract MarginRouter is SafeCallback, Owned {
     }
 
     struct SwapParams {
-        address[] path;
+        PoolId poolId;
+        bool zeroForOne;
         address to;
         uint256 amountIn;
         uint256 amountOutMin;
@@ -66,7 +70,6 @@ contract MarginRouter is SafeCallback, Owned {
         ensure(params.deadline)
         returns (uint256 amountOut)
     {
-        require(params.path.length == 2, "PATH_ERROR");
         require(params.amountIn > 0, "AMOUNT_IN_ERROR");
         amountOut = abi.decode(poolManager.unlock(abi.encodeCall(this.handelSwap, (params))), (uint256));
     }
@@ -77,27 +80,24 @@ contract MarginRouter is SafeCallback, Owned {
         ensure(params.deadline)
         returns (uint256 amountIn)
     {
-        require(params.path.length == 2, "PATH_ERROR");
         require(params.amountOut > 0, "AMOUNT_OUT_ERROR");
         amountIn = abi.decode(poolManager.unlock(abi.encodeCall(this.handelSwap, (params))), (uint256));
     }
 
     function handelSwap(SwapParams calldata params) external selfOnly returns (uint256) {
-        bool zeroForOne = params.path[0] < params.path[1];
-        (Currency currency0, Currency currency1) = zeroForOne
-            ? (Currency.wrap(params.path[0]), Currency.wrap(params.path[1]))
-            : (Currency.wrap(params.path[1]), Currency.wrap(params.path[0]));
-
-        PoolKey memory key = PoolKey({currency0: currency0, currency1: currency1, fee: 0, tickSpacing: 1, hooks: hook});
+        HookStatus memory _status = hook.getStatus(params.poolId);
+        PoolKey memory key = _status.key;
         int256 amountSpecified;
         if (params.amountIn > 0) {
             amountSpecified = -int256(params.amountIn);
         } else if (params.amountOut > 0) {
             amountSpecified = int256(params.amountOut);
         }
+        (Currency inputCurrency, Currency outputCurrency) =
+            params.zeroForOne ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
         if (amountSpecified != 0) {
             IPoolManager.SwapParams memory swapParams = IPoolManager.SwapParams({
-                zeroForOne: zeroForOne,
+                zeroForOne: params.zeroForOne,
                 amountSpecified: amountSpecified,
                 sqrtPriceLimitX96: 0
             });
@@ -106,14 +106,14 @@ contract MarginRouter is SafeCallback, Owned {
             if (params.amountIn > 0) {
                 uint256 amountOut = uint256(int256(delta.amount1()));
                 if (amountOut < params.amountOutMin) revert InsufficientOutputReceived();
-
-                Currency.wrap(params.path[0]).settle(poolManager, address(this), params.amountIn, false);
-                Currency.wrap(params.path[1]).take(poolManager, params.to, amountOut, false);
+                if (params.zeroForOne) {}
+                inputCurrency.settle(poolManager, address(this), params.amountIn, false);
+                outputCurrency.take(poolManager, params.to, amountOut, false);
                 return amountOut;
             } else if (params.amountOut > 0) {
                 uint256 amountIn = uint256(int256(delta.amount1()));
-                Currency.wrap(params.path[0]).settle(poolManager, address(this), amountIn, false);
-                Currency.wrap(params.path[1]).take(poolManager, params.to, params.amountOut, false);
+                inputCurrency.settle(poolManager, address(this), amountIn, false);
+                outputCurrency.take(poolManager, params.to, params.amountOut, false);
                 return amountIn;
             }
         }

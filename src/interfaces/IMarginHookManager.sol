@@ -9,7 +9,7 @@ import {PoolId} from "v4-core/types/PoolId.sol";
 import {MarginParams, RepayParams, LiquidateParams} from "../types/MarginParams.sol";
 import {HookStatus} from "../types/HookStatus.sol";
 
-interface IMarginHookManager {
+interface IMarginHookManager is IHooks {
     function ltvParameters(PoolId poolId) external view returns (uint24, uint24);
 
     function getStatus(PoolId poolId) external view returns (HookStatus memory);

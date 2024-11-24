@@ -110,7 +110,7 @@ contract MarginHookManagerTest is Test {
         deployMintAndApprove2Currencies();
         vm.prank(user);
         marginPositionManager.setHook(address(hookManager));
-        // swapRouter = new MarginRouter(user, manager, factory);
+        swapRouter = new MarginRouter(user, manager, hookManager);
     }
 
     receive() external payable {}
@@ -161,17 +161,17 @@ contract MarginHookManagerTest is Test {
 
     function test_hook_swap_native() public {
         test_hook_liquidity_v2();
-        uint256 amountIn = 0.01 ether;
+        vm.startPrank(user);
+        uint256 amountIn = 0.0123 ether;
         // swap
-        address[] memory _path = new address[](2);
-        _path[0] = address(0);
-        _path[1] = address(tokenB);
+
         uint256 balance0 = manager.balanceOf(address(hookManager), 0);
         uint256 balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
         console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
         console.log("before swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
         MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
-            path: _path,
+            poolId: nativeKey.toId(),
+            zeroForOne: true,
             to: user,
             amountIn: amountIn,
             amountOut: 0,
@@ -181,5 +181,9 @@ contract MarginHookManagerTest is Test {
         swapRouter.exactInput{value: amountIn}(swapParams);
         console.log("swapRouter.balance:%s", manager.balanceOf(address(swapRouter), 0));
         console.log("after swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
+        balance0 = manager.balanceOf(address(hookManager), 0);
+        balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
+        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        vm.stopPrank();
     }
 }
