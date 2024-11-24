@@ -66,8 +66,8 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
 
     IMirrorTokenManager public immutable mirrorTokenManager;
     IMarginPositionManager public immutable marginPositionManager;
-    uint24 initialLTV; // 50%
-    uint24 liquidationLTV; // 90%
+    uint24 initialLTV = 500000; // 50%
+    uint24 liquidationLTV = 900000; // 90%
 
     mapping(PoolId => HookStatus) public hookStatusStore;
     RateStatus public rateStatus;
@@ -151,11 +151,10 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         feeOn = feeTo != address(0) && protocolMarginFee > 0;
     }
 
-    function getBorrowRate(PoolId poolId, Currency borrowToken) external view returns (uint256) {
+    function getBorrowRate(PoolId poolId, bool marginForOne) external view returns (uint256) {
         HookStatus memory status = getStatus(poolId);
-        (uint256 _reserve0, uint256 _reserve1,) = _getReserves(status);
-        uint256 tokenReserve = borrowToken == status.key.currency0 ? _reserve0 : _reserve1;
-        uint256 mirrorReserve = mirrorTokenManager.balanceOf(address(this), borrowToken.toId());
+        uint256 tokenReserve = marginForOne ? status.reserve0 : status.reserve1;
+        uint256 mirrorReserve = marginForOne ? status.mirrorReserve0 : status.mirrorReserve1;
         return _getBorrowRate(tokenReserve, mirrorReserve);
     }
 
@@ -177,6 +176,8 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     function initialize(PoolKey calldata key) external {
         HookStatus memory status;
         status.key = key;
+        status.rate0CumulativeLast = ONE_BILLION;
+        status.rate1CumulativeLast = ONE_BILLION;
         status.blockTimestampLast = _blockTimestamp();
         hookStatusStore[key.toId()] = status;
         poolManager.initialize(key, SQRT_RATIO_1_1);

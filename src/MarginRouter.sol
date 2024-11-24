@@ -70,11 +70,9 @@ contract MarginRouter is SafeCallback, Owned {
         ensure(params.deadline)
         returns (uint256 amountOut)
     {
-        require(params.amountIn > 0, "AMOUNT_IN_ERROR");
+        require(params.amountIn > 0, "AMOUNT_ERROR");
         amountOut = abi.decode(poolManager.unlock(abi.encodeCall(this.handelSwap, (msg.sender, params))), (uint256));
     }
-
-    event BalanceDeltaTest(int128 amount0, int128 amount1);
 
     function exactOutput(SwapParams calldata params)
         external
@@ -82,7 +80,7 @@ contract MarginRouter is SafeCallback, Owned {
         ensure(params.deadline)
         returns (uint256 amountIn)
     {
-        require(params.amountOut > 0, "AMOUNT_OUT_ERROR");
+        require(params.amountOut > 0 && params.amountIn == 0, "AMOUNT_ERROR");
         amountIn = abi.decode(poolManager.unlock(abi.encodeCall(this.handelSwap, (msg.sender, params))), (uint256));
     }
 
