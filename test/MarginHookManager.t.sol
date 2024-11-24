@@ -117,8 +117,7 @@ contract MarginHookManagerTest is Test {
 
     function test_hook_liquidity_v2() public {
         AddLiquidityParams memory params = AddLiquidityParams({
-            currency0: currency0,
-            currency1: currency1,
+            poolId: key.toId(),
             amount0: 1e18,
             amount1: 1e18,
             tickLower: 50000,
@@ -129,23 +128,17 @@ contract MarginHookManagerTest is Test {
         hookManager.addLiquidity(params);
         uint256 uPoolId = uint256(PoolId.unwrap(key.toId()));
         uint256 liquidity = hookManager.balanceOf(address(this), uPoolId);
-        (uint256 _reserves0, uint256 _reserves1) =
-            hookManager.getReserves(Currency.unwrap(currency0), Currency.unwrap(currency1));
+        (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(key.toId());
         assertEq(_reserves0, _reserves1);
         console.log("_reserves0:%s,_reserves1:%s", _reserves0, _reserves1);
-        RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
-            currency0: currency0,
-            currency1: currency1,
-            liquidity: liquidity / 2,
-            deadline: type(uint256).max
-        });
+        RemoveLiquidityParams memory removeParams =
+            RemoveLiquidityParams({poolId: key.toId(), liquidity: liquidity / 2, deadline: type(uint256).max});
         hookManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = hookManager.balanceOf(address(this), uPoolId);
         assertEq(liquidityHalf, liquidity - liquidity / 2);
 
         params = AddLiquidityParams({
-            currency0: CurrencyLibrary.ADDRESS_ZERO,
-            currency1: currency1,
+            poolId: nativeKey.toId(),
             amount0: 1e18,
             amount1: 1e18,
             tickLower: 50000,
@@ -156,15 +149,11 @@ contract MarginHookManagerTest is Test {
         hookManager.addLiquidity{value: 1 ether}(params);
         uPoolId = uint256(PoolId.unwrap(nativeKey.toId()));
         liquidity = hookManager.balanceOf(address(this), uPoolId);
-        (_reserves0, _reserves1) = hookManager.getReserves(address(0), Currency.unwrap(currency1));
+        (_reserves0, _reserves1) = hookManager.getReserves(nativeKey.toId());
         assertEq(_reserves0, _reserves1);
         console.log("_reserves0:%s,_reserves1:%s", _reserves0, _reserves1);
-        removeParams = RemoveLiquidityParams({
-            currency0: CurrencyLibrary.ADDRESS_ZERO,
-            currency1: currency1,
-            liquidity: liquidity / 2,
-            deadline: type(uint256).max
-        });
+        removeParams =
+            RemoveLiquidityParams({poolId: nativeKey.toId(), liquidity: liquidity / 2, deadline: type(uint256).max});
         hookManager.removeLiquidity(removeParams);
         liquidityHalf = hookManager.balanceOf(address(this), uPoolId);
         assertEq(liquidityHalf, liquidity - liquidity / 2);

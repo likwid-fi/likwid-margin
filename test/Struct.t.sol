@@ -10,6 +10,7 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 
 contract StructTest is Test {
     using CurrencyLibrary for Currency;
+    using PoolIdLibrary for PoolKey;
 
     mapping(PoolId => HookStatus) public hookStatusStore;
     PoolKey public key;
@@ -17,7 +18,7 @@ contract StructTest is Test {
     function setUp() public {
         key = PoolKey({
             currency0: Currency.wrap(address(0)),
-            currency1: Currency.wrap(address(1)),
+            currency1: Currency.wrap(address(0)),
             fee: 0,
             tickSpacing: 1,
             hooks: IHooks(address(0))
@@ -26,7 +27,7 @@ contract StructTest is Test {
 
     function test_create() public {
         HookStatus memory status;
-        status.currency0 = key.currency0;
+        status.key = key;
         hookStatusStore[key.toId()] = status;
     }
 
@@ -37,8 +38,21 @@ contract StructTest is Test {
         // assertTrue(hookStatusStore[key.toId()].currency0 == key.currency0);
     }
 
-    function test_uint32() public {
+    function toHexString(bytes32 data) public pure returns (string memory) {
+        bytes memory hexChars = "0123456789abcdef";
+        bytes memory str = new bytes(64);
+
+        for (uint256 i = 0; i < 32; i++) {
+            uint8 byteValue = uint8(data[i]);
+            str[i * 2] = hexChars[byteValue >> 4];
+            str[i * 2 + 1] = hexChars[byteValue & 0x0f];
+        }
+
+        return string(str);
+    }
+
+    function test_uint32() public view {
         uint32 timestamp = uint32((2 ** 32 + 1) % 2 ** 32);
-        console.log("timestamp:%s", timestamp);
+        console.log("timestamp:%s,poolId:%s", timestamp, toHexString(PoolId.unwrap(key.toId())));
     }
 }

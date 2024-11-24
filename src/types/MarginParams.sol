@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
+import {PoolId} from "v4-core/types/PoolId.sol";
+
 struct MarginParams {
-    address marginToken;
-    address borrowToken;
+    PoolId poolId;
+    bool marginForOne; // true: currency1 is marginToken, false: currency0 is marginToken
     uint24 leverage;
     uint256 marginAmount;
     uint256 marginTotal;
@@ -14,8 +16,8 @@ struct MarginParams {
 }
 
 struct RepayParams {
-    address marginToken;
-    address borrowToken;
+    PoolId poolId;
+    bool marginForOne; // true: currency1 is marginToken, false: currency0 is marginToken
     address payer;
     uint256 borrowAmount;
     uint256 repayAmount;
@@ -23,7 +25,7 @@ struct RepayParams {
 }
 
 struct LiquidateParams {
-    address marginToken;
-    address borrowToken;
+    PoolId poolId;
+    bool marginForOne; // true: currency1 is marginToken, false: currency0 is marginToken
     uint256 releaseAmount;
 }

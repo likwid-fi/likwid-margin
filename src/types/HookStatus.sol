@@ -2,10 +2,9 @@
 pragma solidity ^0.8.26;
 
 import {Currency} from "v4-core/types/Currency.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 struct HookStatus {
-    Currency currency0;
-    Currency currency1;
     uint128 reserve0;
     uint128 reserve1;
     uint112 mirrorReserve0;
@@ -13,6 +12,7 @@ struct HookStatus {
     uint32 blockTimestampLast;
     uint256 rate0CumulativeLast;
     uint256 rate1CumulativeLast;
+    PoolKey key;
     FeeStatus feeStatus;
 }
 
