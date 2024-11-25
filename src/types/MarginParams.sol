@@ -19,8 +19,8 @@ struct RepayParams {
     PoolId poolId;
     bool marginForOne; // true: currency1 is marginToken, false: currency0 is marginToken
     address payer;
-    uint256 borrowAmount;
     uint256 repayAmount;
+    uint256 borrowAmount;
     uint256 deadline;
 }
 

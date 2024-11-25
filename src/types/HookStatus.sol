@@ -19,7 +19,6 @@ struct HookStatus {
 struct FeeStatus {
     uint24 initialLTV; // 50%
     uint24 liquidationLTV; // 90%
-    uint24 fee; // 3000 = 0.3%
     uint24 marginFee; // 15000 = 1.5%
     uint24 protocolFee; // 0.3%
     uint24 protocolMarginFee; // 0.5%

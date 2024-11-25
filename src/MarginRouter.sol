@@ -3,11 +3,9 @@ pragma solidity ^0.8.26;
 
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {IUnlockCallback} from "v4-core/interfaces/callback/IUnlockCallback.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
-import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {SafeCallback} from "v4-periphery/src/base/SafeCallback.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
@@ -19,6 +17,7 @@ import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 contract MarginRouter is SafeCallback, Owned {
     using CurrencyLibrary for Currency;
     using CurrencyUtils for Currency;
+    using BalanceDeltaLibrary for BalanceDelta;
 
     error LockFailure();
     error NotSelf();
