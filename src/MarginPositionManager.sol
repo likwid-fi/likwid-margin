@@ -23,6 +23,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     error PairNotExists();
     error InsufficientBorrowReceived();
 
+    event Mint(address indexed sender, uint256 tokenId);
     event Burn(address indexed sender, uint256 tokenId);
 
     uint256 public constant ONE_MILLION = 10 ** 6;
@@ -41,6 +42,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         MarginPosition memory _position = _positions[tokenId];
         delete _borrowPositions[_position.poolId][_position.marginForOne][ownerOf(tokenId)];
         delete _positions[tokenId];
+        emit Burn(msg.sender, tokenId);
     }
 
     modifier ensure(uint256 deadline) {
@@ -75,6 +77,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (params.borrowAmount < params.borrowMinAmount) revert InsufficientBorrowReceived();
         if (positionId == 0) {
             _mint(params.recipient, (positionId = _nextId++));
+            emit Mint(msg.sender, positionId);
             _positions[positionId] = MarginPosition({
                 poolId: params.poolId,
                 marginForOne: params.marginForOne,

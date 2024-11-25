@@ -2,10 +2,13 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Script.sol";
+import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {HookMiner} from "../test/utils/HookMiner.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
+import {MarginRouter} from "../src/MarginRouter.sol";
+import {IMarginHookManager} from "../src/interfaces/IMarginHookManager.sol";
 
 contract DeployHookScript is Script {
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
@@ -15,8 +18,11 @@ contract DeployHookScript is Script {
     function setUp() public {}
 
     function run() public {
+        vm.startBroadcast();
         MirrorTokenManager mirrorTokenManager = new MirrorTokenManager(owner);
+        console2.log("mirrorTokenManager", address(mirrorTokenManager));
         MarginPositionManager marginPositionManager = new MarginPositionManager(owner);
+        console2.log("marginPositionManager", address(marginPositionManager));
         bytes memory constructorArgs =
             abi.encode(owner, manager, address(mirrorTokenManager), address(marginPositionManager));
 
@@ -29,19 +35,23 @@ contract DeployHookScript is Script {
         console2.logBytes32(bytes32(uint256(flags)));
 
         // Mine a salt that will produce a hook address with the correct flags
-        bytes memory creationCode = vm.getCode(vm.envString("MarginHookManager.sol:MarginHookManager"));
+        bytes memory creationCode = vm.getCode("MarginHookManager.sol:MarginHookManager");
         (address hookAddress, bytes32 salt) = HookMiner.find(CREATE2_DEPLOYER, flags, creationCode, constructorArgs);
 
         // Deploy the hook using CREATE2
         bytes memory bytecode = abi.encodePacked(creationCode, constructorArgs);
-        vm.startBroadcast();
+
         address deployedHook;
         assembly {
             deployedHook := create2(0, add(bytecode, 0x20), mload(bytecode), salt)
         }
-        vm.stopBroadcast();
 
         // verify proper create2 usage
         require(deployedHook == hookAddress, "DeployScript: hook address mismatch");
+        marginPositionManager.setHook(hookAddress);
+        console2.log("hookAddress", hookAddress);
+        MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), IMarginHookManager(hookAddress));
+        console2.log("swapRouter", address(swapRouter));
+        vm.stopBroadcast();
     }
 }
