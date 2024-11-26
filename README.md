@@ -78,6 +78,26 @@ forge verify-contract \
     --compiler-version v0.8.26+commit.8a97fa7a \
     0xf0144db7b05f9bf51481bd1de3d5c6c9a98a2c76 \
     src/MarginRouter.sol:MarginRouter
+
+forge script script/DeployMockToken.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
+forge verify-contract \
+    --chain-id 11155111 \
+    --evm-version cancun \
+    --watch \
+    --constructor-args $(cast abi-encode "constructor(string,string,uint8)" "TESTA" "TESTA" 18) \
+    --etherscan-api-key $ETHERSCAN_API_KEY_SEPOLIA \
+    --compiler-version v0.8.26+commit.8a97fa7a \
+    0x17ebA443A87a368654603F63bf5ACC3709BC9418 \
+    lib/v4-periphery/lib/v4-core/lib/solmate/src/test/utils/mocks/MockERC20.sol:MockERC20
+forge verify-contract \
+    --chain-id 11155111 \
+    --evm-version cancun \
+    --watch \
+    --constructor-args $(cast abi-encode "constructor(string,string,uint8)" "TESTB" "TESTB" 18) \
+    --etherscan-api-key $ETHERSCAN_API_KEY_SEPOLIA \
+    --compiler-version v0.8.26+commit.8a97fa7a \
+    0x936A4dc00FEd79C5224EC60ee2d438B504d61128 \
+    lib/v4-periphery/lib/v4-core/lib/solmate/src/test/utils/mocks/MockERC20.sol:MockERC20
 ```
 
 ### Cast
