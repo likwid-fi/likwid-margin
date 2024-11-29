@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
 import {HookStatus} from "../src/types/HookStatus.sol";
+import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
@@ -13,6 +14,9 @@ contract StructTest is Test {
     using PoolIdLibrary for PoolKey;
 
     mapping(PoolId => HookStatus) public hookStatusStore;
+    mapping(uint256 => HookStatus) public hookStatusStore1;
+    mapping(uint256 => MarginPosition) public positions;
+    mapping(uint256 => uint256) public testMap;
     PoolKey public key;
 
     function setUp() public {
@@ -23,6 +27,9 @@ contract StructTest is Test {
             tickSpacing: 1,
             hooks: IHooks(address(0))
         });
+        for (uint256 i = 0; i < 100; i++) {
+            positions[i].rateCumulativeLast = i;
+        }
     }
 
     function test_create() public {
@@ -54,5 +61,18 @@ contract StructTest is Test {
     function test_uint32() public view {
         uint32 timestamp = uint32((2 ** 32 + 1) % 2 ** 32);
         console.log("timestamp:%s,poolId:%s", timestamp, toHexString(PoolId.unwrap(key.toId())));
+    }
+
+    function test_set_status() public {}
+
+    function test_update_status() public {
+        test_set_status();
+        for (uint256 i = 0; i < 100; i++) {
+            positions[i].rateCumulativeLast = i + 10;
+        }
+        // for (uint256 i = 0; i < 100; i++) {
+        //     uint256 test = testMap[i];
+        //     test == 0;
+        // }
     }
 }

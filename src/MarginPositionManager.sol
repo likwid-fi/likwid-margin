@@ -62,8 +62,12 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
     }
 
-    function getPositionId(PoolId poolId, bool marginForOne) external view returns (uint256 _positionId) {
-        _positionId = _borrowPositions[poolId][marginForOne][msg.sender];
+    function getPositionId(PoolId poolId, bool marginForOne, address owner)
+        external
+        view
+        returns (uint256 _positionId)
+    {
+        _positionId = _borrowPositions[poolId][marginForOne][owner];
     }
 
     function margin(MarginParams memory params) external payable ensure(params.deadline) returns (uint256, uint256) {
@@ -89,11 +93,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             _borrowPositions[params.poolId][params.marginForOne][params.recipient] = positionId;
         } else {
             MarginPosition storage _position = _positions[positionId];
-            uint256 borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
-            uint256 amountIn = hook.getAmountIn(_position.poolId, !_position.marginForOne, borrowAmount);
-            (, uint24 _liquidationLTV) = hook.ltvParameters(_position.poolId);
-            bool liquidated = amountIn > _position.marginAmount * _liquidationLTV / ONE_MILLION + _position.marginTotal;
+            (bool liquidated,) = checkLiquidate(_position);
             require(!liquidated, "liquidated");
+            uint256 borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
             _position.marginAmount += params.marginAmount;
             _position.marginTotal += params.marginTotal;
             _position.borrowAmount = borrowAmount + params.borrowAmount;
@@ -106,6 +108,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     function repay(uint256 positionId, uint256 repayAmount, uint256 deadline) external payable ensure(deadline) {
         require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
         MarginPosition storage _position = _positions[positionId];
+        (bool liquidated,) = checkLiquidate(_position);
+        require(!liquidated, "liquidated");
         HookStatus memory _status = hook.getStatus(_position.poolId);
         (Currency borrowToken, Currency marginToken) = _position.marginForOne
             ? (_status.key.currency0, _status.key.currency1)
@@ -118,10 +122,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
         uint256 rateLast = hook.getBorrowRateCumulativeLast(_position.poolId, _position.marginForOne);
         uint256 borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
-        uint256 amountIn = hook.getAmountIn(_position.poolId, !_position.marginForOne, borrowAmount);
-        (, uint24 _liquidationLTV) = hook.ltvParameters(_position.poolId);
-        bool liquidated = amountIn > _position.marginAmount * _liquidationLTV / ONE_MILLION + _position.marginTotal;
-        require(!liquidated, "liquidated");
         RepayParams memory params = RepayParams({
             poolId: _position.poolId,
             marginForOne: _position.marginForOne,
@@ -142,14 +142,23 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
     }
 
-    function checkLiquidate(uint256 positionId) public view returns (bool liquidated, uint256 releaseAmount) {
-        MarginPosition memory _position = _positions[positionId];
+    function checkLiquidate(MarginPosition memory _position)
+        private
+        view
+        returns (bool liquidated, uint256 amountNeed)
+    {
         uint256 rateLast = hook.getBorrowRateCumulativeLast(_position.poolId, _position.marginForOne);
         uint256 borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
-        uint256 amountIn = hook.getAmountIn(_position.poolId, !_position.marginForOne, borrowAmount);
+        amountNeed = hook.getAmountIn(_position.poolId, !_position.marginForOne, borrowAmount);
         (, uint24 _liquidationLTV) = hook.ltvParameters(_position.poolId);
-        liquidated = amountIn > _position.marginAmount * _liquidationLTV / ONE_MILLION + _position.marginTotal;
-        releaseAmount = Math.min(amountIn, _position.marginAmount + _position.marginTotal);
+        liquidated = amountNeed > _position.marginAmount * _liquidationLTV / ONE_MILLION + _position.marginTotal;
+    }
+
+    function checkLiquidate(uint256 positionId) public view returns (bool liquidated, uint256 releaseAmount) {
+        MarginPosition memory _position = _positions[positionId];
+        uint256 amountNeed;
+        (liquidated, amountNeed) = checkLiquidate(_position);
+        releaseAmount = Math.min(amountNeed, _position.marginAmount + _position.marginTotal);
     }
 
     function liquidate(uint256 positionId) external returns (uint256 profit) {

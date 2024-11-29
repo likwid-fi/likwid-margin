@@ -420,7 +420,6 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
 
     function removeLiquidity(RemoveLiquidityParams calldata params)
         external
-        payable
         ensure(params.deadline)
         returns (uint256 amount0, uint256 amount1)
     {

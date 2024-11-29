@@ -50,7 +50,7 @@ library CurrencyUtils {
         if (currency.isAddressZero()) {
             (success,) = recipient.call{value: amount}("");
         } else {
-            if (recipient != address(this)) {
+            if (payer != address(this)) {
                 success = IERC20Minimal(Currency.unwrap(currency)).transferFrom(payer, recipient, amount);
             } else {
                 success = IERC20Minimal(Currency.unwrap(currency)).transfer(recipient, amount);
