@@ -46,8 +46,10 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     error PoolAlreadyInitialized();
     error PairNotExists();
 
-    event Mint(address indexed sender, uint256 poolId, uint256 amount0, uint256 amount1, address indexed to);
-    event Burn(address indexed sender, uint256 poolId, uint256 amount0, uint256 amount1);
+    event Mint(
+        address indexed sender, uint256 poolId, uint256 liquidity, uint256 amount0, uint256 amount1, address indexed to
+    );
+    event Burn(address indexed sender, uint256 poolId, uint256 liquidity, uint256 amount0, uint256 amount1);
     event Swap(uint256 amountIn, uint256 amountOut);
     event Sync(uint256 reserve0, uint256 reserve1, uint256 mirrorReserve0, uint256 mirrorReserve1);
 
@@ -415,7 +417,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         status.key.currency1.take(poolManager, address(this), params.amount1, true);
 
         _update(status.key);
-        emit Mint(sender, uPoolId, params.amount0, params.amount1, params.to);
+        emit Mint(sender, uPoolId, liquidity, params.amount0, params.amount1, params.to);
     }
 
     function removeLiquidity(RemoveLiquidityParams calldata params)
@@ -453,7 +455,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         status.key.currency1.take(poolManager, sender, amount1, false);
 
         _update(status.key);
-        emit Burn(sender, uPoolId, amount0, amount1);
+        emit Burn(sender, uPoolId, params.liquidity, amount0, amount1);
     }
 
     // ******************** OWNER CALL ********************
@@ -488,12 +490,6 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
 
     // ******************** MARGIN FUNCTIONS ********************
 
-    function margin(MarginParams memory params) external positionOnly returns (MarginParams memory) {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (params)));
-        (params.marginTotal, params.borrowAmount) = abi.decode(result, (uint256, uint256));
-        return params;
-    }
-
     function getMarginTotal(PoolId poolId, bool marginForOne, uint24 leverage, uint256 marginAmount)
         external
         view
@@ -510,6 +506,25 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
             uint256 protocolMarginFeeAmount = marginTotal * protocolMarginFee / ONE_MILLION;
             marginWithoutFee -= protocolMarginFeeAmount;
         }
+    }
+
+    function getMarginMax(PoolId poolId, bool marginForOne, uint24 leverage)
+        external
+        view
+        returns (uint256 marginMax, uint256 borrowAmount)
+    {
+        HookStatus memory status = getStatus(poolId);
+        uint24 _initialLTV = status.feeStatus.initialLTV > 0 ? status.feeStatus.initialLTV : initialLTV;
+        bool zeroForOne = marginForOne;
+        borrowAmount = zeroForOne ? status.reserve0 : status.reserve1;
+        (uint256 marginMaxTotal,) = _getAmountOut(status, zeroForOne, borrowAmount);
+        marginMax = marginMaxTotal * ONE_MILLION / leverage / _initialLTV;
+    }
+
+    function margin(MarginParams memory params) external positionOnly returns (MarginParams memory) {
+        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (params)));
+        (params.marginTotal, params.borrowAmount) = abi.decode(result, (uint256, uint256));
+        return params;
     }
 
     function handleMargin(MarginParams calldata params)

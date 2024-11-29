@@ -55,10 +55,10 @@ forge verify-contract \
     --chain-id 11155111 \
     --evm-version cancun \
     --watch \
-    --constructor-args $(cast abi-encode "constructor(address,address,address,address)" "0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1" "0x8C4BcBE6b9eF47855f97E675296FA3F6fafa5F1A" "0x168768C3eB60070D089F7C8fE7A2224d164C9AC6" "0x0085dd2dA42ee35B22B90a5C3d3b092D80521A80") \
+    --constructor-args $(cast abi-encode "constructor(address,address,address,address)" "0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1" "0x8C4BcBE6b9eF47855f97E675296FA3F6fafa5F1A" "0x168768C3eB60070D089F7C8fE7A2224d164C9AC6" "0x716CE8f47504bC7E6E4bd29856585a2e202a4De6") \
     --etherscan-api-key $ETHERSCAN_API_KEY_SEPOLIA \
     --compiler-version v0.8.26+commit.8a97fa7a \
-    0xb5490bf28867761a3a6cb811b36c00b2c8dd4888 \
+    0x589F0171783738B7491d2E5aa3aA00E9034C0888 \
     src/MarginHookManager.sol:MarginHookManager
 forge verify-contract \
     --chain-id 11155111 \
@@ -67,16 +67,16 @@ forge verify-contract \
     --constructor-args $(cast abi-encode "constructor(address)" "0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1") \
     --etherscan-api-key $ETHERSCAN_API_KEY_SEPOLIA \
     --compiler-version v0.8.26+commit.8a97fa7a \
-    0x0085dd2da42ee35b22b90a5c3d3b092d80521a80 \
+    0x716CE8f47504bC7E6E4bd29856585a2e202a4De6 \
     src/MarginPositionManager.sol:MarginPositionManager
 forge verify-contract \
     --chain-id 11155111 \
     --evm-version cancun \
     --watch \
-    --constructor-args $(cast abi-encode "constructor(address,address,address)" "0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1" "0x8C4BcBE6b9eF47855f97E675296FA3F6fafa5F1A" "0xb5490Bf28867761a3a6Cb811b36C00B2c8dd4888") \
+    --constructor-args $(cast abi-encode "constructor(address,address,address)" "0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1" "0x8C4BcBE6b9eF47855f97E675296FA3F6fafa5F1A" "0x589F0171783738B7491d2E5aa3aA00E9034C0888") \
     --etherscan-api-key $ETHERSCAN_API_KEY_SEPOLIA \
     --compiler-version v0.8.26+commit.8a97fa7a \
-    0xf0144db7b05f9bf51481bd1de3d5c6c9a98a2c76 \
+    0x6E0EE135EcD02516cB26a8D4f7F7B8dF0b1E748D \
     src/MarginRouter.sol:MarginRouter
 
 forge script script/DeployMockToken.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY

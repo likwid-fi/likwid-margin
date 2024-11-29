@@ -58,6 +58,21 @@ library CurrencyUtils {
         }
     }
 
+    function checkAmount(Currency currency, address payer, address recipient, uint256 amount)
+        internal
+        returns (bool valid)
+    {
+        if (currency.isAddressZero()) {
+            valid = msg.value >= amount;
+        } else {
+            if (payer != address(this)) {
+                valid = IERC20Minimal(Currency.unwrap(currency)).allowance(payer, recipient) >= amount;
+            } else {
+                valid = IERC20Minimal(Currency.unwrap(currency)).balanceOf(address(this)) >= amount;
+            }
+        }
+    }
+
     function toKeyId(Currency currency, PoolKey memory key) internal pure returns (uint256) {
         return uint256(keccak256(abi.encode(currency, key)));
     }

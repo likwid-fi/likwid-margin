@@ -14,17 +14,16 @@ contract DeployHookScript is Script {
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
     address manager = payable(vm.envAddress("POOL_MANAGER_ADDR"));
     address owner = 0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1;
+    address mirrorTokenManager = 0x168768C3eB60070D089F7C8fE7A2224d164C9AC6;
 
     function setUp() public {}
 
     function run() public {
         vm.startBroadcast();
-        MirrorTokenManager mirrorTokenManager = new MirrorTokenManager(owner);
-        console2.log("mirrorTokenManager", address(mirrorTokenManager));
+        console2.log("mirrorTokenManager", mirrorTokenManager);
         MarginPositionManager marginPositionManager = new MarginPositionManager(owner);
         console2.log("marginPositionManager", address(marginPositionManager));
-        bytes memory constructorArgs =
-            abi.encode(owner, manager, address(mirrorTokenManager), address(marginPositionManager));
+        bytes memory constructorArgs = abi.encode(owner, manager, mirrorTokenManager, address(marginPositionManager));
 
         // hook contracts must have specific flags encoded in the address
         // ------------------------------ //

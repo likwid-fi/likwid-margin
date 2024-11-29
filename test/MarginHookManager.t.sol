@@ -118,7 +118,7 @@ contract MarginHookManagerTest is Test {
 
     receive() external payable {}
 
-    function test_hook_liquidity_v1() public {
+    function test_hook_liquidity_tokens() public {
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: key.toId(),
             amount0: 1e18,
@@ -141,8 +141,8 @@ contract MarginHookManagerTest is Test {
         assertEq(liquidityHalf, liquidity - liquidity / 2);
     }
 
-    function test_hook_margin_v1() public {
-        test_hook_liquidity_v1();
+    function test_hook_margin_tokens() public {
+        test_hook_liquidity_tokens();
         vm.startPrank(user);
         uint256 rate = hookManager.getBorrowRate(nativeKey.toId(), false);
         assertEq(rate, 50000);
@@ -215,8 +215,37 @@ contract MarginHookManagerTest is Test {
         );
     }
 
-    function test_hook_repay_v1() public {
-        test_hook_margin_v1();
+    function test_hook_swap_tokens() public {
+        test_hook_liquidity_tokens();
+        vm.startPrank(user);
+        uint256 amountIn = 0.0123 ether;
+        // swap
+        uint256 balance0 = manager.balanceOf(address(hookManager), uint160(address(tokenA)));
+        uint256 balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
+        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        console.log("before swap tokenA:%s,tokenB:%s", tokenA.balanceOf(user), tokenB.balanceOf(user));
+        MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+            poolId: key.toId(),
+            zeroForOne: true,
+            to: user,
+            amountIn: amountIn,
+            amountOut: 0,
+            amountOutMin: 0,
+            deadline: type(uint256).max
+        });
+        tokenA.approve(address(swapRouter), amountIn);
+        tokenB.approve(address(swapRouter), amountIn);
+        swapRouter.exactInput(swapParams);
+        console.log("swapRouter.balance:%s", manager.balanceOf(address(swapRouter), 0));
+        console.log("after swap tokenA:%s,tokenB:%s", tokenA.balanceOf(user), tokenB.balanceOf(user));
+        balance0 = manager.balanceOf(address(hookManager), uint160(address(tokenA)));
+        balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
+        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        vm.stopPrank();
+    }
+
+    function test_hook_repay_tokens() public {
+        test_hook_margin_tokens();
         vm.startPrank(user);
         uint256 positionId = marginPositionManager.getPositionId(key.toId(), false, user);
         assertGt(positionId, 0);

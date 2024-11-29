@@ -73,6 +73,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     function margin(MarginParams memory params) external payable ensure(params.deadline) returns (uint256, uint256) {
         HookStatus memory _status = hook.getStatus(params.poolId);
         Currency marginToken = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
+        require(marginToken.checkAmount(msg.sender, address(this), params.marginAmount), "INSUFFICIENT_AMOUNT");
         bool success = marginToken.transfer(msg.sender, address(this), params.marginAmount);
         require(success, "MARGIN_SELL_ERR");
         uint256 positionId = _borrowPositions[params.poolId][params.marginForOne][params.recipient];
@@ -114,12 +115,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         (Currency borrowToken, Currency marginToken) = _position.marginForOne
             ? (_status.key.currency0, _status.key.currency1)
             : (_status.key.currency1, _status.key.currency0);
-        if (borrowToken == CurrencyLibrary.ADDRESS_ZERO) {
-            require(msg.value >= repayAmount, "NATIVE_AMOUNT_ERR");
-        } else {
-            bool r = IERC20Minimal(Currency.unwrap(borrowToken)).allowance(msg.sender, address(hook)) >= repayAmount;
-            require(r, "ALLOWANCE_AMOUNT_ERR");
-        }
+        require(borrowToken.checkAmount(msg.sender, address(hook), repayAmount), "INSUFFICIENT_AMOUNT");
         uint256 rateLast = hook.getBorrowRateCumulativeLast(_position.poolId, _position.marginForOne);
         uint256 borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
         RepayParams memory params = RepayParams({
