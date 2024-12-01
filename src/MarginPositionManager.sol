@@ -118,11 +118,14 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         require(borrowToken.checkAmount(msg.sender, address(hook), repayAmount), "INSUFFICIENT_AMOUNT");
         uint256 rateLast = hook.getBorrowRateCumulativeLast(_position.poolId, _position.marginForOne);
         uint256 borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
+        if (repayAmount > borrowAmount) {
+            repayAmount = borrowAmount;
+        }
         RepayParams memory params = RepayParams({
             poolId: _position.poolId,
             marginForOne: _position.marginForOne,
             payer: msg.sender,
-            borrowAmount: _position.borrowAmount,
+            borrowAmount: borrowAmount,
             repayAmount: repayAmount,
             deadline: deadline
         });
