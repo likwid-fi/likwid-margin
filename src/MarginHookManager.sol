@@ -50,8 +50,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         address indexed sender, uint256 poolId, uint256 liquidity, uint256 amount0, uint256 amount1, address indexed to
     );
     event Burn(address indexed sender, uint256 poolId, uint256 liquidity, uint256 amount0, uint256 amount1);
-    event Swap(uint256 amountIn, uint256 amountOut);
-    event Sync(uint256 reserve0, uint256 reserve1, uint256 mirrorReserve0, uint256 mirrorReserve1);
+    event Sync(PoolId poolId, uint256 reserve0, uint256 reserve1, uint256 mirrorReserve0, uint256 mirrorReserve1);
 
     uint256 public constant MINIMUM_LIQUIDITY = 10 ** 3;
     uint256 public constant ONE_MILLION = 10 ** 6;
@@ -286,7 +285,8 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     }
 
     function _update(PoolKey memory key) internal {
-        HookStatus storage status = hookStatusStore[key.toId()];
+        PoolId pooId = key.toId();
+        HookStatus storage status = hookStatusStore[pooId];
         uint32 blockTS = _blockTimestamp();
         uint256 timeElapsed = (blockTS - status.blockTimestampLast) * 10 ** 3;
         uint256 rate0Last =
@@ -306,7 +306,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         status.mirrorReserve1 =
             status.mirrorReserve1 + uint112(nowBalanceStatus.mirrorBalance1) - uint112(balanceStatus.mirrorBalance1);
 
-        emit Sync(status.reserve0, status.reserve1, status.mirrorReserve0, status.mirrorReserve1);
+        emit Sync(pooId, status.reserve0, status.reserve1, status.mirrorReserve0, status.mirrorReserve1);
     }
 
     // given an input amount of an asset and pair reserve, returns the maximum output amount of the other asset
