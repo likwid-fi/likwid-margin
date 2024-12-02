@@ -23,8 +23,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     error PairNotExists();
     error InsufficientBorrowReceived();
 
-    event Mint(address indexed sender, uint256 tokenId);
-    event Burn(address indexed sender, uint256 tokenId);
+    event Mint(address indexed sender, PoolId poolId, uint256 positionId);
+    event Burn(address indexed sender, PoolId poolId, uint256 positionId);
 
     uint256 public constant ONE_MILLION = 10 ** 6;
     uint256 private _nextId = 1;
@@ -37,12 +37,12 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
 
     constructor(address initialOwner) ERC721("LIKWIDMarginPositionManager", "LMPM") Owned(initialOwner) {}
 
-    function _burnPosition(uint256 tokenId) internal {
-        // _burn(tokenId);
-        MarginPosition memory _position = _positions[tokenId];
-        delete _borrowPositions[_position.poolId][_position.marginForOne][ownerOf(tokenId)];
-        delete _positions[tokenId];
-        emit Burn(msg.sender, tokenId);
+    function _burnPosition(uint256 positionId) internal {
+        // _burn(positionId);
+        MarginPosition memory _position = _positions[positionId];
+        delete _borrowPositions[_position.poolId][_position.marginForOne][ownerOf(positionId)];
+        delete _positions[positionId];
+        emit Burn(msg.sender, _position.poolId, positionId);
     }
 
     modifier ensure(uint256 deadline) {
@@ -82,7 +82,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (params.borrowAmount < params.borrowMinAmount) revert InsufficientBorrowReceived();
         if (positionId == 0) {
             _mint(params.recipient, (positionId = _nextId++));
-            emit Mint(msg.sender, positionId);
+            emit Mint(msg.sender, params.poolId, positionId);
             _positions[positionId] = MarginPosition({
                 poolId: params.poolId,
                 marginForOne: params.marginForOne,
