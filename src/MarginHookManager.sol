@@ -345,7 +345,8 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         require(amountOut > 0, "INSUFFICIENT_OUTPUT_AMOUNT");
         (uint256 _reserve0, uint256 _reserve1, FeeStatus memory feeStatus) = _getReserves(status);
         (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
-        require(reserveIn > 0 && reserveOut > 0, "MarginHook: INSUFFICIENT_LIQUIDITY");
+        require(reserveIn > 0 && reserveOut > 0, "INSUFFICIENT_LIQUIDITY");
+        require(amountOut >= reserveOut, "OUTPUT_AMOUNT_OVERFLOW");
         uint256 ratio = ONE_MILLION - status.key.fee;
         uint256 numerator = reserveIn * amountOut * ONE_MILLION;
         uint256 denominator = (reserveOut - amountOut) * ratio;
