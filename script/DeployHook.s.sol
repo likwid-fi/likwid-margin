@@ -23,7 +23,7 @@ contract DeployHookScript is Script {
         console2.log("mirrorTokenManager", mirrorTokenManager);
         MarginPositionManager marginPositionManager = new MarginPositionManager(owner);
         console2.log("marginPositionManager", address(marginPositionManager));
-        bytes memory constructorArgs = abi.encode(owner, manager, mirrorTokenManager, address(marginPositionManager));
+        bytes memory constructorArgs = abi.encode(owner, manager, mirrorTokenManager);
 
         // hook contracts must have specific flags encoded in the address
         // ------------------------------ //
@@ -48,6 +48,7 @@ contract DeployHookScript is Script {
         // verify proper create2 usage
         require(deployedHook == hookAddress, "DeployScript: hook address mismatch");
         marginPositionManager.setHook(hookAddress);
+        IMarginHookManager(hookAddress).addPositionManager(address(marginPositionManager));
         console2.log("hookAddress", hookAddress);
         MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), IMarginHookManager(hookAddress));
         console2.log("swapRouter", address(swapRouter));

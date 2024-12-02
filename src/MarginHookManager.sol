@@ -50,7 +50,9 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         address indexed sender, uint256 poolId, uint256 liquidity, uint256 amount0, uint256 amount1, address indexed to
     );
     event Burn(address indexed sender, uint256 poolId, uint256 liquidity, uint256 amount0, uint256 amount1);
-    event Sync(PoolId poolId, uint256 reserve0, uint256 reserve1, uint256 mirrorReserve0, uint256 mirrorReserve1);
+    event Sync(
+        PoolId indexed poolId, uint256 reserve0, uint256 reserve1, uint256 mirrorReserve0, uint256 mirrorReserve1
+    );
 
     uint256 public constant MINIMUM_LIQUIDITY = 10 ** 3;
     uint256 public constant ONE_MILLION = 10 ** 6;
@@ -63,7 +65,6 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     bytes32 constant MIRROR_BALANCE_1_SLOT = 0xbdb25f21ec501c2e41736c4e3dd44c1c3781af532b6899c36b3f72d4e003b0ab;
 
     IMirrorTokenManager public immutable mirrorTokenManager;
-    IMarginPositionManager public immutable marginPositionManager;
 
     uint24 initialLTV = 500000; // 50%
     uint24 liquidationLTV = 900000; // 90%
@@ -73,17 +74,15 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     uint24 protocolMarginFee = 5000; // 0.5%
 
     mapping(PoolId => HookStatus) public hookStatusStore;
+    mapping(address => bool) public positionManagers;
     RateStatus public rateStatus;
 
-    constructor(
-        address initialOwner,
-        IPoolManager _manager,
-        IMirrorTokenManager _mirrorTokenManager,
-        IMarginPositionManager _marginPositionManager
-    ) Owned(initialOwner) BaseHook(_manager) {
+    constructor(address initialOwner, IPoolManager _manager, IMirrorTokenManager _mirrorTokenManager)
+        Owned(initialOwner)
+        BaseHook(_manager)
+    {
         rateStatus = RateStatus({rateBase: 50000, useHighLevel: 700000, mLow: 10, mHigh: 50});
         mirrorTokenManager = _mirrorTokenManager;
-        marginPositionManager = _marginPositionManager;
     }
 
     modifier ensure(uint256 deadline) {
@@ -92,7 +91,9 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     }
 
     modifier positionOnly() {
-        if (msg.sender != address(marginPositionManager)) revert NotPositionManager();
+        if (!(positionManagers[msg.sender] && IMarginPositionManager(msg.sender).getHook() == address(this))) {
+            revert NotPositionManager();
+        }
         _;
     }
 
@@ -346,7 +347,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         (uint256 _reserve0, uint256 _reserve1, FeeStatus memory feeStatus) = _getReserves(status);
         (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
         require(reserveIn > 0 && reserveOut > 0, "INSUFFICIENT_LIQUIDITY");
-        require(amountOut >= reserveOut, "OUTPUT_AMOUNT_OVERFLOW");
+        require(amountOut < reserveOut, "OUTPUT_AMOUNT_OVERFLOW");
         uint256 ratio = ONE_MILLION - status.key.fee;
         uint256 numerator = reserveIn * amountOut * ONE_MILLION;
         uint256 denominator = (reserveOut - amountOut) * ratio;
@@ -466,6 +467,10 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
 
     // ******************** OWNER CALL ********************
 
+    function addPositionManager(address _marginPositionManager) external onlyOwner {
+        positionManagers[_marginPositionManager] = true;
+    }
+
     function setInitialLTV(uint24 _initialLTV) external onlyOwner {
         initialLTV = _initialLTV;
     }
@@ -528,12 +533,12 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     }
 
     function margin(MarginParams memory params) external positionOnly returns (MarginParams memory) {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (params)));
+        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (msg.sender, params)));
         (params.marginTotal, params.borrowAmount) = abi.decode(result, (uint256, uint256));
         return params;
     }
 
-    function handleMargin(MarginParams calldata params)
+    function handleMargin(address _positionManager, MarginParams calldata params)
         external
         selfOnly
         returns (uint256 marginWithoutFee, uint256 borrowAmount)
@@ -558,7 +563,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
             marginCurrency.take(poolManager, feeTo, protocolMarginFeeAmount, false);
             marginWithoutFee -= protocolMarginFeeAmount;
         }
-        marginCurrency.take(poolManager, address(marginPositionManager), marginWithoutFee, false);
+        marginCurrency.take(poolManager, _positionManager, marginWithoutFee, false);
         // mint mirror token
         mirrorTokenManager.mint(borrowCurrency.toKeyId(status.key), borrowAmount);
         _update(status.key);
@@ -572,10 +577,17 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     function handleRepay(RepayParams calldata params) external selfOnly returns (uint256) {
         HookStatus memory status = getStatus(params.poolId);
         _setBalances(status.key);
-        Currency borrowCurrency = params.marginForOne ? status.key.currency0 : status.key.currency1;
+        (Currency borrowCurrency, Currency marginCurrency) = params.marginForOne
+            ? (status.key.currency0, status.key.currency1)
+            : (status.key.currency1, status.key.currency0);
         // repay borrow
-        borrowCurrency.settle(poolManager, params.payer, params.repayAmount, false);
-        borrowCurrency.take(poolManager, address(this), params.repayAmount, true);
+        if (params.releaseAmount > 0) {
+            marginCurrency.settle(poolManager, params.payer, params.releaseAmount, false);
+            marginCurrency.take(poolManager, address(this), params.releaseAmount, true);
+        } else if (params.repayAmount > 0) {
+            borrowCurrency.settle(poolManager, params.payer, params.repayAmount, false);
+            borrowCurrency.take(poolManager, address(this), params.repayAmount, true);
+        }
         // burn mirror token
         mirrorTokenManager.burnScale(borrowCurrency.toKeyId(status.key), params.borrowAmount, params.repayAmount);
         _update(status.key);
@@ -583,21 +595,31 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     }
 
     function liquidate(LiquidateParams memory params) external payable positionOnly returns (uint256) {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleLiquidate, (params)));
+        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleLiquidate, (msg.sender, params)));
         return abi.decode(result, (uint256));
     }
 
-    function handleLiquidate(LiquidateParams calldata params) external selfOnly returns (uint256) {
+    function handleLiquidate(address _positionManager, LiquidateParams calldata params)
+        external
+        selfOnly
+        returns (uint256)
+    {
         HookStatus memory status = getStatus(params.poolId);
         _setBalances(status.key);
         // release margin
         (Currency borrowCurrency, Currency marginCurrency) = params.marginForOne
             ? (status.key.currency0, status.key.currency1)
             : (status.key.currency1, status.key.currency0);
-        marginCurrency.settle(poolManager, address(this), params.releaseAmount, false);
-        marginCurrency.take(poolManager, address(this), params.releaseAmount, true);
+        if (params.releaseAmount > 0) {
+            marginCurrency.settle(poolManager, _positionManager, params.releaseAmount, false);
+            marginCurrency.take(poolManager, address(this), params.releaseAmount, true);
+        } else if (params.repayAmount > 0) {
+            borrowCurrency.settle(poolManager, _positionManager, params.repayAmount, false);
+            borrowCurrency.take(poolManager, address(this), params.repayAmount, true);
+        }
+
         // burn mirror token
-        mirrorTokenManager.burnScale(borrowCurrency.toId(), 1, 1);
+        mirrorTokenManager.burnScale(borrowCurrency.toId(), params.borrowAmount, params.repayAmount);
         _update(status.key);
         return params.releaseAmount;
     }

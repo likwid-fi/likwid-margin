@@ -72,12 +72,12 @@ contract MarginHookManagerTest is Test {
         uint160 flags =
             uint160(Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
 
-        bytes memory constructorArgs = abi.encode(user, manager, mirrorTokenManager, marginPositionManager); //Add all the necessary constructor arguments from the hook
+        bytes memory constructorArgs = abi.encode(user, manager, mirrorTokenManager); //Add all the necessary constructor arguments from the hook
         // Mine a salt that will produce a hook address with the correct flags
         (address hookAddress, bytes32 salt) =
             HookMiner.find(address(this), flags, type(MarginHookManager).creationCode, constructorArgs);
 
-        hookManager = new MarginHookManager{salt: salt}(user, manager, mirrorTokenManager, marginPositionManager);
+        hookManager = new MarginHookManager{salt: salt}(user, manager, mirrorTokenManager);
         assertEq(address(hookManager), hookAddress);
         tokenA.mint(address(this), 2 ** 255);
         tokenB.mint(address(this), 2 ** 255);
@@ -113,6 +113,8 @@ contract MarginHookManagerTest is Test {
         deployMintAndApprove2Currencies();
         vm.prank(user);
         marginPositionManager.setHook(address(hookManager));
+        vm.prank(user);
+        hookManager.addPositionManager(address(marginPositionManager));
         swapRouter = new MarginRouter(user, manager, hookManager);
     }
 
@@ -529,7 +531,14 @@ contract MarginHookManagerTest is Test {
         console.log("after repay balance:%s tokenB.balance:%s", user.balance, tokenB.balanceOf(user));
         console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
         assertEq(position.borrowAmount - newPosition.borrowAmount, repay);
-        assertEq(position.marginTotal - newPosition.marginTotal, user.balance - userBalance);
+        assertEq(
+            position.marginTotal + position.marginAmount - newPosition.marginTotal - newPosition.marginAmount,
+            user.balance - userBalance
+        );
+        console.log("position.marginAmount:%s,position.marginTotal:%s", position.marginAmount, position.marginTotal);
+        console.log(
+            "newPosition.marginAmount:%s,newPosition.marginTotal:%s", newPosition.marginAmount, newPosition.marginTotal
+        );
         vm.stopPrank();
     }
 

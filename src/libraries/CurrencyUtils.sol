@@ -43,6 +43,14 @@ library CurrencyUtils {
         claims ? manager.mint(recipient, currency.toId(), amount) : manager.take(currency, recipient, amount);
     }
 
+    function approve(Currency currency, address spender, uint256 amount) internal returns (bool success) {
+        if (!currency.isAddressZero()) {
+            success = IERC20Minimal(Currency.unwrap(currency)).approve(spender, amount);
+        } else {
+            success = true;
+        }
+    }
+
     function transfer(Currency currency, address payer, address recipient, uint256 amount)
         internal
         returns (bool success)

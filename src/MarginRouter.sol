@@ -23,6 +23,8 @@ contract MarginRouter is SafeCallback, Owned {
     error NotSelf();
     error InsufficientOutputReceived();
 
+    event Swap(PoolId indexed poolId, address indexed sender, uint256 amount0, uint256 amount1, uint24 fee);
+
     IMarginHookManager public immutable hook;
 
     constructor(address initialOwner, IPoolManager _manager, IMarginHookManager _hook)
@@ -100,20 +102,25 @@ contract MarginRouter is SafeCallback, Owned {
                 amountSpecified: amountSpecified,
                 sqrtPriceLimitX96: 0
             });
-
+            uint256 amountIn;
+            uint256 amountOut;
             BalanceDelta delta = poolManager.swap(key, swapParams, "");
             if (params.amountIn > 0) {
-                uint256 amountOut =
-                    params.zeroForOne ? uint256(int256(delta.amount1())) : uint256(int256(delta.amount0()));
+                amountOut = params.zeroForOne ? uint256(int256(delta.amount1())) : uint256(int256(delta.amount0()));
                 if (amountOut < params.amountOutMin) revert InsufficientOutputReceived();
                 inputCurrency.settle(poolManager, sender, params.amountIn, false);
                 outputCurrency.take(poolManager, params.to, amountOut, false);
+                amountIn = params.amountIn;
+                (uint256 amount0, uint256 amount1) = params.zeroForOne ? (amountIn, amountOut) : (amountOut, amountIn);
+                emit Swap(key.toId(), sender, amount0, amount1, key.fee);
                 return amountOut;
             } else if (params.amountOut > 0) {
-                uint256 amountIn =
-                    params.zeroForOne ? uint256(-int256(delta.amount0())) : uint256(-int256(delta.amount1()));
+                amountIn = params.zeroForOne ? uint256(-int256(delta.amount0())) : uint256(-int256(delta.amount1()));
                 inputCurrency.settle(poolManager, sender, amountIn, false);
                 outputCurrency.take(poolManager, params.to, params.amountOut, false);
+                amountOut = params.amountOut;
+                (uint256 amount0, uint256 amount1) = params.zeroForOne ? (amountOut, amountIn) : (amountIn, amountOut);
+                emit Swap(key.toId(), sender, amount0, amount1, key.fee);
                 return amountIn;
             }
         }

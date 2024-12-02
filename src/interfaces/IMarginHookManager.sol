@@ -19,6 +19,8 @@ interface IMarginHookManager {
 
     function getAmountOut(PoolId poolId, bool zeroForOne, uint256 amountIn) external view returns (uint256 amountOut);
 
+    function addPositionManager(address _marginPositionManager) external;
+
     function margin(MarginParams memory params) external returns (MarginParams memory);
 
     function repay(RepayParams memory params) external payable returns (uint256);
