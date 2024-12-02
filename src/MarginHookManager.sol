@@ -170,6 +170,11 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         (amountOut,) = _getAmountOut(status, zeroForOne, amountIn);
     }
 
+    function getProtocolFees() external view returns (uint24 _protocolFee, uint24 _protocolMarginFee) {
+        _protocolFee = protocolFee;
+        _protocolMarginFee = protocolMarginFee;
+    }
+
     function initialize(PoolKey calldata key) external {
         HookStatus memory status;
         status.key = key;
