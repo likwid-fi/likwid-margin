@@ -259,6 +259,14 @@ contract MarginHookManagerTest is Test {
         console.log("after repay tokenA.balance:%s tokenB.balance:%s", tokenA.balanceOf(user), tokenB.balanceOf(user));
         console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
         assertEq(position.borrowAmount - newPosition.borrowAmount, repay);
+        repay = position.borrowAmount + 0.01 ether;
+        tokenB.approve(address(hookManager), repay);
+        marginPositionManager.repay(positionId, repay, UINT256_MAX);
+        newPosition = marginPositionManager.getPosition(positionId);
+        console.log(
+            "after all.repay tokenA.balance:%s tokenB.balance:%s", tokenA.balanceOf(user), tokenB.balanceOf(user)
+        );
+        console.log("after all.repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
         vm.stopPrank();
     }
 
@@ -505,7 +513,7 @@ contract MarginHookManagerTest is Test {
         vm.stopPrank();
     }
 
-    function test_hook_repay() public {
+    function test_hook_repay_native() public {
         test_hook_margin();
         vm.startPrank(user);
         uint256 positionId = marginPositionManager.getPositionId(nativeKey.toId(), false, user);

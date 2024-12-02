@@ -50,6 +50,11 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         _;
     }
 
+    function transferNative(address to, uint256 amount) internal {
+        (bool success,) = to.call{value: amount}("");
+        require(success, "Transfer failed.");
+    }
+
     function setHook(address _hook) external onlyOwner {
         hook = IMarginHookManager(_hook);
     }
@@ -129,15 +134,20 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             repayAmount: repayAmount,
             deadline: deadline
         });
-        hook.repay{value: msg.value}(params);
+        uint256 sendValue = Math.min(repayAmount, msg.value);
+        hook.repay{value: sendValue}(params);
         // update position
         uint256 releaseTotal = repayAmount * _position.marginTotal / borrowAmount;
         _position.marginTotal -= releaseTotal;
         _position.borrowAmount = borrowAmount - repayAmount;
-        marginToken.transfer(address(this), msg.sender, releaseTotal);
         if (_position.borrowAmount == 0) {
-            marginToken.transfer(address(this), msg.sender, _position.marginAmount);
+            marginToken.transfer(address(this), msg.sender, releaseTotal + _position.marginAmount);
             _burnPosition(positionId);
+        } else {
+            marginToken.transfer(address(this), msg.sender, releaseTotal);
+        }
+        if (msg.value > repayAmount) {
+            transferNative(msg.sender, msg.value - repayAmount);
         }
     }
 
