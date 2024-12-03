@@ -18,7 +18,6 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {Math} from "./libraries/Math.sol";
-import {UnsafeMath} from "./libraries/UnsafeMath.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
@@ -29,19 +28,14 @@ import {HookStatus, BalanceStatus, FeeStatus} from "./types/HookStatus.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams.sol";
 
 contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned {
-    using UnsafeMath for uint256;
     using SafeCast for uint256;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
     using CurrencyUtils for Currency;
 
-    error BalanceOverflow();
     error InvalidInitialization();
     error InsufficientLiquidityMinted();
     error InsufficientLiquidityBurnt();
-    error AddLiquidityDirectToHook();
-    error IncorrectSwapAmount();
-    error NotFactory();
     error NotPositionManager();
     error PoolAlreadyInitialized();
     error PairNotExists();
@@ -110,10 +104,6 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         }
     }
 
-    function _blockTimestamp() internal view returns (uint32 timestamp) {
-        timestamp = uint32(block.timestamp % 2 ** 32);
-    }
-
     function getStatus(PoolId poolId) public view returns (HookStatus memory _status) {
         _status = hookStatusStore[poolId];
         if (_status.key.currency1 == CurrencyLibrary.ADDRESS_ZERO) revert PairNotExists();
@@ -131,8 +121,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
 
     function getReserves(PoolId poolId) external view returns (uint256 _reserve0, uint256 _reserve1) {
         HookStatus memory status = getStatus(poolId);
-        _reserve0 = status.reserve0 + status.mirrorReserve0;
-        _reserve1 = status.reserve1 + status.mirrorReserve1;
+        (_reserve0, _reserve1,) = _getReserves(status);
     }
 
     function ltvParameters(PoolId poolId) external view returns (uint24 _initialLTV, uint24 _liquidationLTV) {
@@ -142,11 +131,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     }
 
     function checkFeeOn() public view returns (bool feeOn) {
-        feeOn = feeTo != address(0) && protocolFee > 0;
-    }
-
-    function checkMarginFeeOn() public view returns (bool feeOn) {
-        feeOn = feeTo != address(0) && protocolMarginFee > 0;
+        feeOn = feeTo != address(0);
     }
 
     function getBorrowRate(PoolId poolId, bool marginForOne) external view returns (uint256) {
@@ -172,8 +157,10 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     }
 
     function getProtocolFees() external view returns (uint24 _protocolFee, uint24 _protocolMarginFee) {
-        _protocolFee = protocolFee;
-        _protocolMarginFee = protocolMarginFee;
+        if (checkFeeOn()) {
+            _protocolFee = protocolFee;
+            _protocolMarginFee = protocolMarginFee;
+        }
     }
 
     function initialize(PoolKey calldata key) external {
@@ -181,7 +168,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         status.key = key;
         status.rate0CumulativeLast = ONE_BILLION;
         status.rate1CumulativeLast = ONE_BILLION;
-        status.blockTimestampLast = _blockTimestamp();
+        status.blockTimestampLast = uint32(block.timestamp % 2 ** 32);
         status.feeStatus.marginFee = 15000; // 1.5%
         hookStatusStore[key.toId()] = status;
         poolManager.initialize(key, SQRT_RATIO_1_1);
@@ -293,7 +280,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     function _update(PoolKey memory key) internal {
         PoolId pooId = key.toId();
         HookStatus storage status = hookStatusStore[pooId];
-        uint32 blockTS = _blockTimestamp();
+        uint32 blockTS = uint32(block.timestamp % 2 ** 32);
         uint256 timeElapsed = (blockTS - status.blockTimestampLast) * 10 ** 3;
         uint256 rate0Last =
             ONE_BILLION + _getBorrowRate(status.reserve0, status.mirrorReserve0) * timeElapsed / YEAR_SECONDS;
@@ -408,10 +395,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
             liquidity = Math.sqrt(params.amount0 * params.amount1) - MINIMUM_LIQUIDITY;
             _mint(address(this), uPoolId, MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
         } else {
-            liquidity = Math.min(
-                (params.amount0 * _totalSupply).unsafeDiv(_reserve0),
-                (params.amount1 * _totalSupply).unsafeDiv(_reserve1)
-            );
+            liquidity = Math.min(params.amount0 * _totalSupply / _reserve0, params.amount1 * _totalSupply / _reserve1);
         }
         if (liquidity == 0) revert InsufficientLiquidityMinted();
 
@@ -447,8 +431,8 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         uint256 _totalSupply = balanceOf[address(this)][uPoolId];
         (uint256 _reserve0, uint256 _reserve1,) = _getReserves(status);
 
-        amount0 = (params.liquidity * _reserve0).unsafeDiv(_totalSupply);
-        amount1 = (params.liquidity * _reserve1).unsafeDiv(_totalSupply);
+        amount0 = params.liquidity * _reserve0 / _totalSupply;
+        amount1 = params.liquidity * _reserve1 / _totalSupply;
         if (amount0 == 0 || amount1 == 0) revert InsufficientLiquidityBurnt();
 
         _burn(address(this), uPoolId, params.liquidity);
@@ -471,24 +455,15 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         positionManagers[_marginPositionManager] = true;
     }
 
-    function setInitialLTV(uint24 _initialLTV) external onlyOwner {
+    function setLTV(uint24 _initialLTV, uint24 _liquidationLTV) external onlyOwner {
         initialLTV = _initialLTV;
-    }
-
-    function setLiquidationLTV(uint24 _liquidationLTV) external onlyOwner {
         liquidationLTV = _liquidationLTV;
     }
 
-    function setFeeTo(address _feeTo) external onlyOwner {
+    function setFeeTo(address _feeTo, uint24 _protocolFee, uint24 _protocolMarginFee) external onlyOwner {
         feeTo = _feeTo;
-    }
-
-    function setProtocolFee(uint24 _fee) external onlyOwner {
-        protocolFee = _fee;
-    }
-
-    function setProtocolMarginFee(uint24 _fee) external onlyOwner {
-        protocolMarginFee = _fee;
+        protocolFee = _protocolFee;
+        protocolMarginFee = _protocolMarginFee;
     }
 
     function setFeeStatus(PoolId poolId, FeeStatus calldata feeStatus) external onlyOwner {
@@ -513,7 +488,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         (borrowAmount,) = _getAmountIn(status, zeroForOne, marginTotal);
         (marginTotal,) = _getAmountOut(status, zeroForOne, borrowAmount);
         marginWithoutFee = marginTotal * (ONE_MILLION - status.feeStatus.marginFee) / ONE_MILLION;
-        if (checkMarginFeeOn()) {
+        if (checkFeeOn()) {
             uint256 protocolMarginFeeAmount = marginTotal * protocolMarginFee / ONE_MILLION;
             marginWithoutFee -= protocolMarginFeeAmount;
         }
@@ -558,7 +533,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         // send total token
         marginWithoutFee = marginTotal * (ONE_MILLION - status.feeStatus.marginFee) / ONE_MILLION;
         marginCurrency.settle(poolManager, address(this), marginWithoutFee, true);
-        if (checkMarginFeeOn()) {
+        if (checkFeeOn()) {
             uint256 protocolMarginFeeAmount = marginTotal * protocolMarginFee / ONE_MILLION;
             marginCurrency.take(poolManager, feeTo, protocolMarginFeeAmount, false);
             marginWithoutFee -= protocolMarginFeeAmount;
