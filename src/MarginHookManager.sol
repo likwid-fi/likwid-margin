@@ -9,6 +9,7 @@ import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {IHooks} from "v4-core/interfaces/IPoolManager.sol";
 import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {ERC6909Claims} from "v4-core/ERC6909Claims.sol";
@@ -37,13 +38,26 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     error InsufficientLiquidityMinted();
     error InsufficientLiquidityBurnt();
     error NotPositionManager();
-    error PoolAlreadyInitialized();
     error PairNotExists();
 
-    event Mint(
-        address indexed sender, uint256 poolId, uint256 liquidity, uint256 amount0, uint256 amount1, address indexed to
+    event Initialize(
+        PoolId indexed id,
+        Currency indexed currency0,
+        Currency indexed currency1,
+        uint24 fee,
+        int24 tickSpacing,
+        IHooks hooks
     );
-    event Burn(address indexed sender, uint256 poolId, uint256 liquidity, uint256 amount0, uint256 amount1);
+
+    event Mint(
+        PoolId indexed poolId,
+        address indexed sender,
+        address indexed to,
+        uint256 liquidity,
+        uint256 amount0,
+        uint256 amount1
+    );
+    event Burn(PoolId indexed poolId, address indexed sender, uint256 liquidity, uint256 amount0, uint256 amount1);
     event Sync(
         PoolId indexed poolId, uint256 reserve0, uint256 reserve1, uint256 mirrorReserve0, uint256 mirrorReserve1
     );
@@ -164,14 +178,16 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     }
 
     function initialize(PoolKey calldata key) external {
+        PoolId id = key.toId();
         HookStatus memory status;
         status.key = key;
         status.rate0CumulativeLast = ONE_BILLION;
         status.rate1CumulativeLast = ONE_BILLION;
         status.blockTimestampLast = uint32(block.timestamp % 2 ** 32);
         status.feeStatus.marginFee = 15000; // 1.5%
-        hookStatusStore[key.toId()] = status;
+        hookStatusStore[id] = status;
         poolManager.initialize(key, SQRT_RATIO_1_1);
+        emit Initialize(id, key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks);
     }
 
     // ******************** HOOK FUNCTIONS ********************
@@ -408,7 +424,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         status.key.currency1.take(poolManager, address(this), params.amount1, true);
 
         _update(status.key);
-        emit Mint(sender, uPoolId, liquidity, params.amount0, params.amount1, params.to);
+        emit Mint(params.poolId, sender, params.to, liquidity, params.amount0, params.amount1);
     }
 
     function removeLiquidity(RemoveLiquidityParams calldata params)
@@ -446,7 +462,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         status.key.currency1.take(poolManager, sender, amount1, false);
 
         _update(status.key);
-        emit Burn(sender, uPoolId, params.liquidity, amount0, amount1);
+        emit Burn(params.poolId, sender, params.liquidity, amount0, amount1);
     }
 
     // ******************** OWNER CALL ********************
@@ -555,11 +571,12 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         (Currency borrowCurrency, Currency marginCurrency) = params.marginForOne
             ? (status.key.currency0, status.key.currency1)
             : (status.key.currency1, status.key.currency0);
-        // repay borrow
         if (params.releaseAmount > 0) {
+            // release margin
             marginCurrency.settle(poolManager, params.payer, params.releaseAmount, false);
             marginCurrency.take(poolManager, address(this), params.releaseAmount, true);
         } else if (params.repayAmount > 0) {
+            // repay borrow
             borrowCurrency.settle(poolManager, params.payer, params.repayAmount, false);
             borrowCurrency.take(poolManager, address(this), params.repayAmount, true);
         }
