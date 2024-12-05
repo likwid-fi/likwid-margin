@@ -5,7 +5,7 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 
-import {MarginParams, RepayParams, LiquidateParams} from "../types/MarginParams.sol";
+import {MarginParams, ReleaseParams} from "../types/MarginParams.sol";
 import {HookStatus} from "../types/HookStatus.sol";
 
 interface IMarginHookManager {
@@ -23,7 +23,5 @@ interface IMarginHookManager {
 
     function margin(MarginParams memory params) external returns (MarginParams memory);
 
-    function repay(RepayParams memory params) external payable returns (uint256);
-
-    function liquidate(LiquidateParams memory params) external payable returns (uint256);
+    function release(ReleaseParams memory params) external payable returns (uint256);
 }

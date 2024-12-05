@@ -23,7 +23,7 @@ import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
-import {MarginParams, RepayParams, LiquidateParams} from "./types/MarginParams.sol";
+import {MarginParams, ReleaseParams} from "./types/MarginParams.sol";
 import {RateStatus} from "./types/RateStatus.sol";
 import {HookStatus, BalanceStatus, FeeStatus} from "./types/HookStatus.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams.sol";
@@ -560,12 +560,12 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         _update(status.key);
     }
 
-    function repay(RepayParams memory params) external payable positionOnly returns (uint256) {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRepay, (params)));
+    function release(ReleaseParams memory params) external payable positionOnly returns (uint256) {
+        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRelease, (params)));
         return abi.decode(result, (uint256));
     }
 
-    function handleRepay(RepayParams calldata params) external selfOnly returns (uint256) {
+    function handleRelease(ReleaseParams calldata params) external selfOnly returns (uint256) {
         HookStatus memory status = getStatus(params.poolId);
         _setBalances(status.key);
         (Currency borrowCurrency, Currency marginCurrency) = params.marginForOne
@@ -584,35 +584,5 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         mirrorTokenManager.burnScale(borrowCurrency.toKeyId(status.key), params.borrowAmount, params.repayAmount);
         _update(status.key);
         return params.repayAmount;
-    }
-
-    function liquidate(LiquidateParams memory params) external payable positionOnly returns (uint256) {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleLiquidate, (msg.sender, params)));
-        return abi.decode(result, (uint256));
-    }
-
-    function handleLiquidate(address _positionManager, LiquidateParams calldata params)
-        external
-        selfOnly
-        returns (uint256)
-    {
-        HookStatus memory status = getStatus(params.poolId);
-        _setBalances(status.key);
-        // release margin
-        (Currency borrowCurrency, Currency marginCurrency) = params.marginForOne
-            ? (status.key.currency0, status.key.currency1)
-            : (status.key.currency1, status.key.currency0);
-        if (params.releaseAmount > 0) {
-            marginCurrency.settle(poolManager, _positionManager, params.releaseAmount, false);
-            marginCurrency.take(poolManager, address(this), params.releaseAmount, true);
-        } else if (params.repayAmount > 0) {
-            borrowCurrency.settle(poolManager, _positionManager, params.repayAmount, false);
-            borrowCurrency.take(poolManager, address(this), params.repayAmount, true);
-        }
-
-        // burn mirror token
-        mirrorTokenManager.burnScale(borrowCurrency.toId(), params.borrowAmount, params.repayAmount);
-        _update(status.key);
-        return params.releaseAmount;
     }
 }

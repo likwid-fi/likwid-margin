@@ -13,7 +13,7 @@ import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
 import {HookStatus} from "./types/HookStatus.sol";
-import {MarginParams, RepayParams, LiquidateParams} from "./types/MarginParams.sol";
+import {MarginParams, ReleaseParams} from "./types/MarginParams.sol";
 import {Math} from "./libraries/Math.sol";
 
 contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
@@ -112,7 +112,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         Currency marginToken = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
         require(checkAmount(marginToken, msg.sender, address(this), params.marginAmount), "INSUFFICIENT_AMOUNT");
         bool success = marginToken.transfer(msg.sender, address(this), params.marginAmount);
-        require(success, "MARGIN_SELL_ERR");
+        require(success, "MARGIN_ERR");
         uint256 positionId = _borrowPositions[params.poolId][params.marginForOne][params.recipient];
         params = hook.margin(params);
         uint256 rateLast = hook.getBorrowRateCumulativeLast(params.poolId, params.marginForOne);
@@ -178,7 +178,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (repayAmount > _position.borrowAmount) {
             repayAmount = _position.borrowAmount;
         }
-        RepayParams memory params = RepayParams({
+        ReleaseParams memory params = ReleaseParams({
             poolId: _position.poolId,
             marginForOne: _position.marginForOne,
             payer: msg.sender,
@@ -188,7 +188,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             deadline: deadline
         });
         uint256 sendValue = Math.min(repayAmount, msg.value);
-        hook.repay{value: sendValue}(params);
+        hook.release{value: sendValue}(params);
         release(positionId, marginToken, repayAmount, _position.borrowAmount);
         if (msg.value > sendValue) {
             transferNative(msg.sender, msg.value - sendValue);
@@ -196,17 +196,22 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         emit Repay(_position.poolId, msg.sender, positionId, repayAmount);
     }
 
-    function close(uint256 positionId, uint256 releaseAmount, uint256 deadline) external payable ensure(deadline) {
+    function close(uint256 positionId, uint256 releaseAmount, uint256 repayMinAmount, uint256 deadline)
+        external
+        payable
+        ensure(deadline)
+    {
         require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
         MarginPosition memory _position = getPosition(positionId);
         HookStatus memory _status = hook.getStatus(_position.poolId);
         Currency marginToken = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;
-        uint256 repayAmount = hook.getAmountOut(_position.poolId, !_position.marginForOne, releaseAmount);
         require(checkAmount(marginToken, msg.sender, address(hook), releaseAmount), "INSUFFICIENT_AMOUNT");
+        uint256 repayAmount = hook.getAmountOut(_position.poolId, !_position.marginForOne, releaseAmount);
+        require(repayAmount > repayMinAmount, "INSUFFICIENT_REPAY_AMOUNT");
         if (repayAmount > _position.borrowAmount) {
             repayAmount = _position.borrowAmount;
         }
-        RepayParams memory params = RepayParams({
+        ReleaseParams memory params = ReleaseParams({
             poolId: _position.poolId,
             marginForOne: _position.marginForOne,
             payer: msg.sender,
@@ -216,7 +221,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             deadline: deadline
         });
         uint256 sendValue = Math.min(releaseAmount, msg.value);
-        hook.repay{value: sendValue}(params);
+        hook.release{value: sendValue}(params);
         release(positionId, marginToken, repayAmount, _position.borrowAmount);
         if (msg.value > sendValue) {
             transferNative(msg.sender, msg.value - sendValue);
@@ -258,14 +263,16 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             bool success = marginToken.approve(address(hook), releaseAmount);
             require(success, "APPROVE_ERR");
         }
-        LiquidateParams memory params = LiquidateParams({
+        ReleaseParams memory params = ReleaseParams({
             poolId: _position.poolId,
             marginForOne: _position.marginForOne,
+            payer: address(this),
             releaseAmount: releaseAmount,
             repayAmount: 1,
-            borrowAmount: 1
+            borrowAmount: 1,
+            deadline: block.timestamp + 1000
         });
-        hook.liquidate{value: liquidateValue}(params);
+        hook.release{value: liquidateValue}(params);
         profit = _position.marginAmount + _position.marginTotal - releaseAmount;
         if (profit > 0) {
             marginToken.transfer(address(this), msg.sender, profit);
@@ -290,14 +297,16 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (borrowToken == CurrencyLibrary.ADDRESS_ZERO) {
             liquidateValue = borrowAmount;
         }
-        LiquidateParams memory params = LiquidateParams({
+        ReleaseParams memory params = ReleaseParams({
             poolId: _position.poolId,
             marginForOne: _position.marginForOne,
+            payer: msg.sender,
             repayAmount: borrowAmount,
             borrowAmount: borrowAmount,
-            releaseAmount: 0
+            releaseAmount: 0,
+            deadline: block.timestamp + 1000
         });
-        hook.liquidate{value: liquidateValue}(params);
+        hook.release{value: liquidateValue}(params);
         profit = _position.marginAmount + _position.marginTotal;
         marginToken.transfer(address(this), msg.sender, profit);
         _burnPosition(positionId);

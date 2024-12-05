@@ -282,7 +282,7 @@ contract MarginPositionManagerTest is Test {
         console.log("before repay tokenA.balance:%s tokenB.balance:%s", tokenA.balanceOf(user), tokenB.balanceOf(user));
         uint256 releaseAmount = 0.01 ether;
         tokenA.approve(address(hookManager), releaseAmount);
-        marginPositionManager.close(positionId, releaseAmount, UINT256_MAX);
+        marginPositionManager.close(positionId, releaseAmount, 0, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
         console.log("after repay tokenA.balance:%s tokenB.balance:%s", tokenA.balanceOf(user), tokenB.balanceOf(user));
         console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);

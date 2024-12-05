@@ -15,7 +15,7 @@ struct MarginParams {
     uint256 deadline;
 }
 
-struct RepayParams {
+struct ReleaseParams {
     PoolId poolId;
     bool marginForOne; // true: currency1 is marginToken, false: currency0 is marginToken
     address payer;
@@ -23,12 +23,4 @@ struct RepayParams {
     uint256 releaseAmount;
     uint256 borrowAmount;
     uint256 deadline;
-}
-
-struct LiquidateParams {
-    PoolId poolId;
-    bool marginForOne; // true: currency1 is marginToken, false: currency0 is marginToken
-    uint256 repayAmount;
-    uint256 borrowAmount;
-    uint256 releaseAmount;
 }

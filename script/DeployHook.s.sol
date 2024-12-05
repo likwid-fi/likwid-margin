@@ -31,7 +31,7 @@ contract DeployHookScript is Script {
         // ------------------------------ //
         uint160 flags =
             uint160(Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
-        console2.logBytes32(bytes32(uint256(flags)));
+        // console2.logBytes32(bytes32(uint256(flags)));
 
         // Mine a salt that will produce a hook address with the correct flags
         bytes memory creationCode = vm.getCode("MarginHookManager.sol:MarginHookManager");
