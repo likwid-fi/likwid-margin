@@ -8,5 +8,5 @@
   "solidity.formatter": "forge",
   "solidity.compileUsingRemoteVersion": "v0.8.26",
   "solidity.remappings": ["v4-periphery/=lib/v4-periphery/"],
-  "cSpell.words": ["chainid", "IERC", "keccak", "mload", "solmate", "TESTB", "tload", "tstore"]
+  "cSpell.words": ["chainid", "Extsload", "Exttload", "IERC", "keccak", "mload", "solmate", "TESTB", "tload", "tstore"]
 }

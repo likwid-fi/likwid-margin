@@ -75,4 +75,39 @@ contract StructTest is Test {
         //     test == 0;
         // }
     }
+
+    function test_shift_01() public pure {
+        uint112 test = type(uint112).max;
+        uint24 test24 = uint24(test);
+        uint256 test1 = uint256(test) << 96;
+        assertEq(test1 / test, 2 ** 96);
+        console.log("test:%s,test1:%s,test24:%s", test, test1, test24);
+    }
+
+    function test_shift_02() public pure {
+        uint112 test = 1;
+        uint256 test1 = uint256(test) << 96;
+        uint24 test24 = uint24(test1);
+        assertEq(test1 / test, 2 ** 96);
+        console.log("test:%s,test1:%s,test24:%s", test, test1, test24);
+    }
+
+    function test_shift_03() public pure {
+        uint128 reserve0 = 11223344;
+        uint128 reserve1 = 22443355;
+        uint256 reserves = (uint256(reserve0) << 128) + uint256(reserve1);
+        uint256 half = reserves >> 1;
+        uint128 half0 = uint128(half >> 128);
+        uint128 half1 = uint128(half);
+        assertEq(half0, reserve0 / 2);
+        assertEq(half1, reserve1 / 2);
+        uint128 _reserve0 = 1122334422;
+        uint128 _reserve1 = 2244335544;
+        uint256 _reserves = (uint256(_reserve0) << 128) + uint256(_reserve1);
+        uint256 _half = (reserves + _reserves) >> 1;
+        uint128 _half0 = uint128(_half >> 128);
+        uint128 _half1 = uint128(_half);
+        assertEq(_half0, (reserve0 + _reserve0) / 2);
+        assertEq(_half1, (reserve1 + _reserve1) / 2);
+    }
 }
