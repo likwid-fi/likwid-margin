@@ -120,6 +120,29 @@ contract MarginHookManagerTest is Test {
 
     receive() external payable {}
 
+    function test_hook_liquidity_tokens() public {
+        AddLiquidityParams memory params = AddLiquidityParams({
+            poolId: key.toId(),
+            amount0: 1e18,
+            amount1: 1e18,
+            tickLower: 50000,
+            tickUpper: 50000,
+            to: address(this),
+            deadline: type(uint256).max
+        });
+        hookManager.addLiquidity(params);
+        uint256 uPoolId = uint256(PoolId.unwrap(key.toId()));
+        uint256 liquidity = hookManager.balanceOf(address(this), uPoolId);
+        (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(key.toId());
+        assertEq(_reserves0, _reserves1);
+        console.log("_reserves0:%s,_reserves1:%s", _reserves0, _reserves1);
+        RemoveLiquidityParams memory removeParams =
+            RemoveLiquidityParams({poolId: key.toId(), liquidity: liquidity / 2, deadline: type(uint256).max});
+        hookManager.removeLiquidity(removeParams);
+        uint256 liquidityHalf = hookManager.balanceOf(address(this), uPoolId);
+        assertEq(liquidityHalf, liquidity - liquidity / 2);
+    }
+
     function test_hook_liquidity_v2() public {
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: key.toId(),
@@ -483,6 +506,71 @@ contract MarginHookManagerTest is Test {
             "after liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
             address(hookManager).balance,
             address(marginPositionManager).balance
+        );
+        vm.stopPrank();
+    }
+
+    function test_hook_margin_max() public {
+        test_hook_liquidity_v2();
+        vm.startPrank(user);
+        tokenB.approve(address(hookManager), 1e18);
+        uint256 rate = hookManager.getBorrowRate(nativeKey.toId(), false);
+        assertEq(rate, 50000);
+        uint256 positionId;
+        uint256 borrowAmount;
+        uint256 payValue;
+        payValue = 0.01 ether;
+        MarginParams memory params = MarginParams({
+            poolId: nativeKey.toId(),
+            marginForOne: false,
+            leverage: 3,
+            marginAmount: payValue,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMinAmount: 0,
+            recipient: user,
+            deadline: block.timestamp + 1000
+        });
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        console.log(
+            "hookManager.balance:%s,marginPositionManager.balance:%s",
+            address(hookManager).balance,
+            address(marginPositionManager).balance
+        );
+        console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
+        MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        console.log(
+            "positionId:%s,position.borrowAmount:%s,rateCumulativeLast:%s",
+            positionId,
+            position.borrowAmount,
+            position.rateCumulativeLast
+        );
+        (payValue, borrowAmount) = hookManager.getMarginMax(nativeKey.toId(), false, 3);
+        params = MarginParams({
+            poolId: nativeKey.toId(),
+            marginForOne: false,
+            leverage: 3,
+            marginAmount: payValue,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMinAmount: 0,
+            recipient: user,
+            deadline: block.timestamp + 1000
+        });
+
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        console.log(
+            "hookManager.balance:%s,marginPositionManager.balance:%s",
+            address(hookManager).balance,
+            address(marginPositionManager).balance
+        );
+        console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
+        position = marginPositionManager.getPosition(positionId);
+        console.log(
+            "positionId:%s,position.borrowAmount:%s,rateCumulativeLast:%s",
+            positionId,
+            position.borrowAmount,
+            position.rateCumulativeLast
         );
         vm.stopPrank();
     }

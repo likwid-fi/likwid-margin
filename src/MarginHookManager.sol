@@ -385,16 +385,6 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         returns (uint256 liquidity)
     {
         require(params.amount0 > 0 && params.amount1 > 0, "AMOUNT_ERR");
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleAddLiquidity, (msg.sender, params)));
-        liquidity = abi.decode(result, (uint256));
-    }
-
-    /// @dev Handle liquidity addition by taking tokens from the sender and claiming ERC6909 to the hook address
-    function handleAddLiquidity(address sender, AddLiquidityParams calldata params)
-        external
-        selfOnly
-        returns (uint256 liquidity)
-    {
         HookStatus memory status = getStatus(params.poolId);
         _setBalances(status.key);
         uint256 uPoolId = uint256(PoolId.unwrap(params.poolId));
@@ -417,28 +407,27 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
 
         _mint(address(this), uPoolId, liquidity);
         _mint(params.to, uPoolId, liquidity);
-
-        status.key.currency0.settle(poolManager, sender, params.amount0, false);
-        status.key.currency0.take(poolManager, address(this), params.amount0, true);
-        status.key.currency1.settle(poolManager, sender, params.amount1, false);
-        status.key.currency1.take(poolManager, address(this), params.amount1, true);
-
+        poolManager.unlock(
+            abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, params.amount0, params.amount1))
+        );
         _update(status.key);
-        emit Mint(params.poolId, sender, params.to, liquidity, params.amount0, params.amount1);
+        emit Mint(params.poolId, msg.sender, params.to, liquidity, params.amount0, params.amount1);
+    }
+
+    /// @dev Handle liquidity addition by taking tokens from the sender and claiming ERC6909 to the hook address
+    function handleAddLiquidity(address sender, PoolKey calldata key, uint256 amount0, uint256 amount1)
+        external
+        selfOnly
+    {
+        key.currency0.settle(poolManager, sender, amount0, false);
+        key.currency0.take(poolManager, address(this), amount0, true);
+        key.currency1.settle(poolManager, sender, amount1, false);
+        key.currency1.take(poolManager, address(this), amount1, true);
     }
 
     function removeLiquidity(RemoveLiquidityParams calldata params)
         external
         ensure(params.deadline)
-        returns (uint256 amount0, uint256 amount1)
-    {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRemoveLiquidity, (msg.sender, params)));
-        (amount0, amount1) = abi.decode(result, (uint256, uint256));
-    }
-
-    function handleRemoveLiquidity(address sender, RemoveLiquidityParams calldata params)
-        external
-        selfOnly
         returns (uint256 amount0, uint256 amount1)
     {
         HookStatus memory status = getStatus(params.poolId);
@@ -452,17 +441,22 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         if (amount0 == 0 || amount1 == 0) revert InsufficientLiquidityBurnt();
 
         _burn(address(this), uPoolId, params.liquidity);
-        _burn(sender, uPoolId, params.liquidity);
-
-        // burn 6909s
-        poolManager.burn(address(this), status.key.currency0.toId(), amount0);
-        poolManager.burn(address(this), status.key.currency1.toId(), amount1);
-        // transfer token to liquidity from address
-        status.key.currency0.take(poolManager, sender, amount0, false);
-        status.key.currency1.take(poolManager, sender, amount1, false);
-
+        _burn(msg.sender, uPoolId, params.liquidity);
+        poolManager.unlock(abi.encodeCall(this.handleRemoveLiquidity, (msg.sender, status.key, amount0, amount1)));
         _update(status.key);
-        emit Burn(params.poolId, sender, params.liquidity, amount0, amount1);
+        emit Burn(params.poolId, msg.sender, params.liquidity, amount0, amount1);
+    }
+
+    function handleRemoveLiquidity(address sender, PoolKey calldata key, uint256 amount0, uint256 amount1)
+        external
+        selfOnly
+    {
+        // burn 6909s
+        poolManager.burn(address(this), key.currency0.toId(), amount0);
+        poolManager.burn(address(this), key.currency1.toId(), amount1);
+        // transfer token to liquidity from address
+        key.currency0.take(poolManager, sender, amount0, false);
+        key.currency1.take(poolManager, sender, amount1, false);
     }
 
     // ******************** OWNER CALL ********************

@@ -116,11 +116,7 @@ contract MarginPositionManagerTest is Test {
         vm.prank(user);
         hookManager.addPositionManager(address(marginPositionManager));
         swapRouter = new MarginRouter(user, manager, hookManager);
-    }
 
-    receive() external payable {}
-
-    function test_hook_liquidity_tokens() public {
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: key.toId(),
             amount0: 1e18,
@@ -143,8 +139,9 @@ contract MarginPositionManagerTest is Test {
         assertEq(liquidityHalf, liquidity - liquidity / 2);
     }
 
+    receive() external payable {}
+
     function test_hook_margin_tokens() public {
-        test_hook_liquidity_tokens();
         vm.startPrank(user);
         uint256 rate = hookManager.getBorrowRate(nativeKey.toId(), false);
         assertEq(rate, 50000);
@@ -218,7 +215,6 @@ contract MarginPositionManagerTest is Test {
     }
 
     function test_hook_swap_tokens() public {
-        test_hook_liquidity_tokens();
         vm.startPrank(user);
         uint256 amountIn = 0.0123 ether;
         // swap

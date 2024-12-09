@@ -9,6 +9,19 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 library CurrencyUtils {
     using CurrencyLibrary for Currency;
 
+    function safeTransfer(Currency currency, address to, uint256 amount) internal returns (bool) {
+        (bool success, bytes memory data) =
+            Currency.unwrap(currency).call(abi.encodeWithSelector(IERC20Minimal.transfer.selector, to, amount));
+        return success && (data.length == 0 || abi.decode(data, (bool)));
+    }
+
+    function safeTransferFrom(Currency currency, address from, address to, uint256 amount) internal returns (bool) {
+        (bool success, bytes memory data) = Currency.unwrap(currency).call(
+            abi.encodeWithSelector(IERC20Minimal.transferFrom.selector, from, to, amount)
+        );
+        return success && (data.length == 0 || abi.decode(data, (bool)));
+    }
+
     /// @notice Settle (pay) a currency to the PoolManager
     /// @param currency Currency to settle
     /// @param manager IPoolManager to settle to
@@ -24,11 +37,13 @@ library CurrencyUtils {
             manager.settle{value: amount}();
         } else {
             manager.sync(currency);
+            bool success;
             if (payer != address(this)) {
-                IERC20Minimal(Currency.unwrap(currency)).transferFrom(payer, address(manager), amount);
+                success = safeTransferFrom(currency, payer, address(manager), amount);
             } else {
-                IERC20Minimal(Currency.unwrap(currency)).transfer(address(manager), amount);
+                success = safeTransfer(currency, address(manager), amount);
             }
+            require(success, "settle:transfer did not succeed");
             manager.settle();
         }
     }
@@ -59,9 +74,9 @@ library CurrencyUtils {
             (success,) = recipient.call{value: amount}("");
         } else {
             if (payer != address(this)) {
-                success = IERC20Minimal(Currency.unwrap(currency)).transferFrom(payer, recipient, amount);
+                success = safeTransferFrom(currency, payer, recipient, amount);
             } else {
-                success = IERC20Minimal(Currency.unwrap(currency)).transfer(recipient, amount);
+                success = safeTransfer(currency, recipient, amount);
             }
         }
     }
