@@ -13,6 +13,8 @@ interface IMarginHookManager {
 
     function getStatus(PoolId poolId) external view returns (HookStatus memory);
 
+    function getReserves(PoolId poolId) external view returns (uint256 _reserve0, uint256 _reserve1);
+
     function getBorrowRateCumulativeLast(PoolId poolId, bool marginForOne) external view returns (uint256);
 
     function getAmountIn(PoolId poolId, bool zeroForOne, uint256 amountOut) external view returns (uint256 amountIn);

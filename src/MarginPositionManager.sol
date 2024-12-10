@@ -237,7 +237,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (_position.rateCumulativeLast > 0) {
             uint256 rateLast = hook.getBorrowRateCumulativeLast(_position.poolId, _position.marginForOne);
             uint256 borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
-            amountNeed = hook.getAmountIn(_position.poolId, !_position.marginForOne, borrowAmount);
+            (uint256 reserve0, uint256 reserve1) = hook.getReserves(_position.poolId);
+            (uint256 reserveBorrow, uint256 reserveMargin) =
+                _position.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+            amountNeed = reserveMargin * borrowAmount / reserveBorrow;
             (, uint24 _liquidationLTV) = hook.ltvParameters(_position.poolId);
             liquidated = amountNeed > _position.marginAmount * _liquidationLTV / ONE_MILLION + _position.marginTotal;
         }

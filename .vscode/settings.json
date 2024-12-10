@@ -9,6 +9,7 @@
   "solidity.compileUsingRemoteVersion": "v0.8.26",
   "solidity.remappings": ["v4-periphery/=lib/v4-periphery/"],
   "cSpell.words": [
+    "Agos",
     "chainid",
     "Extsload",
     "Exttload",
@@ -17,8 +18,10 @@
     "mload",
     "returndata",
     "solmate",
+    "SSTOREs",
     "TESTB",
     "tload",
-    "tstore"
+    "tstore",
+    "USDTS"
   ]
 }

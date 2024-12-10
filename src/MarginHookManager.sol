@@ -308,8 +308,8 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         BalanceStatus memory balanceStatus = _getBalances();
         BalanceStatus memory nowBalanceStatus = _getBalances(key);
 
-        status.reserve0 = status.reserve0 + uint128(nowBalanceStatus.balance0) - uint128(balanceStatus.balance0);
-        status.reserve1 = status.reserve1 + uint128(nowBalanceStatus.balance1) - uint128(balanceStatus.balance1);
+        status.reserve0 = status.reserve0 + uint112(nowBalanceStatus.balance0) - uint112(balanceStatus.balance0);
+        status.reserve1 = status.reserve1 + uint112(nowBalanceStatus.balance1) - uint112(balanceStatus.balance1);
         status.mirrorReserve0 =
             status.mirrorReserve0 + uint112(nowBalanceStatus.mirrorBalance0) - uint112(balanceStatus.mirrorBalance0);
         status.mirrorReserve1 =

@@ -28,8 +28,9 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol";
 
 import {HookMiner} from "./utils/HookMiner.sol";
+import {EIP20NonStandardThrowHarness} from "./mocks/EIP20NonStandardThrowHarness.sol";
 
-contract MarginPositionManagerTest is Test {
+contract MarginUSDTSTest is Test {
     using CurrencyLibrary for Currency;
     using BalanceDeltaLibrary for BalanceDelta;
 
@@ -42,9 +43,8 @@ contract MarginPositionManagerTest is Test {
     MarginHookManager hookManager;
 
     PoolKey key;
-    PoolKey nativeKey;
 
-    MockERC20 tokenA;
+    EIP20NonStandardThrowHarness tokenA;
     MockERC20 tokenB;
     address user;
 
@@ -60,7 +60,7 @@ contract MarginPositionManagerTest is Test {
     }
 
     function deployMintAndApprove2Currencies() internal {
-        tokenA = new MockERC20("TESTA", "TESTA", 18);
+        tokenA = new EIP20NonStandardThrowHarness(UINT256_MAX, "TESTA", 18, "TESTA");
         Currency currencyA = Currency.wrap(address(tokenA));
 
         tokenB = new MockERC20("TESTB", "TESTB", 18);
@@ -79,7 +79,7 @@ contract MarginPositionManagerTest is Test {
 
         hookManager = new MarginHookManager{salt: salt}(user, manager, mirrorTokenManager);
         assertEq(address(hookManager), hookAddress);
-        tokenA.mint(address(this), 2 ** 255);
+        // tokenA.mint(address(this), 2 ** 255);
         tokenB.mint(address(this), 2 ** 255);
 
         tokenA.transfer(user, 10e18);
@@ -91,16 +91,8 @@ contract MarginPositionManagerTest is Test {
         tokenB.approve(address(swapRouter), type(uint256).max);
 
         key = PoolKey({currency0: currency0, currency1: currency1, fee: 0, tickSpacing: 1, hooks: hookManager});
-        nativeKey = PoolKey({
-            currency0: CurrencyLibrary.ADDRESS_ZERO,
-            currency1: currency1,
-            fee: 0,
-            tickSpacing: 1,
-            hooks: hookManager
-        });
 
         hookManager.initialize(key);
-        hookManager.initialize(nativeKey);
     }
 
     function setUp() public {
@@ -141,7 +133,7 @@ contract MarginPositionManagerTest is Test {
 
     receive() external payable {}
 
-    function test_hook_margin_tokens() public {
+    function test_hook_margin_usdts() public {
         vm.startPrank(user);
         uint256 rate = hookManager.getBorrowRate(key.toId(), false);
         assertEq(rate, 50000);
@@ -214,7 +206,7 @@ contract MarginPositionManagerTest is Test {
         );
     }
 
-    function test_hook_swap_tokens() public {
+    function test_hook_swap_usdts() public {
         vm.startPrank(user);
         uint256 amountIn = 0.0123 ether;
         // swap
@@ -242,8 +234,8 @@ contract MarginPositionManagerTest is Test {
         vm.stopPrank();
     }
 
-    function test_hook_repay_tokens() public {
-        test_hook_margin_tokens();
+    function test_hook_repay_usdts() public {
+        test_hook_margin_usdts();
         vm.startPrank(user);
         uint256 positionId = marginPositionManager.getPositionId(key.toId(), false, user);
         assertGt(positionId, 0);
@@ -268,8 +260,8 @@ contract MarginPositionManagerTest is Test {
         vm.stopPrank();
     }
 
-    function test_hook_close_tokens() public {
-        test_hook_margin_tokens();
+    function test_hook_close_usdts() public {
+        test_hook_margin_usdts();
         vm.startPrank(user);
         uint256 positionId = marginPositionManager.getPositionId(key.toId(), false, user);
         assertGt(positionId, 0);

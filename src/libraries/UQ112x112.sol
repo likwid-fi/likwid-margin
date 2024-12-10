@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 library UQ112x112 {
     uint224 constant Q112 = 2 ** 112;
-    uint24 constant ONE_MILLION = 10 ** 6;
+    uint32 constant ONE_MILLION = 10 ** 6;
 
     // encode a uint112 as a UQ112x112
     function encode(uint112 y) internal pure returns (uint224 z) {
@@ -20,19 +20,35 @@ library UQ112x112 {
         z = x / uint224(y);
     }
 
-    function truncated(uint112 reverse0, uint112 reverse1, uint224 price0X112, uint24 range)
+    function getReverses(uint112 reserve0, uint112 reserve1) internal pure returns (uint224 reserves) {
+        reserves = (uint224(reserve0) << 112) + uint224(reserve1);
+    }
+
+    function getReverse0(uint224 reserves) internal pure returns (uint112 reserve0) {
+        reserve0 = uint112(reserves >> 112);
+    }
+
+    function getReverse1(uint224 reserves) internal pure returns (uint112 reserve1) {
+        reserve1 = uint112(reserves);
+    }
+
+    function getPrice1X112(uint224 reserves) internal pure returns (uint224 price1X112) {
+        price1X112 = div(encode(getReverse0(reserves)), getReverse1(reserves));
+    }
+
+    function truncated(uint112 reverse0, uint112 reverse1, uint224 price1X112, uint32 moved)
         internal
         pure
-        returns (uint112 inReverse1)
+        returns (uint112 reverse0Result)
     {
-        uint112 reverse1Min = decode(reverse0 * price0X112 * (ONE_MILLION - range) / ONE_MILLION);
-        uint112 reverse1Max = decode(reverse0 * price0X112 * (ONE_MILLION + range) / ONE_MILLION);
-        if (reverse1 < reverse1Min) {
-            inReverse1 = reverse1Min;
-        } else if (reverse1 > reverse1Max) {
-            inReverse1 = reverse1Max;
+        uint112 reverse0Min = decode(reverse1 * price1X112 * (ONE_MILLION - moved) / ONE_MILLION);
+        uint112 reverse0Max = decode(reverse1 * price1X112 * (ONE_MILLION + moved) / ONE_MILLION);
+        if (reverse0 < reverse0Min) {
+            reverse0Result = reverse0Min;
+        } else if (reverse1 > reverse0Max) {
+            reverse0Result = reverse0Max;
         } else {
-            inReverse1 = reverse1;
+            reverse0Result = reverse0;
         }
     }
 }

@@ -5,8 +5,8 @@ import {Currency} from "v4-core/types/Currency.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 struct HookStatus {
-    uint128 reserve0;
-    uint128 reserve1;
+    uint112 reserve0;
+    uint112 reserve1;
     uint112 mirrorReserve0;
     uint112 mirrorReserve1;
     uint32 blockTimestampLast;
