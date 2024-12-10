@@ -22,6 +22,7 @@ import {Math} from "./libraries/Math.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
+import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
 import {MarginParams, ReleaseParams} from "./types/MarginParams.sol";
 import {RateStatus} from "./types/RateStatus.sol";
@@ -80,6 +81,8 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     address public feeTo;
     uint24 protocolFee = 3000; // 0.3%
     uint24 protocolMarginFee = 5000; // 0.5%
+
+    address public marginOracle;
 
     mapping(PoolId => HookStatus) public hookStatusStore;
     mapping(address => bool) public positionManagers;
@@ -315,6 +318,11 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         status.mirrorReserve1 =
             status.mirrorReserve1 + uint112(nowBalanceStatus.mirrorBalance1) - uint112(balanceStatus.mirrorBalance1);
 
+        if (marginOracle != address(0)) {
+            IMarginOracleWriter(marginOracle).write(
+                status.key, status.reserve0 + status.mirrorReserve0, status.reserve1 + status.mirrorReserve1
+            );
+        }
         emit Sync(pooId, status.reserve0, status.reserve1, status.mirrorReserve0, status.mirrorReserve1);
     }
 
@@ -389,17 +397,22 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         _setBalances(status.key);
         uint256 uPoolId = uint256(PoolId.unwrap(params.poolId));
         (uint256 _reserve0, uint256 _reserve1,) = _getReserves(status);
-        if (_reserve1 > 0) {
+        uint256 _totalSupply = balanceOf[address(this)][uPoolId];
+        if (_reserve1 > 0 && _totalSupply > MINIMUM_LIQUIDITY) {
             uint256 upValue = _reserve0 * (ONE_MILLION + params.tickUpper) / _reserve1;
             uint256 downValue = _reserve0 * (ONE_MILLION - params.tickLower) / _reserve1;
             uint256 inValue = params.amount0 * ONE_MILLION / params.amount1;
             require(inValue >= downValue && inValue <= upValue, "OUT_OF_RANGE");
         }
-        uint256 _totalSupply = balanceOf[address(this)][uPoolId];
 
         if (_totalSupply == 0) {
             liquidity = Math.sqrt(params.amount0 * params.amount1) - MINIMUM_LIQUIDITY;
             _mint(address(this), uPoolId, MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
+            if (marginOracle != address(0)) {
+                IMarginOracleWriter(marginOracle).initialize(
+                    status.key, uint112(params.amount0), uint112(params.amount1)
+                );
+            }
         } else {
             liquidity = Math.min(params.amount0 * _totalSupply / _reserve0, params.amount1 * _totalSupply / _reserve1);
         }
@@ -474,6 +487,10 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         feeTo = _feeTo;
         protocolFee = _protocolFee;
         protocolMarginFee = _protocolMarginFee;
+    }
+
+    function setMarginOracle(address _oracle) external onlyOwner {
+        marginOracle = _oracle;
     }
 
     function setFeeStatus(PoolId poolId, FeeStatus calldata feeStatus) external onlyOwner {

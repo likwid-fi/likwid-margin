@@ -32,6 +32,10 @@ library UQ112x112 {
         reserve1 = uint112(reserves);
     }
 
+    function getPrice0X112(uint224 reserves) internal pure returns (uint224 price0X112) {
+        price0X112 = div(encode(getReverse1(reserves)), getReverse0(reserves));
+    }
+
     function getPrice1X112(uint224 reserves) internal pure returns (uint224 price1X112) {
         price1X112 = div(encode(getReverse0(reserves)), getReverse1(reserves));
     }
@@ -41,11 +45,14 @@ library UQ112x112 {
         pure
         returns (uint112 reverse0Result)
     {
-        uint112 reverse0Min = decode(reverse1 * price1X112 * (ONE_MILLION - moved) / ONE_MILLION);
-        uint112 reverse0Max = decode(reverse1 * price1X112 * (ONE_MILLION + moved) / ONE_MILLION);
+        uint112 reverse0Min;
+        if (moved < ONE_MILLION) {
+            reverse0Min = decode(uint224(reverse1) * price1X112 * (ONE_MILLION - moved) / ONE_MILLION);
+        }
+        uint112 reverse0Max = decode(uint224(reverse1) * price1X112 * (ONE_MILLION + moved) / ONE_MILLION);
         if (reverse0 < reverse0Min) {
             reverse0Result = reverse0Min;
-        } else if (reverse1 > reverse0Max) {
+        } else if (reverse0 > reverse0Max) {
             reverse0Result = reverse0Max;
         } else {
             reverse0Result = reverse0;

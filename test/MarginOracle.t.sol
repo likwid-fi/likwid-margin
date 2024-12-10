@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.24;
+
+// Local
+import {MarginHookManager} from "../src/MarginHookManager.sol";
+import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
+import {MarginPositionManager} from "../src/MarginPositionManager.sol";
+import {MarginRouter} from "../src/MarginRouter.sol";
+import {HookParams} from "../src/types/HookParams.sol";
+import {HookStatus} from "../src/types/HookStatus.sol";
+import {MarginParams} from "../src/types/MarginParams.sol";
+import {MarginPosition} from "../src/types/MarginPosition.sol";
+import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
+// Solmate
+import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
+// Forge
+import {Test} from "forge-std/Test.sol";
+import {console} from "forge-std/console.sol";
+// V4
+import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
+import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
+import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+
+import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol";
+
+import {HookMiner} from "./utils/HookMiner.sol";
+import {EIP20NonStandardThrowHarness} from "./mocks/EIP20NonStandardThrowHarness.sol";
+
+contract MarginOracleTest is Test {
+    using CurrencyLibrary for Currency;
+    using BalanceDeltaLibrary for BalanceDelta;
+
+    uint160 public constant SQRT_RATIO_1_1 = 79228162514264337593543950336;
+    uint256 public constant MINIMUM_LIQUIDITY = 10 ** 3;
+    uint256 public constant ONE_MILLION = 10 ** 6;
+    uint256 public constant ONE_BILLION = 10 ** 9;
+    uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
+
+    MarginHookManager hookManager;
+
+    PoolKey key;
+
+    EIP20NonStandardThrowHarness tokenA;
+    MockERC20 tokenB;
+    address user;
+
+    Currency currency0;
+    Currency currency1;
+    PoolManager manager;
+    MirrorTokenManager mirrorTokenManager;
+    MarginPositionManager marginPositionManager;
+    MarginRouter swapRouter;
+
+    function parameters() external view returns (Currency, Currency, IPoolManager) {
+        return (currency0, currency1, manager);
+    }
+}

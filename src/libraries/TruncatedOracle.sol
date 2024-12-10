@@ -76,7 +76,6 @@ library TruncatedOracle {
             } else {
                 cardinalityUpdated = cardinality;
             }
-
             indexUpdated = (index + 1) % cardinalityUpdated;
             self[indexUpdated] = transform(last, blockTimestamp, reserve0, reserve1);
         }
