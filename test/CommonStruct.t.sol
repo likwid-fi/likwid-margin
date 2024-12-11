@@ -9,7 +9,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 
-contract StructTest is Test {
+contract CommonStructTest is Test {
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolKey;
 

@@ -37,7 +37,13 @@ abstract contract EIP20NonStandardInterface {
 
     function transferFrom(address _from, address _to, uint256 _value) public virtual;
 
-    function approve(address _spender, uint256 _value) public virtual returns (bool success);
+    ///
+    /// !!!!!!!!!!!!!!
+    /// !!! NOTICE !!! `approve` does not return a value, in violation of the ERC-20 specification
+    /// !!!!!!!!!!!!!!
+    ///
+
+    function approve(address _spender, uint256 _value) public virtual;
 
     function allowance(address _owner, address _spender) public view virtual returns (uint256 remaining);
 

@@ -30,32 +30,4 @@ import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol"
 import {HookMiner} from "./utils/HookMiner.sol";
 import {EIP20NonStandardThrowHarness} from "./mocks/EIP20NonStandardThrowHarness.sol";
 
-contract MarginOracleTest is Test {
-    using CurrencyLibrary for Currency;
-    using BalanceDeltaLibrary for BalanceDelta;
-
-    uint160 public constant SQRT_RATIO_1_1 = 79228162514264337593543950336;
-    uint256 public constant MINIMUM_LIQUIDITY = 10 ** 3;
-    uint256 public constant ONE_MILLION = 10 ** 6;
-    uint256 public constant ONE_BILLION = 10 ** 9;
-    uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
-
-    MarginHookManager hookManager;
-
-    PoolKey key;
-
-    EIP20NonStandardThrowHarness tokenA;
-    MockERC20 tokenB;
-    address user;
-
-    Currency currency0;
-    Currency currency1;
-    PoolManager manager;
-    MirrorTokenManager mirrorTokenManager;
-    MarginPositionManager marginPositionManager;
-    MarginRouter swapRouter;
-
-    function parameters() external view returns (Currency, Currency, IPoolManager) {
-        return (currency0, currency1, manager);
-    }
-}
+contract MarginOracleTest is Test {}
