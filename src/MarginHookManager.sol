@@ -11,10 +11,8 @@ import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IHooks} from "v4-core/interfaces/IPoolManager.sol";
 import {SafeCast} from "v4-core/libraries/SafeCast.sol";
-import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {ERC6909Claims} from "v4-core/ERC6909Claims.sol";
 // Solmate
-import {ERC20} from "solmate/src/Tokens/ERC20.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";

@@ -9,6 +9,12 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 library CurrencyUtils {
     using CurrencyLibrary for Currency;
 
+    function safeApprove(Currency currency, address spender, uint256 value) internal returns (bool) {
+        (bool success, bytes memory data) =
+            Currency.unwrap(currency).call(abi.encodeWithSelector(IERC20Minimal.approve.selector, spender, value));
+        return success && (data.length == 0 || abi.decode(data, (bool)));
+    }
+
     function safeTransfer(Currency currency, address to, uint256 amount) internal returns (bool) {
         (bool success, bytes memory data) =
             Currency.unwrap(currency).call(abi.encodeWithSelector(IERC20Minimal.transfer.selector, to, amount));
@@ -60,7 +66,7 @@ library CurrencyUtils {
 
     function approve(Currency currency, address spender, uint256 amount) internal returns (bool success) {
         if (!currency.isAddressZero()) {
-            success = IERC20Minimal(Currency.unwrap(currency)).approve(spender, amount);
+            success = safeApprove(currency, spender, amount);
         } else {
             success = true;
         }

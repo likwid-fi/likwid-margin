@@ -15,6 +15,7 @@ contract DeployHookScript is Script {
     address manager = payable(vm.envAddress("POOL_MANAGER_ADDR"));
     address owner = 0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1;
     address mirrorTokenManager = 0xc708fD75Ed6B3525E1FC1817959D414eEa84C628;
+    address marginOracle = 0xaf1b2E78F24902210Ea0D66A4DE8489e342Bc735;
 
     function setUp() public {}
 
@@ -48,7 +49,9 @@ contract DeployHookScript is Script {
         // verify proper create2 usage
         require(deployedHook == hookAddress, "DeployScript: hook address mismatch");
         marginPositionManager.setHook(hookAddress);
+        marginPositionManager.setMarginOracle(marginOracle);
         IMarginHookManager(hookAddress).addPositionManager(address(marginPositionManager));
+        IMarginHookManager(hookAddress).setMarginOracle(marginOracle);
         console2.log("hookAddress", hookAddress);
         MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), IMarginHookManager(hookAddress));
         console2.log("swapRouter", address(swapRouter));

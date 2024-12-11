@@ -9,7 +9,6 @@ import {PoolId} from "v4-core/types/PoolId.sol";
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {SafeCallback} from "v4-periphery/src/base/SafeCallback.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
-import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 
 import {HookStatus} from "./types/HookStatus.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";

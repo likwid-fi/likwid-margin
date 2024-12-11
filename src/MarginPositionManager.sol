@@ -162,23 +162,18 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         return (positionId, params.borrowAmount);
     }
 
-    function release(
-        uint256 positionId,
-        Currency marginToken,
-        uint256 repayAmount,
-        uint256 borrowAmount,
-        uint256 useMarginAmount
-    ) internal {
+    function release(uint256 positionId, Currency marginToken, uint256 repayAmount, uint256 borrowAmount) internal {
         MarginPosition storage _position = _positions[positionId];
         (bool liquidated,) = checkLiquidate(_position);
         require(!liquidated, "liquidated");
         // update position
         uint256 releaseMargin = _position.marginAmount * repayAmount / borrowAmount;
         uint256 releaseTotal = _position.marginTotal * repayAmount / borrowAmount;
-        _position.marginAmount -= (releaseMargin + useMarginAmount);
+        _position.marginAmount -= releaseMargin;
         _position.marginTotal -= releaseTotal;
         _position.borrowAmount = borrowAmount - repayAmount;
-        marginToken.transfer(address(this), msg.sender, releaseMargin + releaseTotal);
+        bool success = marginToken.transfer(address(this), msg.sender, releaseMargin + releaseTotal);
+        require(success, "RELEASE_TRANSFER_ERR");
         if (_position.borrowAmount == 0) {
             _burnPosition(positionId);
         }
@@ -206,7 +201,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         });
         uint256 sendValue = Math.min(repayAmount, msg.value);
         hook.release{value: sendValue}(params);
-        release(positionId, marginToken, repayAmount, _position.borrowAmount, 0);
+        release(positionId, marginToken, repayAmount, _position.borrowAmount);
         if (msg.value > sendValue) {
             transferNative(msg.sender, msg.value - sendValue);
         }
@@ -219,6 +214,17 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         uint256 releaseAmount = hook.getAmountOut(_position.poolId, _position.marginForOne, repayAmount);
         uint256 sendValue = (_position.marginAmount + _position.marginTotal) * repayMillionth / ONE_MILLION;
         pnlMinAmount = int256(sendValue) - int256(releaseAmount);
+    }
+
+    function close(uint256 positionId, uint256 releaseMargin, uint256 releaseTotal, uint256 borrowAmount) internal {
+        // update position
+        MarginPosition storage sPosition = _positions[positionId];
+        sPosition.marginAmount -= releaseMargin;
+        sPosition.marginTotal -= releaseTotal;
+        sPosition.borrowAmount = borrowAmount;
+        if (sPosition.borrowAmount == 0) {
+            _burnPosition(positionId);
+        }
     }
 
     function close(uint256 positionId, uint256 repayMillionth, int256 pnlMinAmount, uint256 deadline)
@@ -234,7 +240,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         ReleaseParams memory params = ReleaseParams({
             poolId: _position.poolId,
             marginForOne: _position.marginForOne,
-            payer: msg.sender,
+            payer: address(this),
             borrowAmount: _position.borrowAmount,
             repayAmount: 0,
             releaseAmount: 0,
@@ -242,30 +248,36 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         });
         params.repayAmount = _position.borrowAmount * repayMillionth / ONE_MILLION;
         params.releaseAmount = hook.getAmountOut(_position.poolId, _position.marginForOne, params.repayAmount);
-        uint256 sendValue = (_position.marginAmount + _position.marginTotal) * repayMillionth / ONE_MILLION;
+        uint256 releaseMargin = _position.marginAmount * repayMillionth / ONE_MILLION;
+        uint256 releaseTotal = _position.marginTotal * repayMillionth / ONE_MILLION;
         uint256 userMarginAmount;
-        if (sendValue >= params.releaseAmount) {
-            require(pnlMinAmount < int256(sendValue) - int256(params.releaseAmount), "InsufficientOutputReceived");
-            marginToken.transfer(address(this), msg.sender, sendValue - params.releaseAmount);
+        if (releaseMargin + releaseTotal >= params.releaseAmount) {
+            require(
+                pnlMinAmount < int256(releaseMargin + releaseTotal) - int256(params.releaseAmount),
+                "InsufficientOutputReceived"
+            );
+            marginToken.transfer(address(this), msg.sender, releaseMargin + releaseTotal - params.releaseAmount);
         } else {
             uint256 marginAmount = _position.marginAmount * (ONE_MILLION - repayMillionth) / ONE_MILLION;
-            if (sendValue + marginAmount >= params.releaseAmount) {
-                require(pnlMinAmount > int256(sendValue) - int256(params.releaseAmount), "InsufficientOutputReceived");
-                userMarginAmount = params.releaseAmount - sendValue;
+            if (releaseMargin + releaseTotal + marginAmount >= params.releaseAmount) {
+                require(
+                    pnlMinAmount > int256(releaseMargin + releaseTotal) - int256(params.releaseAmount),
+                    "InsufficientOutputReceived"
+                );
+                userMarginAmount = params.releaseAmount - (releaseMargin + releaseTotal);
             } else {
                 // liquidated
                 revert Liquidated();
             }
         }
-        uint256 releaseValue;
         if (marginToken == CurrencyLibrary.ADDRESS_ZERO) {
-            releaseValue = params.releaseAmount;
+            hook.release{value: params.releaseAmount}(params);
         } else {
             bool success = marginToken.approve(address(hook), params.releaseAmount);
             require(success, "APPROVE_ERR");
+            hook.release(params);
         }
-        hook.release{value: releaseValue}(params);
-        release(positionId, marginToken, params.repayAmount, _position.borrowAmount, userMarginAmount);
+        close(positionId, releaseMargin + userMarginAmount, releaseTotal, _position.borrowAmount - params.repayAmount);
         emit Close(_position.poolId, msg.sender, positionId, params.releaseAmount, params.repayAmount);
     }
 

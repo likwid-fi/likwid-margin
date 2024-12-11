@@ -23,6 +23,8 @@ interface IMarginHookManager {
 
     function addPositionManager(address _marginPositionManager) external;
 
+    function setMarginOracle(address _oracle) external;
+
     function margin(MarginParams memory params) external returns (MarginParams memory);
 
     function release(ReleaseParams memory params) external payable returns (uint256);

@@ -5,7 +5,7 @@ import "forge-std/Script.sol";
 
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 
-contract DeployHookScript is Script {
+contract DeployMirrorScript is Script {
     MirrorTokenManager mirrorTokenManager;
     address owner = 0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1;
 

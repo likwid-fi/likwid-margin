@@ -79,6 +79,9 @@ forge verify-contract \
     0x6E0EE135EcD02516cB26a8D4f7F7B8dF0b1E748D \
     src/MarginRouter.sol:MarginRouter
 
+
+forge script script/DeployOracle.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
+
 forge script script/DeployMockToken.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
 forge verify-contract \
     --chain-id 11155111 \

@@ -267,12 +267,18 @@ contract MarginUSDTSTest is Test {
         assertGt(positionId, 0);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
         console.log("before repay positionId:%s,position.borrowAmount:%s", positionId, position.borrowAmount);
-        console.log("before repay tokenA.balance:%s tokenB.balance:%s", tokenA.balanceOf(user), tokenB.balanceOf(user));
-        uint256 releaseAmount = 0.01 ether;
-        tokenA.approve(address(hookManager), releaseAmount);
-        marginPositionManager.close(positionId, 3000, 0, UINT256_MAX);
+        console.log(
+            "before repay tokenA.balance:%s tokenA.balance:%s",
+            tokenA.balanceOf(address(marginPositionManager)),
+            tokenA.balanceOf(user)
+        );
+        marginPositionManager.close(positionId, 1000000, 0, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
-        console.log("after repay tokenA.balance:%s tokenB.balance:%s", tokenA.balanceOf(user), tokenB.balanceOf(user));
+        console.log(
+            "after repay tokenA.balance:%s tokenA.balance:%s",
+            tokenA.balanceOf(address(marginPositionManager)),
+            tokenA.balanceOf(user)
+        );
         console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
         vm.stopPrank();
     }
