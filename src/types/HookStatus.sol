@@ -5,8 +5,8 @@ import {Currency} from "v4-core/types/Currency.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 struct HookStatus {
-    uint112 reserve0;
-    uint112 reserve1;
+    uint112 realReserve0;
+    uint112 realReserve1;
     uint112 mirrorReserve0;
     uint112 mirrorReserve1;
     uint32 blockTimestampLast;
@@ -22,6 +22,8 @@ struct FeeStatus {
     uint24 marginFee; // 15000 = 1.5%
     uint24 protocolFee; // 0.3%
     uint24 protocolMarginFee; // 0.5%
+    uint32 lastMarginTimestamp;
+    uint224 lastPrice1X112;
 }
 
 struct BalanceStatus {

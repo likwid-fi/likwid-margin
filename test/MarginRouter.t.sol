@@ -88,8 +88,7 @@ contract MarginRouterTest is DeployHelper {
         uint256 amountIn = hookManager.getAmountIn(nativeKey.toId(), zeroForOne, amountOut);
         uint256 balance0 = manager.balanceOf(address(hookManager), 0);
         uint256 balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
-        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
-        console.log("before swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
+        console.log("before swap hook.balance0:%s,hook.balance1:%s", balance0, balance1);
         MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
             poolId: nativeKey.toId(),
             zeroForOne: zeroForOne,
@@ -100,21 +99,18 @@ contract MarginRouterTest is DeployHelper {
             deadline: type(uint256).max
         });
         swapRouter.exactOutput{value: amountIn}(swapParams);
-        console.log("swapRouter.balance:%s", manager.balanceOf(address(swapRouter), 0));
-        console.log("after swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
         balance0 = manager.balanceOf(address(hookManager), 0);
         balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
-        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        console.log("after swap hook.balance0:%s,hook.balance1:%s", balance0, balance1);
 
         // token => native
         zeroForOne = false;
+        amountIn = hookManager.getAmountIn(nativeKey.toId(), zeroForOne, amountOut);
         tokenB.approve(address(swapRouter), amountIn);
         // swap
-        amountIn = hookManager.getAmountIn(nativeKey.toId(), zeroForOne, amountOut);
         balance0 = manager.balanceOf(address(hookManager), 0);
         balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
-        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
-        console.log("before swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
+        console.log("before swap hook.balance0:%s,hook.balance1:%s", balance0, balance1);
         swapParams = MarginRouter.SwapParams({
             poolId: nativeKey.toId(),
             zeroForOne: zeroForOne,
@@ -125,11 +121,9 @@ contract MarginRouterTest is DeployHelper {
             deadline: type(uint256).max
         });
         swapRouter.exactOutput(swapParams);
-        console.log("swapRouter.balance:%s", manager.balanceOf(address(swapRouter), 0));
-        console.log("after swap user.balance:%s,tokenB:%s", user.balance, tokenB.balanceOf(user));
         balance0 = manager.balanceOf(address(hookManager), 0);
         balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
-        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        console.log("after swap hook.balance0:%s,hook.balance1:%s", balance0, balance1);
     }
 
     function test_hook_swap_tokens() public {

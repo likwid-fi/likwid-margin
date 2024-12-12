@@ -102,7 +102,7 @@ contract MarginPositionManagerTest is DeployHelper {
         (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(key.toId());
         console.log("_reserves0:%s,_reserves1:%s", _reserves0, _reserves1);
         HookStatus memory _status = hookManager.getStatus(key.toId());
-        console.log("reserve0:%s,reserve1:%s", uint256(_status.reserve0), uint256(_status.reserve1));
+        console.log("reserve0:%s,reserve1:%s", uint256(_status.realReserve0), uint256(_status.realReserve1));
         console.log(
             "mirrorReserve0:%s,mirrorReserve1:%s", uint256(_status.mirrorReserve0), uint256(_status.mirrorReserve1)
         );
@@ -151,7 +151,6 @@ contract MarginPositionManagerTest is DeployHelper {
 
     function test_hook_margin() public {
         address user = address(this);
-        tokenB.approve(address(hookManager), 1e18);
         uint256 rate = hookManager.getBorrowRate(nativeKey.toId(), false);
         assertEq(rate, 50000);
         uint256 positionId;
@@ -273,25 +272,40 @@ contract MarginPositionManagerTest is DeployHelper {
         );
     }
 
-    function test_hook_close_native() public {
-        test_hook_margin();
+    function test_hook_margin_native() public {
         address user = address(this);
-        uint256 positionId = marginPositionManager.getPositionId(nativeKey.toId(), false, user);
+        PoolId poolId = nativeKey.toId();
+        uint256 rate = hookManager.getBorrowRate(poolId, false);
+        assertEq(rate, 50000);
+        uint256 positionId;
+        uint256 borrowAmount;
+        uint256 payValue = 0.01 ether;
+        MarginParams memory params = MarginParams({
+            poolId: poolId,
+            marginForOne: false,
+            leverage: 3,
+            marginAmount: payValue,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMinAmount: 0,
+            recipient: user,
+            deadline: block.timestamp + 1000
+        });
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        assertEq(address(marginPositionManager).balance, position.marginAmount + position.marginTotal);
+    }
+
+    function test_hook_close_native() public {
+        test_hook_margin_native();
+        address user = address(this);
+        PoolId poolId = nativeKey.toId();
+        uint256 positionId = marginPositionManager.getPositionId(poolId, false, user);
         assertGt(positionId, 0);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
-        console.log("before close positionId:%s,position.borrowAmount:%s", positionId, position.borrowAmount);
-        console.log("before close balance:%s tokenB.balance:%s", user.balance, tokenB.balanceOf(user));
-        uint256 releaseAmount = 0.01 ether;
-        tokenB.approve(address(hookManager), releaseAmount);
         marginPositionManager.close(positionId, 3000, 0, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
-        console.log("after close balance:%s tokenB.balance:%s", user.balance, tokenB.balanceOf(user));
-        console.log("after close positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
-
-        console.log("position.marginAmount:%s,position.marginTotal:%s", position.marginAmount, position.marginTotal);
-        console.log(
-            "newPosition.marginAmount:%s,newPosition.marginTotal:%s", newPosition.marginAmount, newPosition.marginTotal
-        );
+        assertEq(position.borrowAmount - newPosition.borrowAmount, position.borrowAmount * 3000 / ONE_MILLION);
     }
 
     function test_hook_liquidate_burn() public {
@@ -568,7 +582,7 @@ contract MarginPositionManagerTest is DeployHelper {
         (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(key.toId());
         console.log("_reserves0:%s,_reserves1:%s", _reserves0, _reserves1);
         HookStatus memory _status = hookManager.getStatus(key.toId());
-        console.log("reserve0:%s,reserve1:%s", uint256(_status.reserve0), uint256(_status.reserve1));
+        console.log("reserve0:%s,reserve1:%s", uint256(_status.realReserve0), uint256(_status.realReserve1));
         console.log(
             "mirrorReserve0:%s,mirrorReserve1:%s", uint256(_status.mirrorReserve0), uint256(_status.mirrorReserve1)
         );

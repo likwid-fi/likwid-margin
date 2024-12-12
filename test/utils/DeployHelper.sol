@@ -142,24 +142,24 @@ contract DeployHelper is Test {
         hookManager.addLiquidity(params);
         params = AddLiquidityParams({
             poolId: nativeKey.toId(),
-            amount0: 1e15,
-            amount1: 1e18,
+            amount0: 1 ether,
+            amount1: 100 ether,
             tickLower: 50000,
             tickUpper: 50000,
             to: address(this),
             deadline: type(uint256).max
         });
-        hookManager.addLiquidity{value: 1e18}(params);
+        hookManager.addLiquidity{value: 1 ether}(params);
         params = AddLiquidityParams({
             poolId: usdtKey.toId(),
-            amount0: 1e15,
-            amount1: 1e18,
+            amount0: 1 ether,
+            amount1: 100 ether,
             tickLower: 50000,
             tickUpper: 50000,
             to: address(this),
             deadline: type(uint256).max
         });
-        hookManager.addLiquidity{value: 1e18}(params);
+        hookManager.addLiquidity{value: 1 ether}(params);
     }
 
     receive() external payable {}

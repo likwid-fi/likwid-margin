@@ -2,9 +2,11 @@
 pragma solidity ^0.8.19;
 
 import {UQ112x112} from "./UQ112x112.sol";
+import {PriceMath} from "./PriceMath.sol";
 
 library TruncatedOracle {
     using UQ112x112 for uint224;
+    using PriceMath for uint224;
 
     /// @notice Thrown when trying to interact with an Oracle of a non-initialized pool
     error OracleCardinalityCannotBeZero();
@@ -33,10 +35,10 @@ library TruncatedOracle {
             uint32 delta = blockTimestamp > last.blockTimestamp
                 ? blockTimestamp - last.blockTimestamp
                 : blockTimestamp + (type(uint32).max - last.blockTimestamp);
-            uint224 price1X112 = UQ112x112.getReverses(reserve0, reserve1).getPrice1X112();
+            uint224 price1X112 = PriceMath.getReverses(reserve0, reserve1).getPrice1X112();
             uint224 prevPrice1X112 = last.reserves.getPrice1X112();
-            reserve0 = UQ112x112.truncated(reserve0, reserve1, prevPrice1X112, MAX_PRICE_SECOND_MOVE * delta);
-            uint224 reserves = UQ112x112.getReverses(reserve0, reserve1);
+            reserve0 = prevPrice1X112.truncated(reserve0, reserve1, MAX_PRICE_SECOND_MOVE * delta);
+            uint224 reserves = PriceMath.getReverses(reserve0, reserve1);
 
             return Observation({
                 blockTimestamp: blockTimestamp,
@@ -50,7 +52,7 @@ library TruncatedOracle {
         internal
         returns (uint16 cardinality, uint16 cardinalityNext)
     {
-        uint224 reserves = UQ112x112.getReverses(reserve0, reserve1);
+        uint224 reserves = PriceMath.getReverses(reserve0, reserve1);
         self[0] = Observation({blockTimestamp: time, reserves: reserves, price1CumulativeLast: 0});
         return (1, 1);
     }
@@ -267,7 +269,7 @@ library TruncatedOracle {
                     uint256(reserve1) * (atOrAfter.price1CumulativeLast - beforeOrAt.price1CumulativeLast)
                         / observationTimeDelta
                 ).decode();
-                uint224 reserve = UQ112x112.getReverses(reserve0, reserve1);
+                uint224 reserve = PriceMath.getReverses(reserve0, reserve1);
                 return (reserve, beforeOrAt.price1CumulativeLast + reserve.getPrice1X112() * targetDelta);
             }
         }

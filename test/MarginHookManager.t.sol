@@ -37,90 +37,81 @@ contract MarginHookManagerTest is DeployHelper {
     }
 
     function test_hook_liquidity_native() public {
+        uint256 amount0 = 1 ether;
+        uint256 amount1 = 1 ether;
+        PoolId poolId = nativeKey.toId();
         AddLiquidityParams memory params = AddLiquidityParams({
-            poolId: key.toId(),
-            amount0: 1e18,
-            amount1: 1e18,
+            poolId: poolId,
+            amount0: amount0,
+            amount1: amount1,
             tickLower: 50000,
             tickUpper: 50000,
             to: address(this),
             deadline: type(uint256).max
         });
-        hookManager.addLiquidity(params);
-        uint256 uPoolId = uint256(PoolId.unwrap(key.toId()));
+        hookManager.addLiquidity{value: amount0}(params);
+        uint256 uPoolId = uint256(PoolId.unwrap(poolId));
         uint256 liquidity = hookManager.balanceOf(address(this), uPoolId);
-        (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(key.toId());
+        assertGt(liquidity, 0);
+        (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(poolId);
+        assertEq(_reserves0, amount0);
         assertEq(_reserves0, _reserves1);
-        console.log("_reserves0:%s,_reserves1:%s", _reserves0, _reserves1);
         RemoveLiquidityParams memory removeParams =
-            RemoveLiquidityParams({poolId: key.toId(), liquidity: liquidity / 2, deadline: type(uint256).max});
+            RemoveLiquidityParams({poolId: poolId, liquidity: liquidity / 2, deadline: type(uint256).max});
         hookManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = hookManager.balanceOf(address(this), uPoolId);
-        assertEq(liquidityHalf, liquidity - liquidity / 2);
-
-        params = AddLiquidityParams({
-            poolId: nativeKey.toId(),
-            amount0: 1e18,
-            amount1: 1e18,
-            tickLower: 50000,
-            tickUpper: 50000,
-            to: address(this),
-            deadline: type(uint256).max
-        });
-        hookManager.addLiquidity{value: 1 ether}(params);
-        uPoolId = uint256(PoolId.unwrap(nativeKey.toId()));
-        liquidity = hookManager.balanceOf(address(this), uPoolId);
-        (_reserves0, _reserves1) = hookManager.getReserves(nativeKey.toId());
-        assertEq(_reserves0, _reserves1);
-        console.log("_reserves0:%s,_reserves1:%s", _reserves0, _reserves1);
-        removeParams =
-            RemoveLiquidityParams({poolId: nativeKey.toId(), liquidity: liquidity / 2, deadline: type(uint256).max});
-        hookManager.removeLiquidity(removeParams);
-        liquidityHalf = hookManager.balanceOf(address(this), uPoolId);
         assertEq(liquidityHalf, liquidity - liquidity / 2);
     }
 
     function test_hook_liquidity_tokens() public {
+        uint256 amount0 = 1 ether;
+        uint256 amount1 = 1 ether;
+        PoolId poolId = key.toId();
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: key.toId(),
-            amount0: 1e18,
-            amount1: 1e18,
+            amount0: amount0,
+            amount1: amount1,
             tickLower: 50000,
             tickUpper: 50000,
             to: address(this),
             deadline: type(uint256).max
         });
         hookManager.addLiquidity(params);
-        uint256 uPoolId = uint256(PoolId.unwrap(key.toId()));
+        uint256 uPoolId = uint256(PoolId.unwrap(poolId));
         uint256 liquidity = hookManager.balanceOf(address(this), uPoolId);
-        (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(key.toId());
+        assertGt(liquidity, 0);
+        (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(poolId);
+        assertEq(_reserves0, amount0);
         assertEq(_reserves0, _reserves1);
-        console.log("_reserves0:%s,_reserves1:%s", _reserves0, _reserves1);
         RemoveLiquidityParams memory removeParams =
-            RemoveLiquidityParams({poolId: key.toId(), liquidity: liquidity / 2, deadline: type(uint256).max});
+            RemoveLiquidityParams({poolId: poolId, liquidity: liquidity / 2, deadline: type(uint256).max});
         hookManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = hookManager.balanceOf(address(this), uPoolId);
         assertEq(liquidityHalf, liquidity - liquidity / 2);
     }
 
     function test_hook_liquidity_usdt_tokens() public {
+        uint256 amount0 = 1 ether;
+        uint256 amount1 = 1 ether;
+        PoolId poolId = usdtKey.toId();
         AddLiquidityParams memory params = AddLiquidityParams({
-            poolId: usdtKey.toId(),
-            amount0: 1e18,
-            amount1: 1e18,
+            poolId: poolId,
+            amount0: amount0,
+            amount1: amount1,
             tickLower: 50000,
             tickUpper: 50000,
             to: address(this),
             deadline: type(uint256).max
         });
-        hookManager.addLiquidity(params);
-        uint256 uPoolId = uint256(PoolId.unwrap(key.toId()));
+        hookManager.addLiquidity{value: amount0}(params);
+        uint256 uPoolId = uint256(PoolId.unwrap(poolId));
         uint256 liquidity = hookManager.balanceOf(address(this), uPoolId);
-        (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(key.toId());
+        assertGt(liquidity, 0);
+        (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(poolId);
+        assertEq(_reserves0, amount0);
         assertEq(_reserves0, _reserves1);
-        console.log("_reserves0:%s,_reserves1:%s", _reserves0, _reserves1);
         RemoveLiquidityParams memory removeParams =
-            RemoveLiquidityParams({poolId: usdtKey.toId(), liquidity: liquidity / 2, deadline: type(uint256).max});
+            RemoveLiquidityParams({poolId: poolId, liquidity: liquidity / 2, deadline: type(uint256).max});
         hookManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = hookManager.balanceOf(address(this), uPoolId);
         assertEq(liquidityHalf, liquidity - liquidity / 2);
