@@ -7,15 +7,14 @@ import {PoolId} from "v4-core/types/PoolId.sol";
 
 import {MarginParams, ReleaseParams} from "../types/MarginParams.sol";
 import {HookStatus} from "../types/HookStatus.sol";
+import {IMarginFees} from "../interfaces/IMarginFees.sol";
 
 interface IMarginHookManager {
-    function ltvParameters(PoolId poolId) external view returns (uint24, uint24);
+    function marginFees() external view returns (IMarginFees);
 
     function getStatus(PoolId poolId) external view returns (HookStatus memory);
 
     function getReserves(PoolId poolId) external view returns (uint256 _reserve0, uint256 _reserve1);
-
-    function getBorrowRateCumulativeLast(PoolId poolId, bool marginForOne) external view returns (uint256);
 
     function getAmountIn(PoolId poolId, bool zeroForOne, uint256 amountOut) external view returns (uint256 amountIn);
 

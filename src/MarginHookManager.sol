@@ -18,19 +18,21 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {Math} from "./libraries/Math.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
+import {TimeUtils} from "./libraries/TimeUtils.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
+import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
 import {MarginParams, ReleaseParams} from "./types/MarginParams.sol";
-import {RateStatus} from "./types/RateStatus.sol";
 import {HookStatus, BalanceStatus, FeeStatus} from "./types/HookStatus.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams.sol";
 
 contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned {
     using UQ112x112 for uint224;
     using SafeCast for uint256;
+    using TimeUtils for uint32;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
     using CurrencyUtils for Currency;
@@ -78,34 +80,20 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     bytes32 constant MIRROR_BALANCE_1_SLOT = 0xbdb25f21ec501c2e41736c4e3dd44c1c3781af532b6899c36b3f72d4e003b0ab;
 
     IMirrorTokenManager public immutable mirrorTokenManager;
-
-    uint24 initialLTV = 500000; // 50%
-    uint24 liquidationLTV = 900000; // 90%
-    uint24 public dynamicFeeDurationSeconds = 120;
-    uint24 public dynamicFeeUnit = 10;
-    address public feeTo;
-    uint24 protocolFee = 3000; // 0.3%
-    uint24 protocolMarginFee = 5000; // 0.5%
-
+    IMarginFees public marginFees;
     address public marginOracle;
 
     mapping(PoolId => HookStatus) public hookStatusStore;
     mapping(address => bool) public positionManagers;
-    RateStatus public rateStatus;
 
-    constructor(address initialOwner, IPoolManager _manager, IMirrorTokenManager _mirrorTokenManager)
-        Owned(initialOwner)
-        BaseHook(_manager)
-    {
-        rateStatus = RateStatus({
-            rateBase: 50000,
-            useMiddleLevel: 400000,
-            useHighLevel: 800000,
-            mLow: 10,
-            mMiddle: 100,
-            mHigh: 10000
-        });
+    constructor(
+        address initialOwner,
+        IPoolManager _manager,
+        IMirrorTokenManager _mirrorTokenManager,
+        IMarginFees _marginFees
+    ) Owned(initialOwner) BaseHook(_manager) {
         mirrorTokenManager = _mirrorTokenManager;
+        marginFees = _marginFees;
     }
 
     modifier ensure(uint256 deadline) {
@@ -148,28 +136,6 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         (_reserve0, _reserve1) = _getReserves(status);
     }
 
-    function ltvParameters(PoolId poolId) external view returns (uint24 _initialLTV, uint24 _liquidationLTV) {
-        HookStatus memory status = getStatus(poolId);
-        _initialLTV = status.feeStatus.initialLTV == 0 ? initialLTV : status.feeStatus.initialLTV;
-        _liquidationLTV = status.feeStatus.liquidationLTV == 0 ? liquidationLTV : status.feeStatus.liquidationLTV;
-    }
-
-    function checkFeeOn() public view returns (bool feeOn) {
-        feeOn = feeTo != address(0);
-    }
-
-    function getBorrowRate(PoolId poolId, bool marginForOne) external view returns (uint256) {
-        HookStatus memory status = getStatus(poolId);
-        uint256 tokenReserve = marginForOne ? status.realReserve0 : status.realReserve1;
-        uint256 mirrorReserve = marginForOne ? status.mirrorReserve0 : status.mirrorReserve1;
-        return _getBorrowRate(tokenReserve, mirrorReserve);
-    }
-
-    function getBorrowRateCumulativeLast(PoolId poolId, bool marginForOne) external view returns (uint256) {
-        HookStatus memory status = getStatus(poolId);
-        return marginForOne ? status.rate0CumulativeLast : status.rate1CumulativeLast;
-    }
-
     function getAmountIn(PoolId poolId, bool zeroForOne, uint256 amountOut) external view returns (uint256 amountIn) {
         HookStatus memory status = getStatus(poolId);
         (amountIn,) = _getAmountIn(status, zeroForOne, amountOut);
@@ -178,20 +144,6 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     function getAmountOut(PoolId poolId, bool zeroForOne, uint256 amountIn) external view returns (uint256 amountOut) {
         HookStatus memory status = getStatus(poolId);
         (amountOut,) = _getAmountOut(status, zeroForOne, amountIn);
-    }
-
-    function getPoolFees(PoolId poolId)
-        external
-        view
-        returns (uint24 _fee, uint24 _marginFee, uint24 _protocolFee, uint24 _protocolMarginFee)
-    {
-        if (checkFeeOn()) {
-            HookStatus memory status = getStatus(poolId);
-            (_fee, _protocolFee) = _dynamicFee(status);
-            _marginFee = status.feeStatus.marginFee;
-            _protocolMarginFee =
-                status.feeStatus.protocolMarginFee > 0 ? status.feeStatus.protocolMarginFee : protocolMarginFee;
-        }
     }
 
     function initialize(PoolKey calldata key) external {
@@ -239,7 +191,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
             specified.take(poolManager, address(this), specifiedAmount - protocolFeeAmount, true);
             unspecified.settle(poolManager, address(this), unspecifiedAmount, true);
             if (protocolFeeAmount > 0) {
-                specified.take(poolManager, feeTo, protocolFeeAmount, false);
+                specified.take(poolManager, marginFees.feeTo(), protocolFeeAmount, false);
             }
             returnDelta = toBeforeSwapDelta(specifiedAmount.toInt128(), -unspecifiedAmount.toInt128());
         } else {
@@ -250,7 +202,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
             unspecified.take(poolManager, address(this), unspecifiedAmount - protocolFeeAmount, true);
             specified.settle(poolManager, address(this), specifiedAmount, true);
             if (protocolFeeAmount > 0) {
-                unspecified.take(poolManager, feeTo, protocolFeeAmount, false);
+                unspecified.take(poolManager, marginFees.feeTo(), protocolFeeAmount, false);
             }
             returnDelta = toBeforeSwapDelta(-specifiedAmount.toInt128(), unspecifiedAmount.toInt128());
         }
@@ -313,17 +265,18 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
     function _update(PoolKey memory key, bool fromMargin) internal {
         PoolId pooId = key.toId();
         HookStatus storage status = hookStatusStore[pooId];
-        uint32 blockTS = uint32(block.timestamp % 2 ** 32);
-        uint256 timeElapsed;
-        if (status.blockTimestampLast <= blockTS) {
-            timeElapsed = (blockTS - status.blockTimestampLast) * 10 ** 3; // MILLION=>BILLON
-        } else {
-            timeElapsed = (2 ** 32 - status.blockTimestampLast + blockTS) * 10 ** 3;
+        (uint32 blockTS, uint256 timeElapsed) = status.blockTimestampLast.getTimeElapsedMillisecond();
+        // save margin price before changed
+        if (fromMargin && status.feeStatus.lastMarginTimestamp != blockTS) {
+            status.feeStatus.lastMarginTimestamp = blockTS;
+            status.feeStatus.lastPrice1X112 = UQ112x112.encode(status.realReserve0 + status.mirrorReserve0).div(
+                status.realReserve1 + status.mirrorReserve1
+            );
         }
-        uint256 rate0Last =
-            ONE_BILLION + _getBorrowRate(status.realReserve0, status.mirrorReserve0) * timeElapsed / YEAR_SECONDS;
-        uint256 rate1Last =
-            ONE_BILLION + _getBorrowRate(status.realReserve1, status.mirrorReserve1) * timeElapsed / YEAR_SECONDS;
+        uint256 rate0Last = ONE_BILLION
+            + marginFees.getBorrowRate(status.realReserve0, status.mirrorReserve0) * timeElapsed / YEAR_SECONDS;
+        uint256 rate1Last = ONE_BILLION
+            + marginFees.getBorrowRate(status.realReserve1, status.mirrorReserve1) * timeElapsed / YEAR_SECONDS;
         status.rate0CumulativeLast = status.rate0CumulativeLast * rate0Last / ONE_BILLION;
         status.rate1CumulativeLast = status.rate1CumulativeLast * rate1Last / ONE_BILLION;
         status.blockTimestampLast = blockTS;
@@ -342,39 +295,8 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
                 status.key, status.realReserve0 + status.mirrorReserve0, status.realReserve1 + status.mirrorReserve1
             );
         }
-        if (fromMargin && status.feeStatus.lastMarginTimestamp != blockTS) {
-            status.feeStatus.lastMarginTimestamp = blockTS;
-            status.feeStatus.lastPrice1X112 = UQ112x112.encode(status.realReserve0 + status.mirrorReserve0).div(
-                status.realReserve1 + status.mirrorReserve1
-            );
-        }
-        emit Sync(pooId, status.realReserve0, status.realReserve1, status.mirrorReserve0, status.mirrorReserve1);
-    }
 
-    function _dynamicFee(HookStatus memory status) internal view returns (uint24 _fee, uint24 _protocolFee) {
-        uint32 blockTS = uint32(block.timestamp % 2 ** 32);
-        uint256 timeElapsed;
-        if (status.feeStatus.lastMarginTimestamp <= blockTS) {
-            timeElapsed = blockTS - status.feeStatus.lastMarginTimestamp;
-        } else {
-            timeElapsed = (2 ** 32 - status.feeStatus.lastMarginTimestamp) + blockTS;
-        }
-        _protocolFee = status.feeStatus.protocolFee == 0 ? protocolFee : status.feeStatus.protocolFee;
-        _fee = status.key.fee;
-        if (timeElapsed < dynamicFeeDurationSeconds && status.feeStatus.lastPrice1X112 > 0) {
-            (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
-            uint224 price1X112 = UQ112x112.encode(uint112(_reserve0)).div(uint112(_reserve1));
-            uint256 priceDiff = price1X112 > status.feeStatus.lastPrice1X112
-                ? price1X112 - status.feeStatus.lastPrice1X112
-                : status.feeStatus.lastPrice1X112 - price1X112;
-            _fee = uint24(
-                priceDiff * 1000 * dynamicFeeUnit * (dynamicFeeDurationSeconds - timeElapsed)
-                    / (status.feeStatus.lastPrice1X112 * dynamicFeeDurationSeconds)
-            ) * status.key.fee / 1000 + status.key.fee;
-            if (_fee >= ONE_MILLION) {
-                _fee = uint24(ONE_MILLION) - 1;
-            }
-        }
+        emit Sync(pooId, status.realReserve0, status.realReserve1, status.mirrorReserve0, status.mirrorReserve1);
     }
 
     // given an input amount of an asset and pair reserve, returns the maximum output amount of the other asset
@@ -387,9 +309,9 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
         (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
         require(reserveIn > 0 && reserveOut > 0, " INSUFFICIENT_LIQUIDITY");
-        (uint24 _fee, uint24 _protocolFee) = _dynamicFee(status);
+        (uint24 _fee, uint24 _protocolFee) = marginFees.dynamicFee(status);
         uint256 ratio = ONE_MILLION - _fee;
-        if (checkFeeOn()) {
+        if (_protocolFee > 0) {
             feeAmount = amountIn * _protocolFee / ONE_MILLION;
             ratio -= _protocolFee;
         }
@@ -410,32 +332,17 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
         require(reserveIn > 0 && reserveOut > 0, "INSUFFICIENT_LIQUIDITY");
         require(amountOut < reserveOut, "OUTPUT_AMOUNT_OVERFLOW");
-        (uint24 _fee, uint24 _protocolFee) = _dynamicFee(status);
+        (uint24 _fee, uint24 _protocolFee) = marginFees.dynamicFee(status);
         uint256 ratio = ONE_MILLION - _fee;
         uint256 numerator = reserveIn * amountOut * ONE_MILLION;
         uint256 denominator = (reserveOut - amountOut) * ratio;
         amountIn = (numerator / denominator) + 1;
-        if (checkFeeOn()) {
+        if (_protocolFee > 0) {
             ratio -= _protocolFee;
             denominator = (reserveOut - amountOut) * ratio;
             feeAmount = ((numerator / denominator) + 1) - amountIn;
             amountIn += feeAmount;
         }
-    }
-
-    function _getBorrowRate(uint256 tokenReserve, uint256 mirrorReserve) internal view returns (uint256) {
-        if (tokenReserve == 0) {
-            return rateStatus.rateBase;
-        }
-        uint256 useLevel = mirrorReserve * ONE_MILLION / (mirrorReserve + tokenReserve);
-        if (useLevel >= rateStatus.useHighLevel) {
-            return rateStatus.rateBase + rateStatus.useMiddleLevel * rateStatus.mLow
-                + rateStatus.useHighLevel * rateStatus.mMiddle + (useLevel - rateStatus.useHighLevel) * rateStatus.mHigh;
-        } else if (useLevel >= rateStatus.useMiddleLevel) {
-            return rateStatus.rateBase + rateStatus.useMiddleLevel * rateStatus.mLow
-                + (useLevel - rateStatus.useMiddleLevel) * rateStatus.mMiddle;
-        }
-        return rateStatus.rateBase + useLevel * rateStatus.mLow;
     }
 
     // ******************** SELF CALL ********************
@@ -532,14 +439,8 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         positionManagers[_marginPositionManager] = true;
     }
 
-    function setLTV(uint24 _initialLTV, uint24 _liquidationLTV) external onlyOwner {
-        initialLTV = _initialLTV;
-        liquidationLTV = _liquidationLTV;
-    }
-
-    function setDynamicFeeArgs(uint24 _dynamicFeeDurationSeconds, uint24 _dynamicFeeUnit) external onlyOwner {
-        dynamicFeeDurationSeconds = _dynamicFeeDurationSeconds;
-        dynamicFeeUnit = _dynamicFeeUnit;
+    function setMarginFees(address _marginFees) external onlyOwner {
+        marginFees = IMarginFees(_marginFees);
     }
 
     function setMarginOracle(address _oracle) external onlyOwner {
@@ -550,50 +451,11 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         hookStatusStore[poolId].feeStatus = feeStatus;
     }
 
-    function setFeeTo(address _feeTo, uint24 _protocolFee, uint24 _protocolMarginFee) external onlyOwner {
-        feeTo = _feeTo;
-        protocolFee = _protocolFee;
-        protocolMarginFee = _protocolMarginFee;
-    }
-
     function withdrawFee(address token, address to, uint256 amount) external onlyOwner returns (bool success) {
         success = Currency.wrap(token).transfer(to, address(this), amount);
     }
 
     // ******************** MARGIN FUNCTIONS ********************
-
-    function getMarginTotal(PoolId poolId, bool marginForOne, uint24 leverage, uint256 marginAmount)
-        external
-        view
-        returns (uint256 marginWithoutFee, uint256 borrowAmount)
-    {
-        HookStatus memory status = getStatus(poolId);
-        uint24 _initialLTV = status.feeStatus.initialLTV > 0 ? status.feeStatus.initialLTV : initialLTV;
-        uint256 marginTotal = marginAmount * leverage * _initialLTV / ONE_MILLION;
-        bool zeroForOne = marginForOne;
-        (borrowAmount,) = _getAmountIn(status, zeroForOne, marginTotal);
-        (marginTotal,) = _getAmountOut(status, zeroForOne, borrowAmount);
-        marginWithoutFee = marginTotal * (ONE_MILLION - status.feeStatus.marginFee) / ONE_MILLION;
-        if (checkFeeOn()) {
-            uint24 _protocolMarginFee =
-                status.feeStatus.protocolMarginFee > 0 ? status.feeStatus.protocolMarginFee : protocolMarginFee;
-            uint256 protocolMarginFeeAmount = marginTotal * _protocolMarginFee / ONE_MILLION;
-            marginWithoutFee -= protocolMarginFeeAmount;
-        }
-    }
-
-    function getMarginMax(PoolId poolId, bool marginForOne, uint24 leverage)
-        external
-        view
-        returns (uint256 marginMax, uint256 borrowAmount)
-    {
-        HookStatus memory status = getStatus(poolId);
-        uint24 _initialLTV = status.feeStatus.initialLTV > 0 ? status.feeStatus.initialLTV : initialLTV;
-        bool zeroForOne = marginForOne;
-        borrowAmount = zeroForOne ? status.realReserve0 : status.realReserve1;
-        (uint256 marginMaxTotal,) = _getAmountOut(status, zeroForOne, borrowAmount);
-        marginMax = marginMaxTotal * ONE_MILLION / leverage / _initialLTV;
-    }
 
     function margin(MarginParams memory params) external positionOnly returns (MarginParams memory) {
         bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (msg.sender, params)));
@@ -613,7 +475,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
             : (status.key.currency1, status.key.currency0);
         bool zeroForOne = params.marginForOne;
         uint256 borrowReserves = zeroForOne ? status.realReserve0 : status.realReserve1;
-        uint24 _initialLTV = status.feeStatus.initialLTV > 0 ? status.feeStatus.initialLTV : initialLTV;
+        uint24 _initialLTV = marginFees.getInitialLTV(address(this), params.poolId);
         uint256 marginTotal = params.marginAmount * params.leverage * _initialLTV / ONE_MILLION;
         (borrowAmount,) = _getAmountIn(status, zeroForOne, marginTotal);
         require(borrowReserves > borrowAmount, "TOKEN_NOT_ENOUGH");
@@ -621,11 +483,10 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         // send total token
         marginWithoutFee = marginTotal * (ONE_MILLION - status.feeStatus.marginFee) / ONE_MILLION;
         marginCurrency.settle(poolManager, address(this), marginWithoutFee, true);
-        if (checkFeeOn()) {
-            uint24 _protocolMarginFee =
-                status.feeStatus.protocolMarginFee > 0 ? status.feeStatus.protocolMarginFee : protocolMarginFee;
+        if (marginFees.feeTo() != address(0)) {
+            uint24 _protocolMarginFee = marginFees.getProtocolMarginFee(address(this), params.poolId);
             uint256 protocolMarginFeeAmount = marginTotal * _protocolMarginFee / ONE_MILLION;
-            marginCurrency.take(poolManager, feeTo, protocolMarginFeeAmount, false);
+            marginCurrency.take(poolManager, marginFees.feeTo(), protocolMarginFeeAmount, false);
             marginWithoutFee -= protocolMarginFeeAmount;
         }
         marginCurrency.take(poolManager, _positionManager, marginWithoutFee, false);
