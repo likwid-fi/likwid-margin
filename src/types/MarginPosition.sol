@@ -7,9 +7,10 @@ struct MarginPosition {
     PoolId poolId;
     bool marginForOne; // true: currency1 is marginToken, false: currency0 is marginToken
     // marginAmount1 + ... + marginAmountN
-    uint256 marginAmount;
+    uint128 marginAmount;
     // marginTotal1 + ... + marginTotalN
-    uint256 marginTotal;
-    uint256 borrowAmount;
+    uint128 marginTotal;
+    uint128 borrowAmount;
+    uint128 rawBorrowAmount;
     uint256 rateCumulativeLast;
 }

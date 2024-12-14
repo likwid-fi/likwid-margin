@@ -14,7 +14,7 @@ contract DeployHookScript is Script {
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
     address manager = payable(vm.envAddress("POOL_MANAGER_ADDR"));
     address owner = 0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1;
-    address mirrorTokenManager = 0xc708fD75Ed6B3525E1FC1817959D414eEa84C628;
+    address mirrorTokenManager = 0xdE2666bF3C006F359B0129Cc29c5b2480ddF7c49;
     address marginOracle = 0xaf1b2E78F24902210Ea0D66A4DE8489e342Bc735;
     address marginFees = 0x3B33E866eAfdb5e9676FAA9aC06EaB9299Bb4C59;
 

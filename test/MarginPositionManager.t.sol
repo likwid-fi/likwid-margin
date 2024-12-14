@@ -114,23 +114,14 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256 positionId = marginPositionManager.getPositionId(key.toId(), false, user);
         assertGt(positionId, 0);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
-        console.log("before repay positionId:%s,position.borrowAmount:%s", positionId, position.borrowAmount);
-        console.log("before repay tokenA.balance:%s tokenB.balance:%s", tokenA.balanceOf(user), tokenB.balanceOf(user));
         uint256 repay = 0.01 ether;
-        tokenB.approve(address(hookManager), repay);
         marginPositionManager.repay(positionId, repay, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
-        console.log("after repay tokenA.balance:%s tokenB.balance:%s", tokenA.balanceOf(user), tokenB.balanceOf(user));
-        console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
         assertEq(position.borrowAmount - newPosition.borrowAmount, repay);
         repay = position.borrowAmount + 0.01 ether;
-        tokenB.approve(address(hookManager), repay);
         marginPositionManager.repay(positionId, repay, UINT256_MAX);
         newPosition = marginPositionManager.getPosition(positionId);
-        console.log(
-            "after all.repay tokenA.balance:%s tokenB.balance:%s", tokenA.balanceOf(user), tokenB.balanceOf(user)
-        );
-        console.log("after all.repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
+        assertEq(newPosition.borrowAmount, 0);
     }
 
     function test_hook_close_tokens() public {
@@ -275,39 +266,40 @@ contract MarginPositionManagerTest is DeployHelper {
     function test_hook_repay_native() public {
         test_hook_margin_native();
         address user = address(this);
-        uint256 positionId = marginPositionManager.getPositionId(nativeKey.toId(), false, user);
+        PoolId poolId = nativeKey.toId();
+        HookStatus memory status = hookManager.getStatus(poolId);
+        uint256 positionId = marginPositionManager.getPositionId(poolId, false, user);
         assertGt(positionId, 0);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        assertEq(status.mirrorReserve1, position.rawBorrowAmount);
         uint256 userBalance = user.balance;
-        console.log("before repay positionId:%s,position.borrowAmount:%s", positionId, position.borrowAmount);
-        console.log("before repay balance:%s tokenB.balance:%s", user.balance, tokenB.balanceOf(user));
         uint256 repay = 0.01 ether;
         tokenB.approve(address(hookManager), repay);
         marginPositionManager.repay(positionId, repay, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
-        console.log("after repay balance:%s tokenB.balance:%s", user.balance, tokenB.balanceOf(user));
-        console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
         assertEq(position.borrowAmount - newPosition.borrowAmount, repay);
         assertEq(
             position.marginTotal + position.marginAmount - newPosition.marginTotal - newPosition.marginAmount,
             user.balance - userBalance
         );
-        console.log("position.marginAmount:%s,position.marginTotal:%s", position.marginAmount, position.marginTotal);
-        console.log(
-            "newPosition.marginAmount:%s,newPosition.marginTotal:%s", newPosition.marginAmount, newPosition.marginTotal
-        );
+        status = hookManager.getStatus(poolId);
+        assertEq(status.mirrorReserve1, newPosition.rawBorrowAmount);
     }
 
     function test_hook_close_native() public {
         test_hook_margin_native();
         address user = address(this);
         PoolId poolId = nativeKey.toId();
+        HookStatus memory status = hookManager.getStatus(poolId);
         uint256 positionId = marginPositionManager.getPositionId(poolId, false, user);
         assertGt(positionId, 0);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        assertEq(status.mirrorReserve1, position.rawBorrowAmount);
         marginPositionManager.close(positionId, 3000, 0, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
         assertEq(position.borrowAmount - newPosition.borrowAmount, position.borrowAmount * 3000 / ONE_MILLION);
+        status = hookManager.getStatus(poolId);
+        assertEq(status.mirrorReserve1, newPosition.rawBorrowAmount);
     }
 
     function test_hook_liquidate_burn() public {

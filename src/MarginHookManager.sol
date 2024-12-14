@@ -516,7 +516,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
             borrowCurrency.take(poolManager, address(this), params.repayAmount, true);
         }
         // burn mirror token
-        mirrorTokenManager.burnScale(borrowCurrency.toKeyId(status.key), params.borrowAmount, params.repayAmount);
+        mirrorTokenManager.burn(borrowCurrency.toKeyId(status.key), params.rawBorrowAmount);
         _update(status.key, true);
         return params.repayAmount;
     }

@@ -21,6 +21,6 @@ struct ReleaseParams {
     address payer;
     uint256 repayAmount;
     uint256 releaseAmount;
-    uint256 borrowAmount;
+    uint256 rawBorrowAmount;
     uint256 deadline;
 }
