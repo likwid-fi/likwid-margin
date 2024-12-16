@@ -143,11 +143,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         borrowAmount = hook.getAmountIn(poolId, zeroForOne, marginTotal);
         marginTotal = hook.getAmountOut(poolId, zeroForOne, borrowAmount);
         marginWithoutFee = marginTotal * (ONE_MILLION - status.feeStatus.marginFee) / ONE_MILLION;
-        uint24 _protocolMarginFee = hook.marginFees().getProtocolMarginFee(address(hook), poolId);
-        if (_protocolMarginFee > 0) {
-            uint256 protocolMarginFeeAmount = marginTotal * _protocolMarginFee / ONE_MILLION;
-            marginWithoutFee -= protocolMarginFeeAmount;
-        }
     }
 
     function getMarginMax(PoolId poolId, bool marginForOne, uint24 leverage)

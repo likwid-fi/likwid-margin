@@ -15,14 +15,9 @@ interface IMarginFees {
 
     function feeTo() external view returns (address);
 
-    function getProtocolMarginFee(address hook, PoolId poolId) external view returns (uint24 _protocolMarginFee);
+    function dynamicFee(HookStatus memory status) external view returns (uint24 _fee);
 
-    function dynamicFee(HookStatus memory status) external view returns (uint24 _fee, uint24 _protocolFee);
-
-    function getPoolFees(address hook, PoolId poolId)
-        external
-        view
-        returns (uint24 _fee, uint24 _marginFee, uint24 _protocolFee, uint24 _protocolMarginFee);
+    function getPoolFees(address hook, PoolId poolId) external view returns (uint24 _fee, uint24 _marginFee);
 
     function getBorrowRateCumulativeLast(HookStatus memory status, bool marginForOne) external view returns (uint256);
 

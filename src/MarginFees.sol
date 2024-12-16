@@ -54,40 +54,20 @@ contract MarginFees is IMarginFees, Owned {
         _liquidationLTV = status.feeStatus.liquidationLTV == 0 ? liquidationLTV : status.feeStatus.liquidationLTV;
     }
 
-    function getPoolFees(address hook, PoolId poolId)
-        external
-        view
-        returns (uint24 _fee, uint24 _marginFee, uint24 _protocolFee, uint24 _protocolMarginFee)
-    {
+    function getPoolFees(address hook, PoolId poolId) external view returns (uint24 _fee, uint24 _marginFee) {
         IMarginHookManager hookManager = IMarginHookManager(hook);
         HookStatus memory status = hookManager.getStatus(poolId);
-        (_fee, _protocolFee) = dynamicFee(status);
+        _fee = dynamicFee(status);
         _marginFee = status.feeStatus.marginFee;
-        if (feeTo != address(0)) {
-            _protocolMarginFee =
-                status.feeStatus.protocolMarginFee > 0 ? status.feeStatus.protocolMarginFee : protocolMarginFee;
-        }
     }
 
-    function getProtocolMarginFee(address hook, PoolId poolId) external view returns (uint24 _protocolMarginFee) {
-        IMarginHookManager hookManager = IMarginHookManager(hook);
-        HookStatus memory status = hookManager.getStatus(poolId);
-        if (feeTo != address(0)) {
-            _protocolMarginFee =
-                status.feeStatus.protocolMarginFee > 0 ? status.feeStatus.protocolMarginFee : protocolMarginFee;
-        }
-    }
-
-    function dynamicFee(HookStatus memory status) public view returns (uint24 _fee, uint24 _protocolFee) {
+    function dynamicFee(HookStatus memory status) public view returns (uint24 _fee) {
         uint32 blockTS = uint32(block.timestamp % 2 ** 32);
         uint256 timeElapsed;
         if (status.feeStatus.lastMarginTimestamp <= blockTS) {
             timeElapsed = blockTS - status.feeStatus.lastMarginTimestamp;
         } else {
             timeElapsed = (2 ** 32 - status.feeStatus.lastMarginTimestamp) + blockTS;
-        }
-        if (feeTo != address(0)) {
-            _protocolFee = status.feeStatus.protocolFee == 0 ? protocolFee : status.feeStatus.protocolFee;
         }
         _fee = status.key.fee;
         if (timeElapsed < dynamicFeeDurationSeconds && status.feeStatus.lastPrice1X112 > 0) {

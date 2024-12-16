@@ -10,12 +10,14 @@ struct AddLiquidityParams {
     uint256 amount1;
     uint256 tickLower;
     uint256 tickUpper;
+    uint8 level;
     address to;
     uint256 deadline;
 }
 
 struct RemoveLiquidityParams {
     PoolId poolId;
+    uint8 level;
     uint256 liquidity;
     uint256 deadline;
 }

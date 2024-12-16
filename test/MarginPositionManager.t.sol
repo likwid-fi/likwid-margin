@@ -615,20 +615,16 @@ contract MarginPositionManagerTest is DeployHelper {
 
     function test_hook_dynamic_fee_usdts() public {
         PoolId poolId = usdtKey.toId();
-        (uint24 _fee, uint24 _marginFee, uint24 _protocolFee, uint24 _protocolMarginFee) =
-            hookManager.marginFees().getPoolFees(address(hookManager), poolId);
+        (uint24 _fee, uint24 _marginFee) = hookManager.marginFees().getPoolFees(address(hookManager), poolId);
         console.log("before margin _fee:%s", _fee);
         test_hook_margin_usdts();
-        (_fee, _marginFee, _protocolFee, _protocolMarginFee) =
-            hookManager.marginFees().getPoolFees(address(hookManager), poolId);
+        (_fee, _marginFee) = hookManager.marginFees().getPoolFees(address(hookManager), poolId);
         console.log("after margin _fee:%s", _fee);
         vm.warp(30);
-        (_fee, _marginFee, _protocolFee, _protocolMarginFee) =
-            hookManager.marginFees().getPoolFees(address(hookManager), poolId);
+        (_fee, _marginFee) = hookManager.marginFees().getPoolFees(address(hookManager), poolId);
         console.log("after margin _fee:%s", _fee);
         vm.warp(126);
-        (_fee, _marginFee, _protocolFee, _protocolMarginFee) =
-            hookManager.marginFees().getPoolFees(address(hookManager), poolId);
+        (_fee, _marginFee) = hookManager.marginFees().getPoolFees(address(hookManager), poolId);
         console.log("after margin _fee:%s", _fee);
     }
 }

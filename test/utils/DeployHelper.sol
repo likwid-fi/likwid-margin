@@ -135,6 +135,7 @@ contract DeployHelper is Test {
     function initPoolLiquidity() internal {
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: key.toId(),
+            level: 3,
             amount0: 1e18,
             amount1: 1e18,
             tickLower: 50000,
@@ -145,6 +146,7 @@ contract DeployHelper is Test {
         hookManager.addLiquidity(params);
         params = AddLiquidityParams({
             poolId: nativeKey.toId(),
+            level: 3,
             amount0: 1 ether,
             amount1: 100 ether,
             tickLower: 50000,
@@ -155,6 +157,7 @@ contract DeployHelper is Test {
         hookManager.addLiquidity{value: 1 ether}(params);
         params = AddLiquidityParams({
             poolId: usdtKey.toId(),
+            level: 3,
             amount0: 1 ether,
             amount1: 100 ether,
             tickLower: 50000,
