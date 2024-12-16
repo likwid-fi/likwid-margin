@@ -392,7 +392,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             payer: address(this),
             rawBorrowAmount: _position.rawBorrowAmount,
             releaseAmount: releaseAmount,
-            repayAmount: 0,
+            repayAmount: _position.borrowAmount,
             deadline: block.timestamp + 1000
         });
         hook.release{value: liquidateValue}(params);
@@ -403,7 +403,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         _burnPosition(positionId);
     }
 
-    function liquidate(uint256 positionId) external returns (uint256 profit) {
+    function liquidateCall(uint256 positionId) external payable returns (uint256 profit) {
         (bool liquidated,) = checkLiquidate(positionId);
         if (!liquidated) {
             return profit;
