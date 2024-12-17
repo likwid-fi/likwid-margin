@@ -441,6 +441,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         uint256 _totalSupply = balanceOf[address(this)][uPoolId];
         (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
         bool feeOn = _mintFee(uPoolId, _totalSupply, _reserve0, _reserve1);
+        (uint112 interest0, uint112 interest1) = marginFees.getInterests(status);
         {
             (uint256 staticSupply0, uint256 staticSupply1) = marginFees.getStaticSupplies(address(this), uPoolId);
             uint256 staticAmount0 = staticSupply0 * _reserve0 / _totalSupply;
@@ -452,10 +453,9 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
                     status.realReserve0 > staticAmount0 && status.realReserve0 - staticAmount0 >= amount0,
                     "NOT_ENOUGH_RESERVE0"
                 );
+                interest0 = uint112(interest0 * (_reserve0 - amount0) / _reserve0);
             } else {
-                amount0 = params.liquidity
-                    * (_reserve0 - UQ112x112.decode(uint224(_reserve0 * status.feeStatus.interestRatio0X112)))
-                    / _totalSupply;
+                amount0 = params.liquidity * (_reserve0 - interest0) / _totalSupply;
                 require(status.realReserve0 >= amount0, "NOT_ENOUGH_RESERVE0");
             }
             // one enable margin
@@ -465,10 +465,9 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
                     status.realReserve1 > staticAmount1 && status.realReserve1 - staticAmount1 >= amount1,
                     "NOT_ENOUGH_RESERVE1"
                 );
+                interest1 = uint112(interest1 * (_reserve1 - amount1) / _reserve1);
             } else {
-                amount1 = params.liquidity
-                    * (_reserve1 - UQ112x112.decode(uint224(_reserve1 * status.feeStatus.interestRatio1X112)))
-                    / _totalSupply;
+                amount1 = params.liquidity * (_reserve1 - interest1) / _totalSupply;
                 require(status.realReserve1 >= amount1, "NOT_ENOUGH_RESERVE1");
             }
             if (amount0 == 0 || amount1 == 0) revert InsufficientLiquidityBurnt();
@@ -477,7 +476,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         _burn(address(this), marginFees.getLevelPool(uPoolId, params.level), params.liquidity);
         _burn(msg.sender, marginFees.getLevelPool(uPoolId, params.level), params.liquidity);
         poolManager.unlock(abi.encodeCall(this.handleRemoveLiquidity, (msg.sender, status.key, amount0, amount1)));
-        (uint112 interest0, uint112 interest1) = marginFees.getInterests(status);
+
         _update(status.key, false, interest0, interest1);
         if (feeOn) kLast = _reserve0 * _reserve1;
         emit Burn(params.poolId, msg.sender, params.liquidity, amount0, amount1);
