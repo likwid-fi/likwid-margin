@@ -22,6 +22,7 @@ contract MarginFees is IMarginFees, Owned {
     uint256 public constant ONE_MILLION = 10 ** 6;
     uint256 public constant ONE_BILLION = 10 ** 9;
     uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
+    uint256 public constant LP_FLAG = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0;
 
     uint24 initialLTV = 500000; // 50%
     uint24 liquidationLTV = 900000; // 90%
@@ -42,6 +43,28 @@ contract MarginFees is IMarginFees, Owned {
             mMiddle: 100,
             mHigh: 10000
         });
+    }
+
+    function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId) {
+        uPoolId = uint256(PoolId.unwrap(poolId)) & LP_FLAG;
+    }
+
+    function getLevelPool(uint256 uPoolId, uint8 level) external pure returns (uint256 lPoolId) {
+        lPoolId = (uPoolId & LP_FLAG) + level;
+    }
+
+    function getStaticSupplies(address hook, uint256 uPoolId)
+        external
+        view
+        returns (uint256 staticSupply0, uint256 staticSupply1)
+    {
+        uint256 lPoolId = (uPoolId & LP_FLAG) + 1;
+        IMarginHookManager manager = IMarginHookManager(hook);
+        staticSupply0 = staticSupply1 = manager.balanceOf(hook, lPoolId);
+        lPoolId = (uPoolId & LP_FLAG) + 2;
+        staticSupply0 += manager.balanceOf(hook, lPoolId);
+        lPoolId = (uPoolId & LP_FLAG) + 3;
+        staticSupply1 += manager.balanceOf(hook, lPoolId);
     }
 
     function getInitialLTV(address hook, PoolId poolId) external view returns (uint24 _initialLTV) {
@@ -135,6 +158,23 @@ contract MarginFees is IMarginFees, Owned {
     function getBorrowRate(address hook, PoolId poolId, bool marginForOne) external view returns (uint256) {
         HookStatus memory status = IMarginHookManager(hook).getStatus(poolId);
         return getBorrowRate(status, marginForOne);
+    }
+
+    function _getInterests(HookStatus memory status) internal pure returns (uint112 interest0, uint112 interest1) {
+        interest0 =
+            UQ112x112.decode((status.realReserve0 + status.mirrorReserve0) * status.feeStatus.interestRatio0X112);
+        interest1 =
+            UQ112x112.decode((status.realReserve1 + status.mirrorReserve1) * status.feeStatus.interestRatio1X112);
+    }
+
+    function getInterests(HookStatus calldata status) external pure returns (uint112 interest0, uint112 interest1) {
+        (interest0, interest1) = _getInterests(status);
+    }
+
+    function getInterests(address hook, PoolId poolId) external view returns (uint112 interest0, uint112 interest1) {
+        IMarginHookManager hookManager = IMarginHookManager(hook);
+        HookStatus memory status = hookManager.getStatus(poolId);
+        (interest0, interest1) = _getInterests(status);
     }
 
     // ******************** OWNER CALL ********************
