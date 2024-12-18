@@ -14,6 +14,14 @@ library UQ112x112 {
         z = uint112(x / uint224(Q112)); // never overflows
     }
 
+    function mul(uint112 x, uint256 y) internal pure returns (uint224 z) {
+        z = uint224(x) * uint224(y);
+    }
+
+    function scaleDown(uint112 x, uint256 scaler, uint256 denominator) internal pure returns (uint112 z) {
+        z = decode(div(mul(x, denominator - scaler), uint112(denominator)));
+    }
+
     // divide a UQ112x112 by a uint112, returning a UQ112x112
     function div(uint224 x, uint112 y) internal pure returns (uint224 z) {
         z = x / uint224(y);

@@ -39,7 +39,7 @@ interface IMarginFees {
 
     function getBorrowRate(address hook, PoolId poolId, bool marginForOne) external view returns (uint256);
 
-    function getBorrowRate(uint256 realReserve, uint256 mirrorReserve) external view returns (uint256);
+    function getBorrowRateByReserves(uint256 realReserve, uint256 mirrorReserve) external view returns (uint256);
 
     function getInterests(HookStatus calldata status) external pure returns (uint112 interest0, uint112 interest1);
 }

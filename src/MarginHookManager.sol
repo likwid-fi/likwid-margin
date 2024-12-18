@@ -31,6 +31,7 @@ import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams
 
 contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned {
     using UQ112x112 for uint224;
+    using UQ112x112 for uint112;
     using SafeCast for uint256;
     using TimeUtils for uint32;
     using PoolIdLibrary for PoolKey;
@@ -290,16 +291,16 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         if (fromMargin) {
             if (status.feeStatus.lastMarginTimestamp != blockTS) {
                 status.feeStatus.lastMarginTimestamp = blockTS;
-                status.feeStatus.lastPrice1X112 = UQ112x112.encode(status.realReserve0 + status.mirrorReserve0).div(
+                status.feeStatus.lastPrice1X112 = (status.realReserve0 + status.mirrorReserve0).encode().div(
                     status.realReserve1 + status.mirrorReserve1
                 );
             }
         }
 
         uint256 rate0Last = ONE_BILLION
-            + marginFees.getBorrowRate(status.realReserve0, status.mirrorReserve0) * timeElapsed / YEAR_SECONDS;
+            + marginFees.getBorrowRateByReserves(status.realReserve0, status.mirrorReserve0) * timeElapsed / YEAR_SECONDS;
         uint256 rate1Last = ONE_BILLION
-            + marginFees.getBorrowRate(status.realReserve1, status.mirrorReserve1) * timeElapsed / YEAR_SECONDS;
+            + marginFees.getBorrowRateByReserves(status.realReserve1, status.mirrorReserve1) * timeElapsed / YEAR_SECONDS;
         status.rate0CumulativeLast = status.rate0CumulativeLast * rate0Last / ONE_BILLION;
         status.rate1CumulativeLast = status.rate1CumulativeLast * rate1Last / ONE_BILLION;
         status.blockTimestampLast = blockTS;
@@ -319,12 +320,10 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
             );
         }
         if (interest0 > 0) {
-            status.feeStatus.interestRatio0X112 =
-                uint112(UQ112x112.encode(interest0).div((status.realReserve0 + status.mirrorReserve0)));
+            status.interestRatio0X112 = uint112(interest0.encode().div((status.realReserve0 + status.mirrorReserve0)));
         }
         if (interest1 > 0) {
-            status.feeStatus.interestRatio1X112 =
-                uint112(UQ112x112.encode(interest1).div((status.realReserve1 + status.mirrorReserve1)));
+            status.interestRatio1X112 = uint112(interest1.encode().div((status.realReserve1 + status.mirrorReserve1)));
         }
         emit Sync(pooId, status.realReserve0, status.realReserve1, status.mirrorReserve0, status.mirrorReserve1);
     }
@@ -381,10 +380,11 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         HookStatus memory status = getStatus(params.poolId);
         _setBalances(status.key);
         uint256 uPoolId = marginFees.getPoolId(params.poolId);
-        (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
-        uint256 _totalSupply = balanceOf[address(this)][uPoolId];
-        bool feeOn = _mintFee(uPoolId, _totalSupply, _reserve0, _reserve1);
+        (uint112 interest0, uint112 interest1) = marginFees.getInterests(status);
         {
+            (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
+            uint256 _totalSupply = balanceOf[address(this)][uPoolId];
+            bool feeOn = _mintFee(uPoolId, _totalSupply, _reserve0, _reserve1);
             if (_reserve1 > 0 && _totalSupply > MINIMUM_LIQUIDITY) {
                 uint256 upValue = _reserve0 * (ONE_MILLION + params.tickUpper) / _reserve1;
                 uint256 downValue = _reserve0 * (ONE_MILLION - params.tickLower) / _reserve1;
@@ -405,17 +405,16 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
                     Math.min(params.amount0 * _totalSupply / _reserve0, params.amount1 * _totalSupply / _reserve1);
             }
             if (liquidity == 0) revert InsufficientLiquidityMinted();
-
-            _mint(address(this), uPoolId, liquidity);
-            _mint(address(this), marginFees.getLevelPool(uPoolId, params.level), liquidity);
-            _mint(params.to, marginFees.getLevelPool(uPoolId, params.level), liquidity);
-            poolManager.unlock(
-                abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, params.amount0, params.amount1))
-            );
-            (uint112 interest0, uint112 interest1) = marginFees.getInterests(status);
-            _update(status.key, false, interest0, interest1);
+            if (feeOn) kLast = _reserve0 * _reserve1;
         }
-        if (feeOn) kLast = _reserve0 * _reserve1;
+        uint256 levelPool = marginFees.getLevelPool(uPoolId, params.level);
+        _mint(address(this), uPoolId, liquidity);
+        _mint(address(this), levelPool, liquidity);
+        _mint(params.to, levelPool, liquidity);
+        poolManager.unlock(
+            abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, params.amount0, params.amount1))
+        );
+        _update(status.key, false, interest0, interest1);
         emit Mint(params.poolId, msg.sender, params.to, liquidity, params.amount0, params.amount1);
     }
 
@@ -438,22 +437,21 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
         HookStatus memory status = getStatus(params.poolId);
         _setBalances(status.key);
         uint256 uPoolId = marginFees.getPoolId(params.poolId);
-        uint256 _totalSupply = balanceOf[address(this)][uPoolId];
-        (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
-        bool feeOn = _mintFee(uPoolId, _totalSupply, _reserve0, _reserve1);
         (uint112 interest0, uint112 interest1) = marginFees.getInterests(status);
         {
+            uint256 _totalSupply = balanceOf[address(this)][uPoolId];
+            (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
+            bool feeOn = _mintFee(uPoolId, _totalSupply, _reserve0, _reserve1);
             (uint256 staticSupply0, uint256 staticSupply1) = marginFees.getStaticSupplies(address(this), uPoolId);
-            uint256 staticAmount0 = staticSupply0 * _reserve0 / _totalSupply;
-            uint256 staticAmount1 = staticSupply1 * _reserve1 / _totalSupply;
             // zero enable margin
             if (params.level == 3 || params.level == 4) {
                 amount0 = params.liquidity * _reserve0 / _totalSupply;
+                uint256 staticAmount0 = staticSupply0 * _reserve0 / _totalSupply;
                 require(
                     status.realReserve0 > staticAmount0 && status.realReserve0 - staticAmount0 >= amount0,
                     "NOT_ENOUGH_RESERVE0"
                 );
-                interest0 = uint112(interest0 * (_reserve0 - amount0) / _reserve0);
+                interest0 = interest0.scaleDown(amount0, _reserve0);
             } else {
                 amount0 = params.liquidity * (_reserve0 - interest0) / _totalSupply;
                 require(status.realReserve0 >= amount0, "NOT_ENOUGH_RESERVE0");
@@ -461,24 +459,27 @@ contract MarginHookManager is IMarginHookManager, BaseHook, ERC6909Claims, Owned
             // one enable margin
             if (params.level == 2 || params.level == 4) {
                 amount1 = params.liquidity * _reserve1 / _totalSupply;
+                uint256 staticAmount1 = staticSupply1 * _reserve1 / _totalSupply;
                 require(
                     status.realReserve1 > staticAmount1 && status.realReserve1 - staticAmount1 >= amount1,
                     "NOT_ENOUGH_RESERVE1"
                 );
-                interest1 = uint112(interest1 * (_reserve1 - amount1) / _reserve1);
+                interest1 = interest1.scaleDown(amount1, _reserve1);
             } else {
                 amount1 = params.liquidity * (_reserve1 - interest1) / _totalSupply;
                 require(status.realReserve1 >= amount1, "NOT_ENOUGH_RESERVE1");
             }
             if (amount0 == 0 || amount1 == 0) revert InsufficientLiquidityBurnt();
+            if (feeOn) kLast = _reserve0 * _reserve1;
         }
+        uint256 levelPool = marginFees.getLevelPool(uPoolId, params.level);
         _burn(address(this), uPoolId, params.liquidity);
-        _burn(address(this), marginFees.getLevelPool(uPoolId, params.level), params.liquidity);
-        _burn(msg.sender, marginFees.getLevelPool(uPoolId, params.level), params.liquidity);
+        _burn(address(this), levelPool, params.liquidity);
+        _burn(msg.sender, levelPool, params.liquidity);
         poolManager.unlock(abi.encodeCall(this.handleRemoveLiquidity, (msg.sender, status.key, amount0, amount1)));
 
         _update(status.key, false, interest0, interest1);
-        if (feeOn) kLast = _reserve0 * _reserve1;
+
         emit Burn(params.poolId, msg.sender, params.liquidity, amount0, amount1);
     }
 

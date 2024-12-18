@@ -15,6 +15,7 @@ import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {TimeUtils} from "./libraries/TimeUtils.sol";
 
 contract MarginFees is IMarginFees, Owned {
+    using UQ112x112 for uint112;
     using UQ112x112 for uint224;
     using PoolIdLibrary for PoolKey;
     using TimeUtils for uint32;
@@ -52,6 +53,19 @@ contract MarginFees is IMarginFees, Owned {
 
     function getLevelPool(uint256 uPoolId, uint8 level) external pure returns (uint256 lPoolId) {
         lPoolId = (uPoolId & LP_FLAG) + level;
+    }
+
+    function getPoolLiquidities(address hook, PoolId poolId, address owner)
+        external
+        view
+        returns (uint256[4] memory liquidities)
+    {
+        IMarginHookManager manager = IMarginHookManager(hook);
+        uint256 uPoolId = uint256(PoolId.unwrap(poolId)) & LP_FLAG;
+        for (uint256 i = 0; i < 4; i++) {
+            uint256 lPoolId = uPoolId + 1 + i;
+            liquidities[i] = manager.balanceOf(owner, lPoolId);
+        }
     }
 
     function getStaticSupplies(address hook, uint256 uPoolId)
@@ -116,11 +130,11 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     function getBorrowRateByReserves(uint256 realReserve, uint256 mirrorReserve) public view returns (uint256 rate) {
+        rate = rateStatus.rateBase;
         if (mirrorReserve == 0) {
-            return rateStatus.rateBase;
+            return rate;
         }
         uint256 useLevel = mirrorReserve * ONE_MILLION / (mirrorReserve + realReserve);
-        rate = rateStatus.rateBase;
         if (useLevel >= rateStatus.useHighLevel) {
             rate += uint256(useLevel - rateStatus.useHighLevel) * rateStatus.mHigh;
             useLevel = rateStatus.useHighLevel;
@@ -163,10 +177,8 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     function _getInterests(HookStatus memory status) internal pure returns (uint112 interest0, uint112 interest1) {
-        interest0 =
-            UQ112x112.decode((status.realReserve0 + status.mirrorReserve0) * status.feeStatus.interestRatio0X112);
-        interest1 =
-            UQ112x112.decode((status.realReserve1 + status.mirrorReserve1) * status.feeStatus.interestRatio1X112);
+        interest0 = status.interestRatio0X112.mul(status.realReserve0 + status.mirrorReserve0).decode();
+        interest1 = status.interestRatio1X112.mul(status.realReserve1 + status.mirrorReserve1).decode();
     }
 
     function getInterests(HookStatus calldata status) external pure returns (uint112 interest0, uint112 interest1) {
