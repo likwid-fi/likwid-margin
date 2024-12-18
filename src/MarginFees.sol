@@ -43,6 +43,7 @@ contract MarginFees is IMarginFees, Owned {
             mMiddle: 100,
             mHigh: 10000
         });
+        feeTo = initialOwner;
     }
 
     function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId) {
@@ -99,12 +100,12 @@ contract MarginFees is IMarginFees, Owned {
             uint256 priceDiff = price1X112 > status.feeStatus.lastPrice1X112
                 ? price1X112 - status.feeStatus.lastPrice1X112
                 : status.feeStatus.lastPrice1X112 - price1X112;
-            _fee = uint24(
-                priceDiff * 1000 * dynamicFeeUnit * (dynamicFeeDurationSeconds - timeElapsed)
-                    / (status.feeStatus.lastPrice1X112 * dynamicFeeDurationSeconds)
-            ) * status.key.fee / 1000 + status.key.fee;
-            if (_fee >= ONE_MILLION) {
+            uint256 dFee = priceDiff * 1000 * dynamicFeeUnit * (dynamicFeeDurationSeconds - timeElapsed)
+                / (status.feeStatus.lastPrice1X112 * dynamicFeeDurationSeconds) * status.key.fee / 1000 + status.key.fee;
+            if (dFee >= ONE_MILLION) {
                 _fee = uint24(ONE_MILLION) - 1;
+            } else {
+                _fee = uint24(dFee);
             }
         }
     }
@@ -114,20 +115,21 @@ contract MarginFees is IMarginFees, Owned {
         _reserve1 = status.realReserve1 + status.mirrorReserve1;
     }
 
-    function getBorrowRate(uint256 realReserve, uint256 mirrorReserve) public view returns (uint256) {
-        if (realReserve == 0) {
+    function getBorrowRateByReserves(uint256 realReserve, uint256 mirrorReserve) public view returns (uint256 rate) {
+        if (mirrorReserve == 0) {
             return rateStatus.rateBase;
         }
         uint256 useLevel = mirrorReserve * ONE_MILLION / (mirrorReserve + realReserve);
+        rate = rateStatus.rateBase;
         if (useLevel >= rateStatus.useHighLevel) {
-            return rateStatus.rateBase + rateStatus.useMiddleLevel * rateStatus.mLow
-                + (rateStatus.useHighLevel - rateStatus.useMiddleLevel) * rateStatus.mMiddle
-                + (useLevel - rateStatus.useHighLevel) * rateStatus.mHigh;
-        } else if (useLevel >= rateStatus.useMiddleLevel) {
-            return rateStatus.rateBase + rateStatus.useMiddleLevel * rateStatus.mLow
-                + (useLevel - rateStatus.useMiddleLevel) * rateStatus.mMiddle;
+            rate += uint256(useLevel - rateStatus.useHighLevel) * rateStatus.mHigh;
+            useLevel = rateStatus.useHighLevel;
         }
-        return rateStatus.rateBase + useLevel * rateStatus.mLow;
+        if (useLevel >= rateStatus.useMiddleLevel) {
+            rate += uint256(useLevel - rateStatus.useMiddleLevel) * rateStatus.mMiddle;
+            useLevel = rateStatus.useMiddleLevel;
+        }
+        return rate + useLevel * rateStatus.mLow;
     }
 
     function getBorrowRateCumulativeLast(HookStatus memory status, bool marginForOne) public view returns (uint256) {
@@ -152,7 +154,7 @@ contract MarginFees is IMarginFees, Owned {
     function getBorrowRate(HookStatus memory status, bool marginForOne) public view returns (uint256) {
         uint256 realReserve = marginForOne ? status.realReserve0 : status.realReserve1;
         uint256 mirrorReserve = marginForOne ? status.mirrorReserve0 : status.mirrorReserve1;
-        return getBorrowRate(realReserve, mirrorReserve);
+        return getBorrowRateByReserves(realReserve, mirrorReserve);
     }
 
     function getBorrowRate(address hook, PoolId poolId, bool marginForOne) external view returns (uint256) {
