@@ -30,14 +30,11 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol";
 
 import {HookMiner} from "./utils/HookMiner.sol";
-import {EIP20NonStandardThrowHarness} from "./mocks/EIP20NonStandardThrowHarness.sol";
+import {DeployHelper} from "./utils/DeployHelper.sol";
 
-contract MarginFeesTest is Test {
-    MarginFees marginFees;
-    uint256 public constant ONE_MILLION = 10 ** 6;
-
+contract MarginFeesTest is DeployHelper {
     function setUp() public {
-        marginFees = new MarginFees(address(this));
+        deployHookAndRouter();
     }
 
     function test_get_borrow_rate() public view {

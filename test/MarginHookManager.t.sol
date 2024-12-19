@@ -93,9 +93,9 @@ contract MarginHookManagerTest is DeployHelper {
     }
 
     function test_hook_liquidity_usdt_tokens() public {
+        PoolId poolId = usdtKey.toId();
         uint256 amount0 = 1 ether;
         uint256 amount1 = 1 ether;
-        PoolId poolId = usdtKey.toId();
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: poolId,
             amount0: amount0,
@@ -124,5 +124,125 @@ contract MarginHookManagerTest is DeployHelper {
         hookManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
+    }
+
+    function test_hook_liquidity_fee() public {
+        address user = vm.addr(1);
+        tokenUSDT.transfer(user, 10 ether);
+        (bool success,) = user.call{value: 10 ether}("");
+        assertTrue(success);
+        PoolId poolId = usdtKey.toId();
+        {
+            vm.startPrank(user);
+            uint256 amount0 = 1 ether;
+            uint256 amount1 = 1 ether;
+            tokenUSDT.approve(address(hookManager), amount1);
+            AddLiquidityParams memory params = AddLiquidityParams({
+                poolId: poolId,
+                amount0: amount0,
+                amount1: amount1,
+                tickLower: 50000,
+                tickUpper: 50000,
+                to: user,
+                level: 4,
+                deadline: type(uint256).max
+            });
+            hookManager.addLiquidity{value: amount0}(params);
+            vm.stopPrank();
+        }
+        uint256 uPoolId = marginFees.getPoolId(poolId);
+        uint256 feeLiquidity = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        console.log("feeLiquidity:%s,kLast:%s", feeLiquidity, hookManager.kLast());
+        {
+            vm.startPrank(user);
+            uint256 amount0 = 1 ether;
+            uint256 amount1 = 1 ether;
+            tokenUSDT.approve(address(hookManager), amount1);
+            AddLiquidityParams memory params = AddLiquidityParams({
+                poolId: poolId,
+                amount0: amount0,
+                amount1: amount1,
+                tickLower: 50000,
+                tickUpper: 50000,
+                to: user,
+                level: 4,
+                deadline: type(uint256).max
+            });
+            hookManager.addLiquidity{value: amount0}(params);
+            vm.stopPrank();
+        }
+        feeLiquidity = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        console.log("feeLiquidity:%s,kLast:%s", feeLiquidity, hookManager.kLast());
+        {
+            vm.startPrank(user);
+            uint256 amount0 = 1 ether;
+            uint256 amount1 = 1 ether;
+            tokenUSDT.approve(address(hookManager), amount1);
+            AddLiquidityParams memory params = AddLiquidityParams({
+                poolId: poolId,
+                amount0: amount0,
+                amount1: amount1,
+                tickLower: 50000,
+                tickUpper: 50000,
+                to: user,
+                level: 4,
+                deadline: type(uint256).max
+            });
+            hookManager.addLiquidity{value: amount0}(params);
+            vm.stopPrank();
+        }
+        feeLiquidity = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        console.log("feeLiquidity:%s,kLast:%s", feeLiquidity, hookManager.kLast());
+        {
+            uint256 amountIn = 0.0123 ether;
+            // swap
+            uint256 balance0 = manager.balanceOf(address(hookManager), 0);
+            uint256 balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenUSDT)));
+            console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+            MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+                poolId: poolId,
+                zeroForOne: true,
+                to: address(this),
+                amountIn: amountIn,
+                amountOut: 0,
+                amountOutMin: 0,
+                deadline: type(uint256).max
+            });
+            swapRouter.exactInput{value: amountIn}(swapParams);
+            balance0 = manager.balanceOf(address(hookManager), 0);
+            balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenUSDT)));
+            console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        }
+        {
+            uint256 amountIn = 0.0123 ether;
+            // swap
+            uint256 balance0 = manager.balanceOf(address(hookManager), 0);
+            uint256 balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenUSDT)));
+            console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+            MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+                poolId: poolId,
+                zeroForOne: false,
+                to: address(this),
+                amountIn: amountIn,
+                amountOut: 0,
+                amountOutMin: 0,
+                deadline: type(uint256).max
+            });
+            swapRouter.exactInput{value: amountIn}(swapParams);
+            balance0 = manager.balanceOf(address(hookManager), 0);
+            balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenUSDT)));
+            console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        }
+        {
+            vm.startPrank(user);
+            uint256 liquidity = marginLiquidity.balanceOf(user, marginFees.getLevelPool(uPoolId, 4));
+            assertGt(liquidity, 0);
+            RemoveLiquidityParams memory removeParams =
+                RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
+            hookManager.removeLiquidity(removeParams);
+            vm.stopPrank();
+        }
+        feeLiquidity = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        console.log("feeLiquidity:%s,kLast:%s", feeLiquidity, hookManager.kLast());
     }
 }
