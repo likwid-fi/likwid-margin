@@ -3,17 +3,9 @@ pragma solidity ^0.8.26;
 
 import {ERC6909Claims} from "v4-core/ERC6909Claims.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
-import {PoolId} from "v4-core/types/PoolId.sol";
-import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
-
-import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 
 contract MirrorTokenManager is IMirrorTokenManager, ERC6909Claims, Owned {
-    using CurrencyLibrary for Currency;
-
-    mapping(Currency => mapping(PoolId => uint256)) private _poolTokenId;
-
     constructor(address initialOwner) Owned(initialOwner) {}
 
     function mint(uint256 id, uint256 amount) external {

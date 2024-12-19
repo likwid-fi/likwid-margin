@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-import {IERC6909Claims} from "v4-core/interfaces/external/IERC6909Claims.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
@@ -10,7 +9,7 @@ import {MarginParams, ReleaseParams} from "../types/MarginParams.sol";
 import {HookStatus} from "../types/HookStatus.sol";
 import {IMarginFees} from "../interfaces/IMarginFees.sol";
 
-interface IMarginHookManager is IERC6909Claims {
+interface IMarginHookManager {
     function marginFees() external view returns (IMarginFees);
 
     function getStatus(PoolId poolId) external view returns (HookStatus memory);

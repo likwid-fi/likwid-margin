@@ -11,6 +11,7 @@ import {TruncatedOracle} from "./libraries/TruncatedOracle.sol";
 import {RateStatus} from "./types/RateStatus.sol";
 import {HookStatus, BalanceStatus, FeeStatus} from "./types/HookStatus.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
+import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {TimeUtils} from "./libraries/TimeUtils.sol";
 
@@ -55,31 +56,30 @@ contract MarginFees is IMarginFees, Owned {
         lPoolId = (uPoolId & LP_FLAG) + level;
     }
 
-    function getPoolLiquidities(address hook, PoolId poolId, address owner)
+    function getPoolLiquidities(address marginLiquidity, PoolId poolId, address owner)
         external
         view
         returns (uint256[4] memory liquidities)
     {
-        IMarginHookManager manager = IMarginHookManager(hook);
+        IMarginLiquidity liquidity = IMarginLiquidity(marginLiquidity);
         uint256 uPoolId = uint256(PoolId.unwrap(poolId)) & LP_FLAG;
         for (uint256 i = 0; i < 4; i++) {
             uint256 lPoolId = uPoolId + 1 + i;
-            liquidities[i] = manager.balanceOf(owner, lPoolId);
+            liquidities[i] = liquidity.balanceOf(owner, lPoolId);
         }
     }
 
-    function getStaticSupplies(address hook, uint256 uPoolId)
+    function getRetainSupplies(IMarginLiquidity liquidity, address hook, uint256 uPoolId)
         external
         view
-        returns (uint256 staticSupply0, uint256 staticSupply1)
+        returns (uint256 retainSupply0, uint256 retainSupply1)
     {
         uint256 lPoolId = (uPoolId & LP_FLAG) + 1;
-        IMarginHookManager manager = IMarginHookManager(hook);
-        staticSupply0 = staticSupply1 = manager.balanceOf(hook, lPoolId);
+        retainSupply0 = retainSupply1 = liquidity.balanceOf(hook, lPoolId);
         lPoolId = (uPoolId & LP_FLAG) + 2;
-        staticSupply0 += manager.balanceOf(hook, lPoolId);
+        retainSupply0 += liquidity.balanceOf(hook, lPoolId);
         lPoolId = (uPoolId & LP_FLAG) + 3;
-        staticSupply1 += manager.balanceOf(hook, lPoolId);
+        retainSupply1 += liquidity.balanceOf(hook, lPoolId);
     }
 
     function getInitialLTV(address hook, PoolId poolId) external view returns (uint24 _initialLTV) {

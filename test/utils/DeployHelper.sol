@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 // Local
 import {MarginHookManager} from "../../src/MarginHookManager.sol";
 import {MirrorTokenManager} from "../../src/MirrorTokenManager.sol";
+import {MarginLiquidity} from "../../src/MarginLiquidity.sol";
 import {MarginPositionManager} from "../../src/MarginPositionManager.sol";
 import {MarginRouter} from "../../src/MarginRouter.sol";
 import {MarginOracle} from "../../src/MarginOracle.sol";
@@ -54,6 +55,7 @@ contract DeployHelper is Test {
 
     PoolManager manager;
     MirrorTokenManager mirrorTokenManager;
+    MarginLiquidity marginLiquidity;
     MarginPositionManager marginPositionManager;
     MarginRouter swapRouter;
     MarginOracle marginOracle;
@@ -76,13 +78,17 @@ contract DeployHelper is Test {
         uint160 flags =
             uint160(Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
 
-        bytes memory constructorArgs = abi.encode(address(this), manager, mirrorTokenManager, marginFees); //Add all the necessary constructor arguments from the hook
+        bytes memory constructorArgs =
+            abi.encode(address(this), manager, mirrorTokenManager, marginLiquidity, marginFees); //Add all the necessary constructor arguments from the hook
         // Mine a salt that will produce a hook address with the correct flags
         (address hookAddress, bytes32 salt) =
             HookMiner.find(address(this), flags, type(MarginHookManager).creationCode, constructorArgs);
 
-        hookManager = new MarginHookManager{salt: salt}(address(this), manager, mirrorTokenManager, marginFees);
+        hookManager =
+            new MarginHookManager{salt: salt}(address(this), manager, mirrorTokenManager, marginLiquidity, marginFees);
         assertEq(address(hookManager), hookAddress);
+        marginLiquidity.addHooks(hookAddress);
+
         tokenA.mint(address(this), 2 ** 255);
         tokenB.mint(address(this), 2 ** 255);
 
@@ -128,6 +134,7 @@ contract DeployHelper is Test {
         manager = new PoolManager(address(this));
         mirrorTokenManager = new MirrorTokenManager(address(this));
         marginFees = new MarginFees(address(this));
+        marginLiquidity = new MarginLiquidity(address(this), marginFees);
         marginOracle = new MarginOracle();
         deployMintAndApprove2Currencies();
     }

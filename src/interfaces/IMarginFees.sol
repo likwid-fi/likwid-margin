@@ -7,16 +7,17 @@ import {PoolId} from "v4-core/types/PoolId.sol";
 
 import {MarginParams, ReleaseParams} from "../types/MarginParams.sol";
 import {HookStatus} from "../types/HookStatus.sol";
+import {IMarginLiquidity} from "./IMarginLiquidity.sol";
 
 interface IMarginFees {
     function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId);
 
     function getLevelPool(uint256 uPoolId, uint8 level) external pure returns (uint256 lPoolId);
 
-    function getStaticSupplies(address hook, uint256 uPoolId)
+    function getRetainSupplies(IMarginLiquidity liquidity, address hook, uint256 uPoolId)
         external
         view
-        returns (uint256 staticSupply0, uint256 staticSupply1);
+        returns (uint256 retainSupply0, uint256 retainSupply1);
 
     function getInitialLTV(address hook, PoolId poolId) external view returns (uint24 _initialLTV);
 
