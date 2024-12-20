@@ -17,5 +17,8 @@ interface IMarginLiquidity is IERC6909Claims {
 
     function getLevelPool(uint256 uPoolId, uint8 level) external pure returns (uint256 lPoolId);
 
-    function getRetainSupplies(uint256 uPoolId) external view returns (uint256 retainSupply0, uint256 retainSupply1);
+    function getSupplies(uint256 uPoolId)
+        external
+        view
+        returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1);
 }

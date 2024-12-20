@@ -19,10 +19,12 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         _;
     }
 
+    // ******************** OWNER CALL ********************
     function addHooks(address _hook) external onlyOwner {
         hooks[_hook] = true;
     }
 
+    // ********************  HOOK CALL ********************
     function mint(address receiver, uint256 id, uint256 amount) external onlyHook {
         unchecked {
             _mint(receiver, id, amount);
@@ -53,6 +55,24 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         }
     }
 
+    function getSupplies(uint256 uPoolId)
+        external
+        view
+        onlyHook
+        returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1)
+    {
+        uPoolId = uPoolId & LP_FLAG;
+        address hook = msg.sender;
+        totalSupply = balanceOf[hook][uPoolId];
+        uint256 lPoolId = uPoolId + 1;
+        retainSupply0 = retainSupply1 = balanceOf[hook][lPoolId];
+        lPoolId = uPoolId + 2;
+        retainSupply0 += balanceOf[hook][lPoolId];
+        lPoolId = uPoolId + 3;
+        retainSupply1 += balanceOf[hook][lPoolId];
+    }
+
+    // ******************** EXTERNAL CALL ********************
     function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId) {
         uPoolId = uint256(PoolId.unwrap(poolId)) & LP_FLAG;
     }
@@ -67,15 +87,5 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
             uint256 lPoolId = uPoolId + 1 + i;
             liquidities[i] = balanceOf[owner][lPoolId];
         }
-    }
-
-    function getRetainSupplies(uint256 uPoolId) external view returns (uint256 retainSupply0, uint256 retainSupply1) {
-        uint256 lPoolId = (uPoolId & LP_FLAG) + 1;
-        address sender = msg.sender;
-        retainSupply0 = retainSupply1 = balanceOf[sender][lPoolId];
-        lPoolId = (uPoolId & LP_FLAG) + 2;
-        retainSupply0 += balanceOf[sender][lPoolId];
-        lPoolId = (uPoolId & LP_FLAG) + 3;
-        retainSupply1 += balanceOf[sender][lPoolId];
     }
 }

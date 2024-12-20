@@ -11,7 +11,6 @@ import {TruncatedOracle} from "./libraries/TruncatedOracle.sol";
 import {RateStatus} from "./types/RateStatus.sol";
 import {HookStatus, BalanceStatus, FeeStatus} from "./types/HookStatus.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
-import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {TimeUtils} from "./libraries/TimeUtils.sol";
 

@@ -448,8 +448,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         {
             (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
             feeOn = _mintFee(uPoolId, _reserve0, _reserve1);
-            uint256 _totalSupply = marginLiquidity.balanceOf(address(this), uPoolId);
-            (uint256 retainSupply0, uint256 retainSupply1) = marginLiquidity.getRetainSupplies(uPoolId);
+            (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) = marginLiquidity.getSupplies(uPoolId);
             // zero enable margin
             if (params.level == 3 || params.level == 4) {
                 amount0 = params.liquidity * _reserve0 / _totalSupply;
@@ -539,14 +538,21 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
             ? (status.key.currency0, status.key.currency1)
             : (status.key.currency1, status.key.currency0);
         bool zeroForOne = params.marginForOne;
-        uint256 borrowReserves = zeroForOne ? status.realReserve0 : status.realReserve1;
+        uint256 borrowReserves;
+        {
+            uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
+            (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) = marginLiquidity.getSupplies(uPoolId);
+            uint256 borrowReserves0 = (_totalSupply - retainSupply0) * status.realReserve0 / _totalSupply;
+            uint256 borrowReserves1 = (_totalSupply - retainSupply1) * status.realReserve1 / _totalSupply;
+            borrowReserves = zeroForOne ? borrowReserves0 : borrowReserves1;
+        }
         uint24 _initialLTV = marginFees.getInitialLTV(address(this), params.poolId);
         uint256 marginTotal = params.marginAmount * params.leverage * _initialLTV / ONE_MILLION;
         borrowAmount = _getAmountIn(status, zeroForOne, marginTotal);
         require(borrowReserves > borrowAmount, "TOKEN_NOT_ENOUGH");
-        marginTotal = _getAmountOut(status, zeroForOne, borrowAmount);
         // send total token
         marginWithoutFee = marginTotal * (ONE_MILLION - status.feeStatus.marginFee) / ONE_MILLION;
+
         marginCurrency.settle(poolManager, address(this), marginWithoutFee, true);
         marginCurrency.take(poolManager, _positionManager, marginWithoutFee, false);
         // mint mirror token
