@@ -134,7 +134,7 @@ contract DeployHelper is Test {
         manager = new PoolManager(address(this));
         mirrorTokenManager = new MirrorTokenManager(address(this));
         marginFees = new MarginFees(address(this));
-        marginLiquidity = new MarginLiquidity(address(this), marginFees);
+        marginLiquidity = new MarginLiquidity(address(this));
         marginOracle = new MarginOracle();
         deployMintAndApprove2Currencies();
     }

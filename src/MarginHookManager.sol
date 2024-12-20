@@ -277,7 +277,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
                     uint256 denominator = (rootK * protocolRatio) + rootKLast;
                     uint256 liquidity = numerator / denominator;
                     if (liquidity > 0) {
-                        uint256 poolId = marginFees.getLevelPool(uPoolId, 4);
+                        uint256 poolId = marginLiquidity.getLevelPool(uPoolId, 4);
                         marginLiquidity.mint(feeTo, poolId, liquidity);
                     }
                 }
@@ -387,7 +387,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         require(params.amount0 > 0 && params.amount1 > 0, "AMOUNT_ERR");
         HookStatus memory status = getStatus(params.poolId);
         _setBalances(status.key);
-        uint256 uPoolId = marginFees.getPoolId(params.poolId);
+        uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
         (uint112 interest0, uint112 interest1) = marginFees.getInterests(status);
         bool feeOn;
         {
@@ -442,15 +442,14 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
     {
         HookStatus memory status = getStatus(params.poolId);
         _setBalances(status.key);
-        uint256 uPoolId = marginFees.getPoolId(params.poolId);
+        uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
         (uint112 interest0, uint112 interest1) = marginFees.getInterests(status);
         bool feeOn;
         {
             (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
             feeOn = _mintFee(uPoolId, _reserve0, _reserve1);
             uint256 _totalSupply = marginLiquidity.balanceOf(address(this), uPoolId);
-            (uint256 retainSupply0, uint256 retainSupply1) =
-                marginFees.getRetainSupplies(marginLiquidity, address(this), uPoolId);
+            (uint256 retainSupply0, uint256 retainSupply1) = marginLiquidity.getRetainSupplies(uPoolId);
             // zero enable margin
             if (params.level == 3 || params.level == 4) {
                 amount0 = params.liquidity * _reserve0 / _totalSupply;

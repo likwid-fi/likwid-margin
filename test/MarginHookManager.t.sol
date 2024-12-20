@@ -51,8 +51,8 @@ contract MarginHookManagerTest is DeployHelper {
             deadline: type(uint256).max
         });
         hookManager.addLiquidity{value: amount0}(params);
-        uint256 uPoolId = marginFees.getPoolId(poolId);
-        uint256 liquidity = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        uint256 uPoolId = marginLiquidity.getPoolId(poolId);
+        uint256 liquidity = marginLiquidity.balanceOf(address(this), marginLiquidity.getLevelPool(uPoolId, 4));
         assertGt(liquidity, 0);
         (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
@@ -60,7 +60,7 @@ contract MarginHookManagerTest is DeployHelper {
         RemoveLiquidityParams memory removeParams =
             RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
         hookManager.removeLiquidity(removeParams);
-        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), marginLiquidity.getLevelPool(uPoolId, 4));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
     }
 
@@ -79,8 +79,8 @@ contract MarginHookManagerTest is DeployHelper {
             deadline: type(uint256).max
         });
         hookManager.addLiquidity(params);
-        uint256 uPoolId = marginFees.getPoolId(poolId);
-        uint256 liquidity = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        uint256 uPoolId = marginLiquidity.getPoolId(poolId);
+        uint256 liquidity = marginLiquidity.balanceOf(address(this), marginLiquidity.getLevelPool(uPoolId, 4));
         assertGt(liquidity, 0);
         (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
@@ -88,7 +88,7 @@ contract MarginHookManagerTest is DeployHelper {
         RemoveLiquidityParams memory removeParams =
             RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
         hookManager.removeLiquidity(removeParams);
-        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), marginLiquidity.getLevelPool(uPoolId, 4));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
     }
 
@@ -107,14 +107,14 @@ contract MarginHookManagerTest is DeployHelper {
             deadline: type(uint256).max
         });
         hookManager.addLiquidity{value: amount0}(params);
-        uint256 uPoolId = marginFees.getPoolId(poolId);
+        uint256 uPoolId = marginLiquidity.getPoolId(poolId);
         console.logBytes32(PoolId.unwrap(poolId));
-        console.logBytes32(bytes32(marginFees.getLevelPool(uPoolId, 0)));
-        console.logBytes32(bytes32(marginFees.getLevelPool(uPoolId, 1)));
-        console.logBytes32(bytes32(marginFees.getLevelPool(uPoolId, 2)));
-        console.logBytes32(bytes32(marginFees.getLevelPool(uPoolId, 3)));
-        console.logBytes32(bytes32(marginFees.getLevelPool(uPoolId, 4)));
-        uint256 liquidity = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        console.logBytes32(bytes32(marginLiquidity.getLevelPool(uPoolId, 0)));
+        console.logBytes32(bytes32(marginLiquidity.getLevelPool(uPoolId, 1)));
+        console.logBytes32(bytes32(marginLiquidity.getLevelPool(uPoolId, 2)));
+        console.logBytes32(bytes32(marginLiquidity.getLevelPool(uPoolId, 3)));
+        console.logBytes32(bytes32(marginLiquidity.getLevelPool(uPoolId, 4)));
+        uint256 liquidity = marginLiquidity.balanceOf(address(this), marginLiquidity.getLevelPool(uPoolId, 4));
         assertGt(liquidity, 0);
         (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
@@ -122,7 +122,7 @@ contract MarginHookManagerTest is DeployHelper {
         RemoveLiquidityParams memory removeParams =
             RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
         hookManager.removeLiquidity(removeParams);
-        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), marginLiquidity.getLevelPool(uPoolId, 4));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
     }
 
@@ -150,8 +150,8 @@ contract MarginHookManagerTest is DeployHelper {
             hookManager.addLiquidity{value: amount0}(params);
             vm.stopPrank();
         }
-        uint256 uPoolId = marginFees.getPoolId(poolId);
-        uint256 feeLiquidity = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        uint256 uPoolId = marginLiquidity.getPoolId(poolId);
+        uint256 feeLiquidity = marginLiquidity.balanceOf(address(this), marginLiquidity.getLevelPool(uPoolId, 4));
         console.log("feeLiquidity:%s,kLast:%s", feeLiquidity, hookManager.kLast());
         {
             vm.startPrank(user);
@@ -171,7 +171,7 @@ contract MarginHookManagerTest is DeployHelper {
             hookManager.addLiquidity{value: amount0}(params);
             vm.stopPrank();
         }
-        feeLiquidity = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        feeLiquidity = marginLiquidity.balanceOf(address(this), marginLiquidity.getLevelPool(uPoolId, 4));
         console.log("feeLiquidity:%s,kLast:%s", feeLiquidity, hookManager.kLast());
         {
             vm.startPrank(user);
@@ -191,7 +191,7 @@ contract MarginHookManagerTest is DeployHelper {
             hookManager.addLiquidity{value: amount0}(params);
             vm.stopPrank();
         }
-        feeLiquidity = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        feeLiquidity = marginLiquidity.balanceOf(address(this), marginLiquidity.getLevelPool(uPoolId, 4));
         console.log("feeLiquidity:%s,kLast:%s", feeLiquidity, hookManager.kLast());
         {
             uint256 amountIn = 0.0123 ether;
@@ -235,14 +235,14 @@ contract MarginHookManagerTest is DeployHelper {
         }
         {
             vm.startPrank(user);
-            uint256 liquidity = marginLiquidity.balanceOf(user, marginFees.getLevelPool(uPoolId, 4));
+            uint256 liquidity = marginLiquidity.balanceOf(user, marginLiquidity.getLevelPool(uPoolId, 4));
             assertGt(liquidity, 0);
             RemoveLiquidityParams memory removeParams =
                 RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
             hookManager.removeLiquidity(removeParams);
             vm.stopPrank();
         }
-        feeLiquidity = marginLiquidity.balanceOf(address(this), marginFees.getLevelPool(uPoolId, 4));
+        feeLiquidity = marginLiquidity.balanceOf(address(this), marginLiquidity.getLevelPool(uPoolId, 4));
         console.log("feeLiquidity:%s,kLast:%s", feeLiquidity, hookManager.kLast());
     }
 }

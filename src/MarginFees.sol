@@ -24,7 +24,6 @@ contract MarginFees is IMarginFees, Owned {
     uint256 public constant ONE_MILLION = 10 ** 6;
     uint256 public constant ONE_BILLION = 10 ** 9;
     uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
-    uint256 public constant LP_FLAG = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0;
 
     uint24 initialLTV = 500000; // 50%
     uint24 liquidationLTV = 900000; // 90%
@@ -46,40 +45,6 @@ contract MarginFees is IMarginFees, Owned {
             mHigh: 10000
         });
         feeTo = initialOwner;
-    }
-
-    function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId) {
-        uPoolId = uint256(PoolId.unwrap(poolId)) & LP_FLAG;
-    }
-
-    function getLevelPool(uint256 uPoolId, uint8 level) external pure returns (uint256 lPoolId) {
-        lPoolId = (uPoolId & LP_FLAG) + level;
-    }
-
-    function getPoolLiquidities(address marginLiquidity, PoolId poolId, address owner)
-        external
-        view
-        returns (uint256[4] memory liquidities)
-    {
-        IMarginLiquidity liquidity = IMarginLiquidity(marginLiquidity);
-        uint256 uPoolId = uint256(PoolId.unwrap(poolId)) & LP_FLAG;
-        for (uint256 i = 0; i < 4; i++) {
-            uint256 lPoolId = uPoolId + 1 + i;
-            liquidities[i] = liquidity.balanceOf(owner, lPoolId);
-        }
-    }
-
-    function getRetainSupplies(IMarginLiquidity liquidity, address hook, uint256 uPoolId)
-        external
-        view
-        returns (uint256 retainSupply0, uint256 retainSupply1)
-    {
-        uint256 lPoolId = (uPoolId & LP_FLAG) + 1;
-        retainSupply0 = retainSupply1 = liquidity.balanceOf(hook, lPoolId);
-        lPoolId = (uPoolId & LP_FLAG) + 2;
-        retainSupply0 += liquidity.balanceOf(hook, lPoolId);
-        lPoolId = (uPoolId & LP_FLAG) + 3;
-        retainSupply1 += liquidity.balanceOf(hook, lPoolId);
     }
 
     function getInitialLTV(address hook, PoolId poolId) external view returns (uint24 _initialLTV) {
