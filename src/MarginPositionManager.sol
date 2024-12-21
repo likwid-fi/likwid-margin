@@ -139,9 +139,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         HookStatus memory status = hook.getStatus(poolId);
         uint24 _initialLTV = hook.marginFees().getInitialLTV(address(hook), poolId);
         uint256 marginTotal = marginAmount * leverage * _initialLTV / ONE_MILLION;
-        bool zeroForOne = marginForOne;
-        borrowAmount = hook.getAmountIn(poolId, zeroForOne, marginTotal);
-        marginTotal = hook.getAmountOut(poolId, zeroForOne, borrowAmount);
+        borrowAmount = hook.getAmountIn(poolId, marginForOne, marginTotal);
         marginWithoutFee = marginTotal * (ONE_MILLION - status.feeStatus.marginFee) / ONE_MILLION;
     }
 
@@ -152,9 +150,12 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     {
         HookStatus memory status = hook.getStatus(poolId);
         uint24 _initialLTV = hook.marginFees().getInitialLTV(address(hook), poolId);
-        bool zeroForOne = marginForOne;
-        borrowAmount = zeroForOne ? status.realReserve0 : status.realReserve1;
-        uint256 marginMaxTotal = hook.getAmountOut(poolId, zeroForOne, borrowAmount);
+        (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) =
+            hook.marginLiquidity().getPoolSupplies(address(hook), poolId);
+        uint256 marginReserve0 = (_totalSupply - retainSupply0) * status.realReserve0 / _totalSupply;
+        uint256 marginReserve1 = (_totalSupply - retainSupply1) * status.realReserve1 / _totalSupply;
+        uint256 marginMaxTotal = (marginForOne ? marginReserve1 : marginReserve0) - 1000;
+        borrowAmount = hook.getAmountIn(poolId, marginForOne, marginMaxTotal);
         marginMax = marginMaxTotal * ONE_MILLION / leverage / _initialLTV;
     }
 

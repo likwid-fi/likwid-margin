@@ -8,9 +8,11 @@ import {PoolId} from "v4-core/types/PoolId.sol";
 import {MarginParams, ReleaseParams} from "../types/MarginParams.sol";
 import {HookStatus} from "../types/HookStatus.sol";
 import {IMarginFees} from "../interfaces/IMarginFees.sol";
+import {IMarginLiquidity} from "../interfaces/IMarginLiquidity.sol";
 
 interface IMarginHookManager {
     function marginFees() external view returns (IMarginFees);
+    function marginLiquidity() external view returns (IMarginLiquidity);
 
     function getStatus(PoolId poolId) external view returns (HookStatus memory);
 

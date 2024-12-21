@@ -538,18 +538,18 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
             ? (status.key.currency0, status.key.currency1)
             : (status.key.currency1, status.key.currency0);
         bool zeroForOne = params.marginForOne;
-        uint256 borrowReserves;
+        uint256 marginReserves;
         {
             uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
             (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) = marginLiquidity.getSupplies(uPoolId);
-            uint256 borrowReserves0 = (_totalSupply - retainSupply0) * status.realReserve0 / _totalSupply;
-            uint256 borrowReserves1 = (_totalSupply - retainSupply1) * status.realReserve1 / _totalSupply;
-            borrowReserves = zeroForOne ? borrowReserves0 : borrowReserves1;
+            uint256 marginReserve0 = (_totalSupply - retainSupply0) * status.realReserve0 / _totalSupply;
+            uint256 marginReserve1 = (_totalSupply - retainSupply1) * status.realReserve1 / _totalSupply;
+            marginReserves = params.marginForOne ? marginReserve1 : marginReserve0;
         }
         uint24 _initialLTV = marginFees.getInitialLTV(address(this), params.poolId);
         uint256 marginTotal = params.marginAmount * params.leverage * _initialLTV / ONE_MILLION;
+        require(marginReserves >= marginTotal, "TOKEN_NOT_ENOUGH");
         borrowAmount = _getAmountIn(status, zeroForOne, marginTotal);
-        require(borrowReserves > borrowAmount, "TOKEN_NOT_ENOUGH");
         // send total token
         marginWithoutFee = marginTotal * (ONE_MILLION - status.feeStatus.marginFee) / ONE_MILLION;
 

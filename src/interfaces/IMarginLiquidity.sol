@@ -21,4 +21,9 @@ interface IMarginLiquidity is IERC6909Claims {
         external
         view
         returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1);
+
+    function getPoolSupplies(address hook, PoolId poolId)
+        external
+        view
+        returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1);
 }

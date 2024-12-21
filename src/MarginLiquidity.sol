@@ -19,6 +19,25 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         _;
     }
 
+    function _getPoolId(PoolId poolId) internal pure returns (uint256 uPoolId) {
+        uPoolId = uint256(PoolId.unwrap(poolId)) & LP_FLAG;
+    }
+
+    function _getPoolSupplies(address hook, uint256 uPoolId)
+        internal
+        view
+        returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1)
+    {
+        uPoolId = uPoolId & LP_FLAG;
+        totalSupply = balanceOf[hook][uPoolId];
+        uint256 lPoolId = uPoolId + 1;
+        retainSupply0 = retainSupply1 = balanceOf[hook][lPoolId];
+        lPoolId = uPoolId + 2;
+        retainSupply0 += balanceOf[hook][lPoolId];
+        lPoolId = uPoolId + 3;
+        retainSupply1 += balanceOf[hook][lPoolId];
+    }
+
     // ******************** OWNER CALL ********************
     function addHooks(address _hook) external onlyOwner {
         hooks[_hook] = true;
@@ -61,20 +80,21 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         onlyHook
         returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1)
     {
-        uPoolId = uPoolId & LP_FLAG;
-        address hook = msg.sender;
-        totalSupply = balanceOf[hook][uPoolId];
-        uint256 lPoolId = uPoolId + 1;
-        retainSupply0 = retainSupply1 = balanceOf[hook][lPoolId];
-        lPoolId = uPoolId + 2;
-        retainSupply0 += balanceOf[hook][lPoolId];
-        lPoolId = uPoolId + 3;
-        retainSupply1 += balanceOf[hook][lPoolId];
+        (totalSupply, retainSupply0, retainSupply1) = _getPoolSupplies(msg.sender, uPoolId);
     }
 
     // ******************** EXTERNAL CALL ********************
     function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId) {
-        uPoolId = uint256(PoolId.unwrap(poolId)) & LP_FLAG;
+        uPoolId = _getPoolId(poolId);
+    }
+
+    function getPoolSupplies(address hook, PoolId poolId)
+        external
+        view
+        returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1)
+    {
+        uint256 uPoolId = _getPoolId(poolId);
+        (totalSupply, retainSupply0, retainSupply1) = _getPoolSupplies(hook, uPoolId);
     }
 
     function getLevelPool(uint256 uPoolId, uint8 level) external pure returns (uint256 lPoolId) {
