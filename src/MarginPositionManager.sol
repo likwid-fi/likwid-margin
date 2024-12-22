@@ -154,7 +154,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             hook.marginLiquidity().getPoolSupplies(address(hook), poolId);
         uint256 marginReserve0 = (_totalSupply - retainSupply0) * status.realReserve0 / _totalSupply;
         uint256 marginReserve1 = (_totalSupply - retainSupply1) * status.realReserve1 / _totalSupply;
-        uint256 marginMaxTotal = (marginForOne ? marginReserve1 : marginReserve0) - 1000;
+        uint256 marginMaxTotal = (marginForOne ? marginReserve1 : marginReserve0);
+        if (marginMaxTotal > 1000) {
+            marginMaxTotal -= 1000;
+        }
         borrowAmount = hook.getAmountIn(poolId, marginForOne, marginMaxTotal);
         marginMax = marginMaxTotal * ONE_MILLION / leverage / _initialLTV;
     }
