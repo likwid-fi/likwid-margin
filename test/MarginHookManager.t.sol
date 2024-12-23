@@ -245,4 +245,93 @@ contract MarginHookManagerTest is DeployHelper {
         feeLiquidity = marginLiquidity.balanceOf(address(this), marginLiquidity.getLevelPool(uPoolId, 4));
         console.log("feeLiquidity:%s,kLast:%s", feeLiquidity, hookManager.kLast());
     }
+
+    function test_hook_liquidity_level() public {
+        address user = vm.addr(1);
+        tokenUSDT.transfer(user, 10 ether);
+        (bool success,) = user.call{value: 10 ether}("");
+        assertTrue(success);
+        PoolId poolId = usdtKey.toId();
+        {
+            vm.startPrank(user);
+            uint256 amount0 = 1 ether;
+            uint256 amount1 = 1 ether;
+            tokenUSDT.approve(address(hookManager), amount1);
+            AddLiquidityParams memory params = AddLiquidityParams({
+                poolId: poolId,
+                amount0: amount0,
+                amount1: amount1,
+                tickLower: 50000,
+                tickUpper: 50000,
+                to: user,
+                level: 1,
+                deadline: type(uint256).max
+            });
+            hookManager.addLiquidity{value: amount0}(params);
+            vm.stopPrank();
+        }
+        (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) =
+            marginLiquidity.getPoolSupplies(address(hookManager), poolId);
+        console.log("totalSupply:%s,retainSupply0:%s,retainSupply1:%s", totalSupply, retainSupply0, retainSupply1);
+        {
+            vm.startPrank(user);
+            uint256 amount0 = 1 ether;
+            uint256 amount1 = 1 ether;
+            tokenUSDT.approve(address(hookManager), amount1);
+            AddLiquidityParams memory params = AddLiquidityParams({
+                poolId: poolId,
+                amount0: amount0,
+                amount1: amount1,
+                tickLower: 50000,
+                tickUpper: 50000,
+                to: user,
+                level: 2,
+                deadline: type(uint256).max
+            });
+            hookManager.addLiquidity{value: amount0}(params);
+            vm.stopPrank();
+        }
+        (totalSupply, retainSupply0, retainSupply1) = marginLiquidity.getPoolSupplies(address(hookManager), poolId);
+        console.log("totalSupply:%s,retainSupply0:%s,retainSupply1:%s", totalSupply, retainSupply0, retainSupply1);
+        {
+            vm.startPrank(user);
+            uint256 amount0 = 1 ether;
+            uint256 amount1 = 1 ether;
+            tokenUSDT.approve(address(hookManager), amount1);
+            AddLiquidityParams memory params = AddLiquidityParams({
+                poolId: poolId,
+                amount0: amount0,
+                amount1: amount1,
+                tickLower: 50000,
+                tickUpper: 50000,
+                to: user,
+                level: 3,
+                deadline: type(uint256).max
+            });
+            hookManager.addLiquidity{value: amount0}(params);
+            vm.stopPrank();
+        }
+        (totalSupply, retainSupply0, retainSupply1) = marginLiquidity.getPoolSupplies(address(hookManager), poolId);
+        console.log("totalSupply:%s,retainSupply0:%s,retainSupply1:%s", totalSupply, retainSupply0, retainSupply1);
+        {
+            vm.startPrank(user);
+            uint256 amount0 = 1 ether;
+            uint256 amount1 = 1 ether;
+            tokenUSDT.approve(address(hookManager), amount1);
+            AddLiquidityParams memory params = AddLiquidityParams({
+                poolId: poolId,
+                amount0: amount0,
+                amount1: amount1,
+                tickLower: 50000,
+                tickUpper: 50000,
+                to: user,
+                level: 4,
+                deadline: type(uint256).max
+            });
+            hookManager.addLiquidity{value: amount0}(params);
+            vm.stopPrank();
+        }
+        (totalSupply, retainSupply0, retainSupply1) = marginLiquidity.getPoolSupplies(address(hookManager), poolId);
+        console.log("totalSupply:%s,retainSupply0:%s,retainSupply1:%s", totalSupply, retainSupply0, retainSupply1);
+    }
 }

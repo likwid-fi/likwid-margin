@@ -515,10 +515,6 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         hookStatusStore[poolId].feeStatus = feeStatus;
     }
 
-    function withdrawFee(address token, address to, uint256 amount) external onlyOwner returns (bool success) {
-        success = Currency.wrap(token).transfer(to, address(this), amount);
-    }
-
     // ******************** MARGIN FUNCTIONS ********************
 
     function margin(MarginParams memory params) external positionOnly returns (MarginParams memory) {

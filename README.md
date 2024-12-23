@@ -48,9 +48,9 @@ anvil
 ### Deploy
 
 ```shell
-forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-source .env & forge script script/DeployHook.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
-## --num-of-optimizations 1000000 默认是200
+source ../envs/likwid-margin.env
+forge script script/DeployHook.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
+## --num-of-optimizations 1000000 default:200
 forge verify-contract \
     --chain-id 11155111 \
     --evm-version cancun \

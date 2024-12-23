@@ -82,9 +82,14 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         _;
     }
 
+    modifier onlyMargin() {
+        require(msg.sender == address(hook.poolManager()) || msg.sender == address(this), "ONLY_MARGIN");
+        _;
+    }
+
     function transferNative(address to, uint256 amount) internal {
         (bool success,) = to.call{value: amount}("");
-        require(success, "Transfer failed.");
+        require(success, "TRANSFER_FAILED");
     }
 
     function setHook(address _hook) external onlyOwner {
@@ -167,7 +172,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         Currency marginToken = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
         require(checkAmount(marginToken, msg.sender, address(this), params.marginAmount), "INSUFFICIENT_AMOUNT");
         bool success = marginToken.transfer(msg.sender, address(this), params.marginAmount);
-        require(success, "MARGIN_ERR");
+        require(success, "MARGIN_TRANSFER_FAILED");
         uint256 positionId = _borrowPositions[params.poolId][params.marginForOne][params.recipient];
         params = hook.margin(params);
         uint256 rateLast = hook.marginFees().getBorrowRateCumulativeLast(_status, params.marginForOne);
@@ -480,9 +485,5 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         );
     }
 
-    function withdrawFee(address token, address to, uint256 amount) external onlyOwner returns (bool success) {
-        success = Currency.wrap(token).transfer(to, address(this), amount);
-    }
-
-    receive() external payable {}
+    receive() external payable onlyMargin {}
 }

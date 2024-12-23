@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {IImmutableState} from "v4-periphery/src/interfaces/IImmutableState.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 
@@ -10,8 +11,9 @@ import {HookStatus} from "../types/HookStatus.sol";
 import {IMarginFees} from "../interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "../interfaces/IMarginLiquidity.sol";
 
-interface IMarginHookManager {
+interface IMarginHookManager is IImmutableState {
     function marginFees() external view returns (IMarginFees);
+
     function marginLiquidity() external view returns (IMarginLiquidity);
 
     function getStatus(PoolId poolId) external view returns (HookStatus memory);
