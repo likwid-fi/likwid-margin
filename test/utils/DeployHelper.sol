@@ -9,6 +9,7 @@ import {MarginPositionManager} from "../../src/MarginPositionManager.sol";
 import {MarginRouter} from "../../src/MarginRouter.sol";
 import {MarginOracle} from "../../src/MarginOracle.sol";
 import {MarginFees} from "../../src/MarginFees.sol";
+import {MarginChecker} from "../../src/MarginChecker.sol";
 import {HookParams} from "../../src/types/HookParams.sol";
 import {HookStatus} from "../../src/types/HookStatus.sol";
 import {MarginParams} from "../../src/types/MarginParams.sol";
@@ -60,6 +61,7 @@ contract DeployHelper is Test {
     MarginRouter swapRouter;
     MarginOracle marginOracle;
     MarginFees marginFees;
+    MarginChecker marginChecker;
 
     function deployMintAndApprove2Currencies() internal {
         tokenA = new MockERC20("TESTA", "TESTA", 18);
@@ -119,7 +121,8 @@ contract DeployHelper is Test {
         hookManager.initialize(nativeKey);
         hookManager.initialize(usdtKey);
 
-        marginPositionManager = new MarginPositionManager(address(this));
+        marginChecker = new MarginChecker(address(this));
+        marginPositionManager = new MarginPositionManager(address(this), marginChecker);
         marginPositionManager.setHook(address(hookManager));
         hookManager.addPositionManager(address(marginPositionManager));
         marginPositionManager.setMarginOracle(address(marginOracle));

@@ -365,7 +365,7 @@ contract MarginPositionManagerTest is DeployHelper {
             address(hookManager).balance,
             address(marginPositionManager).balance
         );
-        marginPositionManager.liquidateBurn(positionId);
+        marginPositionManager.liquidateBurn(positionId, "");
         position = marginPositionManager.getPosition(positionId);
         console.log(
             "after liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
@@ -438,7 +438,7 @@ contract MarginPositionManagerTest is DeployHelper {
             address(hookManager).balance,
             address(marginPositionManager).balance
         );
-        marginPositionManager.liquidateBurn(positionId);
+        marginPositionManager.liquidateBurn(positionId, "");
         position = marginPositionManager.getPosition(positionId);
         console.log(
             "after liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",

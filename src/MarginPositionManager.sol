@@ -12,6 +12,7 @@ import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
+import {IMarginChecker} from "./interfaces/IMarginChecker.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
 import {HookStatus} from "./types/HookStatus.sol";
 import {MarginParams, ReleaseParams} from "./types/MarginParams.sol";
@@ -61,13 +62,19 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     uint256 private _nextId = 1;
     uint256 public marginMinAmount = 0.1 ether;
     IMarginHookManager private hook;
+    IMarginChecker public checker;
     address public marginOracle;
 
     mapping(uint256 => MarginPosition) private _positions;
     mapping(address => uint256) private _hookPositions;
     mapping(PoolId => mapping(bool => mapping(address => uint256))) private _borrowPositions;
 
-    constructor(address initialOwner) ERC721("LIKWIDMarginPositionManager", "LMPM") Owned(initialOwner) {}
+    constructor(address initialOwner, IMarginChecker _checker)
+        ERC721("LIKWIDMarginPositionManager", "LMPM")
+        Owned(initialOwner)
+    {
+        checker = _checker;
+    }
 
     function _burnPosition(uint256 positionId) internal {
         // _burn(positionId);
@@ -102,6 +109,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
 
     function setMarginOracle(address _oracle) external onlyOwner {
         marginOracle = _oracle;
+    }
+
+    function setMarginChecker(address _checker) external onlyOwner {
+        checker = IMarginChecker(_checker);
     }
 
     function getPosition(uint256 positionId) public view returns (MarginPosition memory _position) {
@@ -375,7 +386,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         releaseAmount = Math.min(amountNeed, _position.marginAmount + _position.marginTotal);
     }
 
-    function liquidateBurn(uint256 positionId) external returns (uint256 profit) {
+    function liquidateBurn(uint256 positionId, bytes calldata signature) external returns (uint256 profit) {
+        require(checker.checkLiquidate(msg.sender, positionId, signature), "CHECK_ERROR");
         (bool liquidated, uint256 releaseAmount) = checkLiquidate(positionId);
         if (!liquidated) {
             return profit;
@@ -407,7 +419,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         _burnPosition(positionId);
     }
 
-    function liquidateCall(uint256 positionId) external payable returns (uint256 profit) {
+    function liquidateCall(uint256 positionId, bytes calldata signature) external payable returns (uint256 profit) {
+        require(checker.checkLiquidate(msg.sender, positionId, signature), "CHECK_ERROR");
         (bool liquidated,) = checkLiquidate(positionId);
         if (!liquidated) {
             return profit;
