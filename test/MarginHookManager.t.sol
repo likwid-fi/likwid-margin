@@ -254,8 +254,8 @@ contract MarginHookManagerTest is DeployHelper {
         PoolId poolId = usdtKey.toId();
         {
             vm.startPrank(user);
-            uint256 amount0 = 1 ether;
-            uint256 amount1 = 1 ether;
+            uint256 amount0 = 0.1 ether;
+            uint256 amount1 = 0.1 ether;
             tokenUSDT.approve(address(hookManager), amount1);
             AddLiquidityParams memory params = AddLiquidityParams({
                 poolId: poolId,
@@ -275,8 +275,8 @@ contract MarginHookManagerTest is DeployHelper {
         console.log("totalSupply:%s,retainSupply0:%s,retainSupply1:%s", totalSupply, retainSupply0, retainSupply1);
         {
             vm.startPrank(user);
-            uint256 amount0 = 1 ether;
-            uint256 amount1 = 1 ether;
+            uint256 amount0 = 0.2 ether;
+            uint256 amount1 = 0.2 ether;
             tokenUSDT.approve(address(hookManager), amount1);
             AddLiquidityParams memory params = AddLiquidityParams({
                 poolId: poolId,
@@ -295,8 +295,8 @@ contract MarginHookManagerTest is DeployHelper {
         console.log("totalSupply:%s,retainSupply0:%s,retainSupply1:%s", totalSupply, retainSupply0, retainSupply1);
         {
             vm.startPrank(user);
-            uint256 amount0 = 1 ether;
-            uint256 amount1 = 1 ether;
+            uint256 amount0 = 0.3 ether;
+            uint256 amount1 = 0.3 ether;
             tokenUSDT.approve(address(hookManager), amount1);
             AddLiquidityParams memory params = AddLiquidityParams({
                 poolId: poolId,
@@ -315,8 +315,8 @@ contract MarginHookManagerTest is DeployHelper {
         console.log("totalSupply:%s,retainSupply0:%s,retainSupply1:%s", totalSupply, retainSupply0, retainSupply1);
         {
             vm.startPrank(user);
-            uint256 amount0 = 1 ether;
-            uint256 amount1 = 1 ether;
+            uint256 amount0 = 0.4 ether;
+            uint256 amount1 = 0.4 ether;
             tokenUSDT.approve(address(hookManager), amount1);
             AddLiquidityParams memory params = AddLiquidityParams({
                 poolId: poolId,
@@ -333,5 +333,7 @@ contract MarginHookManagerTest is DeployHelper {
         }
         (totalSupply, retainSupply0, retainSupply1) = marginLiquidity.getPoolSupplies(address(hookManager), poolId);
         console.log("totalSupply:%s,retainSupply0:%s,retainSupply1:%s", totalSupply, retainSupply0, retainSupply1);
+        uint256[4] memory liquidities = marginLiquidity.getPoolLiquidities(poolId, user);
+        console.log(liquidities[0], liquidities[1], liquidities[2], liquidities[3]);
     }
 }

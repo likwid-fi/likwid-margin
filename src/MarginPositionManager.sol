@@ -121,6 +121,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             uint256 rateLast =
                 hook.marginFees().getBorrowRateCumulativeLast(address(hook), _position.poolId, _position.marginForOne);
             _position.borrowAmount = uint128(_position.borrowAmount * rateLast / _position.rateCumulativeLast);
+            _position.rateCumulativeLast = rateLast;
         }
     }
 
@@ -224,21 +225,30 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         return (positionId, params.borrowAmount);
     }
 
-    function release(uint256 positionId, Currency marginToken, uint256 repayAmount, uint256 borrowAmount) internal {
+    function release(
+        uint256 positionId,
+        Currency marginToken,
+        uint256 repayAmount,
+        uint256 borrowAmount,
+        uint256 repayRawAmount,
+        uint256 rateLast
+    ) internal {
         MarginPosition storage _position = _positions[positionId];
         (bool liquidated,) = _checkLiquidate(_position);
         require(!liquidated, "liquidated");
         // update position
+        _position.borrowAmount = uint128(borrowAmount - repayAmount);
         uint256 releaseMargin = _position.marginAmount * repayAmount / borrowAmount;
         uint256 releaseTotal = _position.marginTotal * repayAmount / borrowAmount;
-        _position.marginAmount -= uint128(releaseMargin);
-        _position.marginTotal -= uint128(releaseTotal);
-        _position.borrowAmount = uint128(borrowAmount - repayAmount);
-        _position.rawBorrowAmount = uint128(_position.rawBorrowAmount * (borrowAmount - repayAmount) / borrowAmount);
         bool success = marginToken.transfer(address(this), msg.sender, releaseMargin + releaseTotal);
         require(success, "RELEASE_TRANSFER_ERR");
         if (_position.borrowAmount == 0) {
             _burnPosition(positionId);
+        } else {
+            _position.marginAmount -= uint128(releaseMargin);
+            _position.marginTotal -= uint128(releaseTotal);
+            _position.rawBorrowAmount -= uint128(repayRawAmount);
+            _position.rateCumulativeLast = rateLast;
         }
     }
 
@@ -253,18 +263,21 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (repayAmount > _position.borrowAmount) {
             repayAmount = _position.borrowAmount;
         }
+        uint256 repayRawAmount = uint256(_position.rawBorrowAmount) * repayAmount / _position.borrowAmount;
         ReleaseParams memory params = ReleaseParams({
             poolId: _position.poolId,
             marginForOne: _position.marginForOne,
             payer: msg.sender,
-            rawBorrowAmount: _position.rawBorrowAmount * repayAmount / _position.borrowAmount,
+            rawBorrowAmount: repayRawAmount,
             repayAmount: repayAmount,
             releaseAmount: 0,
             deadline: deadline
         });
         uint256 sendValue = Math.min(repayAmount, msg.value);
         hook.release{value: sendValue}(params);
-        release(positionId, marginToken, repayAmount, _position.borrowAmount);
+        release(
+            positionId, marginToken, repayAmount, _position.borrowAmount, repayRawAmount, _position.rateCumulativeLast
+        );
         if (msg.value > sendValue) {
             transferNative(msg.sender, msg.value - sendValue);
         }
@@ -284,16 +297,20 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         uint256 releaseMargin,
         uint256 releaseTotal,
         uint256 repayAmount,
-        uint256 repayRawAmount
+        uint256 repayRawAmount,
+        uint256 rateLast
     ) internal {
         // update position
         MarginPosition storage sPosition = _positions[positionId];
-        sPosition.marginAmount -= uint128(releaseMargin);
-        sPosition.marginTotal -= uint128(releaseTotal);
         sPosition.borrowAmount -= uint128(repayAmount);
-        sPosition.rawBorrowAmount -= uint128(repayRawAmount);
+
         if (sPosition.borrowAmount == 0) {
             _burnPosition(positionId);
+        } else {
+            sPosition.marginAmount -= uint128(releaseMargin);
+            sPosition.marginTotal -= uint128(releaseTotal);
+            sPosition.rawBorrowAmount -= uint128(repayRawAmount);
+            sPosition.rateCumulativeLast = rateLast;
         }
     }
 
@@ -348,7 +365,14 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             require(success, "APPROVE_ERR");
             hook.release(params);
         }
-        close(positionId, releaseMargin + userMarginAmount, releaseTotal, params.repayAmount, params.rawBorrowAmount);
+        close(
+            positionId,
+            releaseMargin + userMarginAmount,
+            releaseTotal,
+            params.repayAmount,
+            params.rawBorrowAmount,
+            _position.rateCumulativeLast
+        );
         emit Close(_position.poolId, msg.sender, positionId, params.releaseAmount, params.repayAmount);
     }
 

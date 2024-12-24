@@ -270,6 +270,7 @@ contract MarginPositionManagerTest is DeployHelper {
         HookStatus memory status = hookManager.getStatus(poolId);
         uint256 positionId = marginPositionManager.getPositionId(poolId, false, user);
         assertGt(positionId, 0);
+        vm.warp(3600 * 20);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
         assertEq(status.mirrorReserve1, position.rawBorrowAmount);
         uint256 userBalance = user.balance;
@@ -277,13 +278,23 @@ contract MarginPositionManagerTest is DeployHelper {
         tokenB.approve(address(hookManager), repay);
         marginPositionManager.repay(positionId, repay, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
-        assertEq(position.borrowAmount - newPosition.borrowAmount, repay);
+        assertEq((position.borrowAmount - newPosition.borrowAmount), repay);
         assertEq(
             position.marginTotal + position.marginAmount - newPosition.marginTotal - newPosition.marginAmount,
             user.balance - userBalance
         );
         status = hookManager.getStatus(poolId);
         assertEq(status.mirrorReserve1, newPosition.rawBorrowAmount);
+
+        (uint112 interest0, uint112 interest1) = marginFees.getInterests(address(hookManager), poolId);
+        console.log("interest0:%s,interest1:%s", interest0, interest1);
+        assertEq(
+            (
+                (position.borrowAmount - newPosition.borrowAmount)
+                    - (position.rawBorrowAmount - newPosition.rawBorrowAmount)
+            ) / 10,
+            interest1 / 10
+        );
     }
 
     function test_hook_close_native() public {
