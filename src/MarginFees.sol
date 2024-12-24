@@ -66,20 +66,19 @@ contract MarginFees is IMarginFees, Owned {
     function dynamicFee(HookStatus memory status) public view returns (uint24 _fee) {
         uint32 blockTS = uint32(block.timestamp % 2 ** 32);
         uint256 timeElapsed;
-        if (status.feeStatus.lastMarginTimestamp <= blockTS) {
-            timeElapsed = blockTS - status.feeStatus.lastMarginTimestamp;
+        if (status.marginTimestampLast <= blockTS) {
+            timeElapsed = blockTS - status.marginTimestampLast;
         } else {
-            timeElapsed = (2 ** 32 - status.feeStatus.lastMarginTimestamp) + blockTS;
+            timeElapsed = (2 ** 32 - status.marginTimestampLast) + blockTS;
         }
         _fee = status.key.fee;
-        if (timeElapsed < dynamicFeeDurationSeconds && status.feeStatus.lastPrice1X112 > 0) {
+        uint256 lastPrice1X112 = status.lastPrice1X112;
+        if (timeElapsed < dynamicFeeDurationSeconds && lastPrice1X112 > 0) {
             (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
             uint224 price1X112 = UQ112x112.encode(uint112(_reserve0)).div(uint112(_reserve1));
-            uint256 priceDiff = price1X112 > status.feeStatus.lastPrice1X112
-                ? price1X112 - status.feeStatus.lastPrice1X112
-                : status.feeStatus.lastPrice1X112 - price1X112;
+            uint256 priceDiff = price1X112 > lastPrice1X112 ? price1X112 - lastPrice1X112 : lastPrice1X112 - price1X112;
             uint256 dFee = priceDiff * 1000 * dynamicFeeUnit * (dynamicFeeDurationSeconds - timeElapsed)
-                / (status.feeStatus.lastPrice1X112 * dynamicFeeDurationSeconds) * status.key.fee / 1000 + status.key.fee;
+                / (lastPrice1X112 * dynamicFeeDurationSeconds) * _fee / 1000 + _fee;
             if (dFee >= ONE_MILLION) {
                 _fee = uint24(ONE_MILLION) - 1;
             } else {

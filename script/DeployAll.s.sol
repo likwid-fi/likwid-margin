@@ -7,6 +7,7 @@ import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {HookMiner} from "../test/utils/HookMiner.sol";
 import {IMarginHookManager} from "../src/interfaces/IMarginHookManager.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
+import {MarginLiquidity} from "../src/MarginLiquidity.sol";
 import {MarginChecker} from "../src/MarginChecker.sol";
 import {MarginOracle} from "../src/MarginOracle.sol";
 import {MarginFees} from "../src/MarginFees.sol";
@@ -15,9 +16,10 @@ import {MarginRouter} from "../src/MarginRouter.sol";
 
 contract DeployAllScript is Script {
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
-    address manager = payable(vm.envAddress("POOL_MANAGER_ADDR"));
+    address manager = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
     address owner = 0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1;
     MirrorTokenManager mirrorTokenManager;
+    MarginLiquidity marginLiquidity;
     MarginChecker marginChecker;
     MarginOracle marginOracle;
     MarginFees marginFees;
@@ -28,6 +30,8 @@ contract DeployAllScript is Script {
         vm.startBroadcast();
         mirrorTokenManager = new MirrorTokenManager(owner);
         console2.log("mirrorTokenManager:", address(mirrorTokenManager));
+        marginLiquidity = new MarginLiquidity(owner);
+        console2.log("marginLiquidity:", address(marginLiquidity));
         marginChecker = new MarginChecker(owner);
         console2.log("marginChecker:", address(marginChecker));
         marginOracle = new MarginOracle();
@@ -37,7 +41,8 @@ contract DeployAllScript is Script {
 
         MarginPositionManager marginPositionManager = new MarginPositionManager(owner, marginChecker);
         console2.log("marginPositionManager", address(marginPositionManager));
-        bytes memory constructorArgs = abi.encode(owner, manager, address(mirrorTokenManager), address(marginFees));
+        bytes memory constructorArgs =
+            abi.encode(owner, manager, address(mirrorTokenManager), address(marginLiquidity), address(marginFees));
 
         uint160 flags =
             uint160(Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);

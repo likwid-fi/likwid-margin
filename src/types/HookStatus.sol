@@ -14,6 +14,8 @@ struct HookStatus {
     uint112 interestRatio1X112;
     uint256 rate0CumulativeLast;
     uint256 rate1CumulativeLast;
+    uint32 marginTimestampLast;
+    uint224 lastPrice1X112;
     PoolKey key;
     FeeStatus feeStatus;
 }
@@ -22,8 +24,6 @@ struct FeeStatus {
     uint24 initialLTV; // 50%
     uint24 liquidationLTV; // 90%
     uint24 marginFee; // 15000 = 1.5%
-    uint32 lastMarginTimestamp;
-    uint224 lastPrice1X112;
 }
 
 struct BalanceStatus {

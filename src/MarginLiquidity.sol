@@ -4,15 +4,18 @@ pragma solidity ^0.8.26;
 import {ERC6909Claims} from "v4-core/ERC6909Claims.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
-
+import {Math} from "./libraries/Math.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 
 contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
     uint256 public constant LP_FLAG = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0;
 
+    uint8 public protocolRatio;
     mapping(address => bool) public hooks;
 
-    constructor(address initialOwner) Owned(initialOwner) {}
+    constructor(address initialOwner) Owned(initialOwner) {
+        protocolRatio = 99; // 1/(protocolRatio+1)
+    }
 
     modifier onlyHook() {
         require(hooks[msg.sender], "UNAUTHORIZED");
@@ -53,6 +56,30 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
     function burn(address sender, uint256 id, uint256 amount) external onlyHook {
         unchecked {
             _burn(sender, id, amount);
+        }
+    }
+
+    function mintFee(address feeTo, uint256 _kLast, uint256 uPoolId, uint256 _reserve0, uint256 _reserve1)
+        external
+        onlyHook
+        returns (bool feeOn)
+    {
+        feeOn = feeTo != address(0);
+        if (feeOn) {
+            if (_kLast != 0) {
+                uint256 rootK = Math.sqrt(uint256(_reserve0) * _reserve1);
+                uint256 rootKLast = Math.sqrt(_kLast);
+                if (rootK > rootKLast) {
+                    uint256 _totalSupply = balanceOf[msg.sender][uPoolId];
+                    uint256 numerator = _totalSupply * (rootK - rootKLast);
+                    uint256 denominator = (rootK * protocolRatio) + rootKLast;
+                    uint256 liquidity = numerator / denominator;
+                    if (liquidity > 0) {
+                        uint256 poolId = (uPoolId & LP_FLAG) + 4;
+                        _mint(feeTo, poolId, liquidity);
+                    }
+                }
+            }
         }
     }
 

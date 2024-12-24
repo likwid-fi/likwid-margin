@@ -49,6 +49,7 @@ anvil
 
 ```shell
 source ../envs/likwid-margin.env
+forge script script/DeployAll.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
 forge script script/DeployHook.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
 ## --num-of-optimizations 1000000 default:200
 forge verify-contract \
