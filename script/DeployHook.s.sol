@@ -13,12 +13,13 @@ import {IMarginChecker} from "../src/interfaces/IMarginChecker.sol";
 
 contract DeployHookScript is Script {
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
-    address manager = payable(vm.envAddress("POOL_MANAGER_ADDR"));
+    address manager = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
     address owner = 0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1;
-    address mirrorTokenManager = 0xdE2666bF3C006F359B0129Cc29c5b2480ddF7c49;
-    address marginOracle = 0xaf1b2E78F24902210Ea0D66A4DE8489e342Bc735;
-    address marginChecker = 0x3B33E866eAfdb5e9676FAA9aC06EaB9299Bb4C59;
-    address marginFees = 0x3B33E866eAfdb5e9676FAA9aC06EaB9299Bb4C59;
+    address mirrorTokenManager = 0x3012A1E5c713FFb5CcCA46624c3f653653896999;
+    address marginLiquidity = 0xDD0AebD45cd5c339e366fB7DEF71143C78585a6f;
+    address marginChecker = 0x571371a6De330F4CEdF6a575E509e3603b765164;
+    address marginOracle = 0xfB2495C71142b4243e3C0CeA7301e38894f1d90E;
+    address marginFees = 0xB51794D6333D5995ef3fd5a2f791481aa06c5DB0;
 
     function setUp() public {}
 
@@ -27,7 +28,7 @@ contract DeployHookScript is Script {
         console2.log("mirrorTokenManager:", mirrorTokenManager);
         MarginPositionManager marginPositionManager = new MarginPositionManager(owner, IMarginChecker(marginChecker));
         console2.log("marginPositionManager:", address(marginPositionManager));
-        bytes memory constructorArgs = abi.encode(owner, manager, mirrorTokenManager, marginFees);
+        bytes memory constructorArgs = abi.encode(owner, manager, mirrorTokenManager, marginLiquidity, marginFees);
 
         // hook contracts must have specific flags encoded in the address
         // ------------------------------ //
