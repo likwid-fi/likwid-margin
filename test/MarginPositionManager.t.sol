@@ -261,6 +261,8 @@ contract MarginPositionManagerTest is DeployHelper {
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
         assertEq(address(marginPositionManager).balance, position.marginAmount + position.marginTotal);
+        uint256 _positionId = marginPositionManager.getPositionId(poolId, false, user);
+        assertEq(positionId, _positionId);
     }
 
     function test_hook_repay_native() public {

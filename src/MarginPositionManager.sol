@@ -30,6 +30,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
 
     error PairNotExists();
     error Liquidated();
+    error MarginTransferFailed(uint256 amount);
+    error InsufficientAmount(uint256 amount);
     error InsufficientBorrowReceived();
 
     event Mint(PoolId indexed poolId, address indexed sender, address indexed to, uint256 positionId);
@@ -182,9 +184,11 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     function margin(MarginParams memory params) external payable ensure(params.deadline) returns (uint256, uint256) {
         HookStatus memory _status = hook.getStatus(params.poolId);
         Currency marginToken = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
-        require(checkAmount(marginToken, msg.sender, address(this), params.marginAmount), "INSUFFICIENT_AMOUNT");
+        if (!checkAmount(marginToken, msg.sender, address(this), params.marginAmount)) {
+            revert InsufficientAmount(params.marginAmount);
+        }
         bool success = marginToken.transfer(msg.sender, address(this), params.marginAmount);
-        require(success, "MARGIN_TRANSFER_FAILED");
+        if (!success) revert MarginTransferFailed(params.marginAmount);
         uint256 positionId = _borrowPositions[params.poolId][params.marginForOne][params.recipient];
         params = hook.margin(params);
         uint256 rateLast = hook.marginFees().getBorrowRateCumulativeLast(_status, params.marginForOne);
@@ -259,7 +263,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         (Currency borrowToken, Currency marginToken) = _position.marginForOne
             ? (_status.key.currency0, _status.key.currency1)
             : (_status.key.currency1, _status.key.currency0);
-        require(checkAmount(borrowToken, msg.sender, address(hook), repayAmount), "INSUFFICIENT_AMOUNT");
+        if (!checkAmount(borrowToken, msg.sender, address(hook), repayAmount)) {
+            revert InsufficientAmount(repayAmount);
+        }
         if (repayAmount > _position.borrowAmount) {
             repayAmount = _position.borrowAmount;
         }
@@ -411,7 +417,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     }
 
     function liquidateBurn(uint256 positionId, bytes calldata signature) external returns (uint256 profit) {
-        require(checker.checkLiquidate(msg.sender, positionId, signature), "CHECK_ERROR");
+        require(checker.checkLiquidate(msg.sender, positionId, signature), "AUTH_ERROR");
         (bool liquidated, uint256 releaseAmount) = checkLiquidate(positionId);
         if (!liquidated) {
             return profit;
@@ -444,7 +450,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     }
 
     function liquidateCall(uint256 positionId, bytes calldata signature) external payable returns (uint256 profit) {
-        require(checker.checkLiquidate(msg.sender, positionId, signature), "CHECK_ERROR");
+        require(checker.checkLiquidate(msg.sender, positionId, signature), "AUTH_ERROR");
         (bool liquidated,) = checkLiquidate(positionId);
         if (!liquidated) {
             return profit;
