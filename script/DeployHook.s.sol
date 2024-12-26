@@ -6,6 +6,7 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {HookMiner} from "../test/utils/HookMiner.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
+import {MarginLiquidity} from "../src/MarginLiquidity.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
 import {IMarginHookManager} from "../src/interfaces/IMarginHookManager.sol";
@@ -57,6 +58,7 @@ contract DeployHookScript is Script {
         IMarginHookManager(hookAddress).addPositionManager(address(marginPositionManager));
         IMarginHookManager(hookAddress).setMarginOracle(marginOracle);
         console2.log("hookAddress:", hookAddress);
+        MarginLiquidity(marginLiquidity).addHooks(hookAddress);
         MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), IMarginHookManager(hookAddress));
         console2.log("swapRouter:", address(swapRouter));
         vm.stopBroadcast();

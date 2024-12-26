@@ -265,6 +265,59 @@ contract MarginPositionManagerTest is DeployHelper {
         assertEq(positionId, _positionId);
     }
 
+    function test_checkAmount() public {
+        address user = vm.addr(10);
+        (bool success,) = user.call{value: 1 ether}("");
+        assertTrue(success);
+        vm.startPrank(user);
+        PoolId poolId = nativeKey.toId();
+        uint256 positionId;
+        uint256 borrowAmount;
+        uint256 payValue = 0.01 ether;
+        MarginParams memory params = MarginParams({
+            poolId: poolId,
+            marginForOne: false,
+            leverage: 3,
+            marginAmount: payValue,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMinAmount: 0,
+            recipient: user,
+            deadline: block.timestamp + 1000
+        });
+        vm.expectPartialRevert(MarginPositionManager.InsufficientAmount.selector);
+        payValue = 0.001 ether;
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        vm.stopPrank();
+    }
+
+    function test_deadline() public {
+        address user = vm.addr(10);
+        (bool success,) = user.call{value: 1 ether}("");
+        assertTrue(success);
+        vm.startPrank(user);
+        PoolId poolId = nativeKey.toId();
+        uint256 positionId;
+        uint256 borrowAmount;
+        uint256 payValue = 0.01 ether;
+        MarginParams memory params = MarginParams({
+            poolId: poolId,
+            marginForOne: false,
+            leverage: 3,
+            marginAmount: payValue,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMinAmount: 0,
+            recipient: user,
+            deadline: 0
+        });
+        vm.expectRevert(bytes("EXPIRED"));
+        payValue = 0.001 ether;
+        vm.warp(3600 * 20);
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        vm.stopPrank();
+    }
+
     function test_hook_repay_native() public {
         test_hook_margin_native();
         address user = address(this);
