@@ -251,6 +251,10 @@ contract MarginHookManagerTest is DeployHelper {
         tokenUSDT.transfer(user, 10 ether);
         (bool success,) = user.call{value: 10 ether}("");
         assertTrue(success);
+        uint256 level1;
+        uint256 level2;
+        uint256 level3;
+        uint256 level4;
         PoolId poolId = usdtKey.toId();
         {
             vm.startPrank(user);
@@ -267,7 +271,7 @@ contract MarginHookManagerTest is DeployHelper {
                 level: 1,
                 deadline: type(uint256).max
             });
-            hookManager.addLiquidity{value: amount0}(params);
+            level1 = hookManager.addLiquidity{value: amount0}(params);
             vm.stopPrank();
         }
         (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) =
@@ -288,7 +292,7 @@ contract MarginHookManagerTest is DeployHelper {
                 level: 2,
                 deadline: type(uint256).max
             });
-            hookManager.addLiquidity{value: amount0}(params);
+            level2 = hookManager.addLiquidity{value: amount0}(params);
             vm.stopPrank();
         }
         (totalSupply, retainSupply0, retainSupply1) = marginLiquidity.getPoolSupplies(address(hookManager), poolId);
@@ -308,7 +312,7 @@ contract MarginHookManagerTest is DeployHelper {
                 level: 3,
                 deadline: type(uint256).max
             });
-            hookManager.addLiquidity{value: amount0}(params);
+            level3 = hookManager.addLiquidity{value: amount0}(params);
             vm.stopPrank();
         }
         (totalSupply, retainSupply0, retainSupply1) = marginLiquidity.getPoolSupplies(address(hookManager), poolId);
@@ -328,12 +332,29 @@ contract MarginHookManagerTest is DeployHelper {
                 level: 4,
                 deadline: type(uint256).max
             });
-            hookManager.addLiquidity{value: amount0}(params);
+            level4 = hookManager.addLiquidity{value: amount0}(params);
             vm.stopPrank();
         }
         (totalSupply, retainSupply0, retainSupply1) = marginLiquidity.getPoolSupplies(address(hookManager), poolId);
         console.log("totalSupply:%s,retainSupply0:%s,retainSupply1:%s", totalSupply, retainSupply0, retainSupply1);
         uint256[4] memory liquidities = marginLiquidity.getPoolLiquidities(poolId, user);
         console.log(liquidities[0], liquidities[1], liquidities[2], liquidities[3]);
+        assertEq(level1, liquidities[0]);
+        assertEq(level2, liquidities[1]);
+        assertEq(level3, liquidities[2]);
+        assertEq(level4, liquidities[3]);
+        assertEq(level1 + level2 + level3 + level4 + 1000, totalSupply);
+        assertEq(level1 + level2, retainSupply0);
+        assertEq(level1 + level3, retainSupply1);
+        {
+            vm.startPrank(user);
+            uint256 liquidity = 0.2 ether;
+            RemoveLiquidityParams memory params =
+                RemoveLiquidityParams({poolId: poolId, liquidity: liquidity, level: 4, deadline: type(uint256).max});
+            hookManager.removeLiquidity(params);
+            vm.stopPrank();
+        }
+        liquidities = marginLiquidity.getPoolLiquidities(poolId, user);
+        assertEq(level4 - 0.2 ether, liquidities[3]);
     }
 }
