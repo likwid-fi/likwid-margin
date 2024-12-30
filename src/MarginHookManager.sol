@@ -542,8 +542,8 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
             marginCurrency.settle(poolManager, params.payer, params.releaseAmount, false);
             marginCurrency.take(poolManager, address(this), params.releaseAmount, true);
             if (params.repayAmount > params.rawBorrowAmount) {
-                uint256 interest =
-                    (params.repayAmount - params.rawBorrowAmount) * params.releaseAmount / params.repayAmount;
+                uint256 overRepay = params.repayAmount - params.rawBorrowAmount;
+                uint256 interest = overRepay * params.releaseAmount / params.repayAmount;
                 params.marginForOne ? interest1 += uint112(interest) : interest0 += uint112(interest);
             }
         } else if (params.repayAmount > 0) {

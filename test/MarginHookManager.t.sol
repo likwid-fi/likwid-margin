@@ -246,99 +246,45 @@ contract MarginHookManagerTest is DeployHelper {
         console.log("feeLiquidity:%s,kLast:%s", feeLiquidity, hookManager.kLast());
     }
 
+    function addLiquidity(
+        address user,
+        PoolId poolId,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 tickLower,
+        uint256 tickUpper,
+        uint8 level
+    ) internal returns (uint256) {
+        vm.startPrank(user);
+        tokenUSDT.approve(address(hookManager), amount1);
+        AddLiquidityParams memory params = AddLiquidityParams({
+            poolId: poolId,
+            amount0: amount0,
+            amount1: amount1,
+            tickLower: tickLower,
+            tickUpper: tickUpper,
+            to: user,
+            level: level,
+            deadline: type(uint256).max
+        });
+        uint256 liquidity = hookManager.addLiquidity{value: amount0}(params);
+        vm.stopPrank();
+        return liquidity;
+    }
+
     function test_hook_liquidity_level() public {
         address user = vm.addr(1);
         tokenUSDT.transfer(user, 10 ether);
         (bool success,) = user.call{value: 10 ether}("");
         assertTrue(success);
-        uint256 level1;
-        uint256 level2;
-        uint256 level3;
-        uint256 level4;
         PoolId poolId = usdtKey.toId();
-        {
-            vm.startPrank(user);
-            uint256 amount0 = 0.1 ether;
-            uint256 amount1 = 0.1 ether;
-            tokenUSDT.approve(address(hookManager), amount1);
-            AddLiquidityParams memory params = AddLiquidityParams({
-                poolId: poolId,
-                amount0: amount0,
-                amount1: amount1,
-                tickLower: 50000,
-                tickUpper: 50000,
-                to: user,
-                level: 1,
-                deadline: type(uint256).max
-            });
-            level1 = hookManager.addLiquidity{value: amount0}(params);
-            vm.stopPrank();
-        }
+        uint256 level1 = addLiquidity(user, poolId, 0.1 ether, 0.1 ether, 50000, 50000, 1);
+        uint256 level2 = addLiquidity(user, poolId, 0.2 ether, 0.2 ether, 50000, 50000, 2);
+        uint256 level3 = addLiquidity(user, poolId, 0.3 ether, 0.3 ether, 50000, 50000, 3);
+        uint256 level4 = addLiquidity(user, poolId, 0.4 ether, 0.4 ether, 50000, 50000, 4);
+        uint256[4] memory liquidities = marginLiquidity.getPoolLiquidities(poolId, user);
         (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) =
             marginLiquidity.getPoolSupplies(address(hookManager), poolId);
-        console.log("totalSupply:%s,retainSupply0:%s,retainSupply1:%s", totalSupply, retainSupply0, retainSupply1);
-        {
-            vm.startPrank(user);
-            uint256 amount0 = 0.2 ether;
-            uint256 amount1 = 0.2 ether;
-            tokenUSDT.approve(address(hookManager), amount1);
-            AddLiquidityParams memory params = AddLiquidityParams({
-                poolId: poolId,
-                amount0: amount0,
-                amount1: amount1,
-                tickLower: 50000,
-                tickUpper: 50000,
-                to: user,
-                level: 2,
-                deadline: type(uint256).max
-            });
-            level2 = hookManager.addLiquidity{value: amount0}(params);
-            vm.stopPrank();
-        }
-        (totalSupply, retainSupply0, retainSupply1) = marginLiquidity.getPoolSupplies(address(hookManager), poolId);
-        console.log("totalSupply:%s,retainSupply0:%s,retainSupply1:%s", totalSupply, retainSupply0, retainSupply1);
-        {
-            vm.startPrank(user);
-            uint256 amount0 = 0.3 ether;
-            uint256 amount1 = 0.3 ether;
-            tokenUSDT.approve(address(hookManager), amount1);
-            AddLiquidityParams memory params = AddLiquidityParams({
-                poolId: poolId,
-                amount0: amount0,
-                amount1: amount1,
-                tickLower: 50000,
-                tickUpper: 50000,
-                to: user,
-                level: 3,
-                deadline: type(uint256).max
-            });
-            level3 = hookManager.addLiquidity{value: amount0}(params);
-            vm.stopPrank();
-        }
-        (totalSupply, retainSupply0, retainSupply1) = marginLiquidity.getPoolSupplies(address(hookManager), poolId);
-        console.log("totalSupply:%s,retainSupply0:%s,retainSupply1:%s", totalSupply, retainSupply0, retainSupply1);
-        {
-            vm.startPrank(user);
-            uint256 amount0 = 0.4 ether;
-            uint256 amount1 = 0.4 ether;
-            tokenUSDT.approve(address(hookManager), amount1);
-            AddLiquidityParams memory params = AddLiquidityParams({
-                poolId: poolId,
-                amount0: amount0,
-                amount1: amount1,
-                tickLower: 50000,
-                tickUpper: 50000,
-                to: user,
-                level: 4,
-                deadline: type(uint256).max
-            });
-            level4 = hookManager.addLiquidity{value: amount0}(params);
-            vm.stopPrank();
-        }
-        (totalSupply, retainSupply0, retainSupply1) = marginLiquidity.getPoolSupplies(address(hookManager), poolId);
-        console.log("totalSupply:%s,retainSupply0:%s,retainSupply1:%s", totalSupply, retainSupply0, retainSupply1);
-        uint256[4] memory liquidities = marginLiquidity.getPoolLiquidities(poolId, user);
-        console.log(liquidities[0], liquidities[1], liquidities[2], liquidities[3]);
         assertEq(level1, liquidities[0]);
         assertEq(level2, liquidities[1]);
         assertEq(level3, liquidities[2]);
@@ -356,5 +302,31 @@ contract MarginHookManagerTest is DeployHelper {
         }
         liquidities = marginLiquidity.getPoolLiquidities(poolId, user);
         assertEq(level4 - 0.2 ether, liquidities[3]);
+    }
+
+    function test_OutOfRange() public {
+        address user = vm.addr(1);
+        tokenUSDT.transfer(user, 10 ether);
+        (bool success,) = user.call{value: 10 ether}("");
+        assertTrue(success);
+        PoolId poolId = usdtKey.toId();
+        addLiquidity(user, poolId, 0.1 ether, 0.1 ether, 50000, 50000, 1);
+        vm.startPrank(user);
+        uint256 amount0 = 0.1 ether;
+        uint256 amount1 = 0.09 ether;
+        tokenUSDT.approve(address(hookManager), amount1);
+        AddLiquidityParams memory params = AddLiquidityParams({
+            poolId: poolId,
+            amount0: amount0,
+            amount1: amount1,
+            tickLower: 50000,
+            tickUpper: 50000,
+            to: user,
+            level: 1,
+            deadline: type(uint256).max
+        });
+        vm.expectRevert(bytes("OUT_OF_RANGE"));
+        hookManager.addLiquidity{value: amount0}(params);
+        vm.stopPrank();
     }
 }
