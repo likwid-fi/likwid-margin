@@ -125,13 +125,12 @@ contract MarginRouterTest is DeployHelper {
         console.log("after swap hook.balance0:%s,hook.balance1:%s", balance0, balance1);
     }
 
-    function test_hook_swap_tokens() public {
-        address user = address(this);
-        uint256 amountIn = 0.0123 ether;
+    function exactInputTokens(uint256 amountIn, address user) internal {
         // swap
         uint256 balance0 = manager.balanceOf(address(hookManager), uint160(address(tokenA)));
         uint256 balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
-        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        uint256 balanceA = tokenA.balanceOf(user);
+        uint256 balanceB = tokenB.balanceOf(user);
         MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
             poolId: key.toId(),
             zeroForOne: true,
@@ -141,10 +140,30 @@ contract MarginRouterTest is DeployHelper {
             amountOutMin: 0,
             deadline: type(uint256).max
         });
-        swapRouter.exactInput(swapParams);
-        balance0 = manager.balanceOf(address(hookManager), uint160(address(tokenA)));
-        balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
-        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        uint256 amountOut = swapRouter.exactInput(swapParams);
+        uint256 _balance0 = manager.balanceOf(address(hookManager), uint160(address(tokenA)));
+        uint256 _balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
+        uint256 _balanceA = tokenA.balanceOf(user);
+        uint256 _balanceB = tokenB.balanceOf(user);
+        if (address(tokenA) < address(tokenB)) {
+            assertEq(amountIn, _balance0 - balance0);
+            assertEq(amountOut, _balanceB - balanceB);
+            assertEq(amountOut, balance1 - _balance1);
+        } else {
+            assertEq(amountIn, _balance1 - balance1);
+            assertEq(amountOut, _balanceA - balanceA);
+            assertEq(amountOut, balance0 - _balance0);
+        }
+    }
+
+    function test_hook_swap_tokens() public {
+        address user = address(this);
+        uint256 amountIn = 0.0123 ether;
+        exactInputTokens(amountIn, user);
+        amountIn = 0.0000123 ether;
+        exactInputTokens(amountIn, user);
+        amountIn = 1.23 ether;
+        exactInputTokens(amountIn, user);
     }
 
     function test_hook_swap_usdts() public {
@@ -153,7 +172,7 @@ contract MarginRouterTest is DeployHelper {
         // swap
         uint256 balance0 = manager.balanceOf(address(hookManager), 0);
         uint256 balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenUSDT)));
-        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        uint256 balanceUSDT = tokenUSDT.balanceOf(user);
         MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
             poolId: usdtKey.toId(),
             zeroForOne: true,
@@ -163,9 +182,12 @@ contract MarginRouterTest is DeployHelper {
             amountOutMin: 0,
             deadline: type(uint256).max
         });
-        swapRouter.exactInput{value: amountIn}(swapParams);
-        balance0 = manager.balanceOf(address(hookManager), 0);
-        balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenUSDT)));
-        console.log("hook.balance0:%s,hook.balance1:%s", balance0, balance1);
+        uint256 amountOut = swapRouter.exactInput{value: amountIn}(swapParams);
+        uint256 _balance0 = manager.balanceOf(address(hookManager), 0);
+        uint256 _balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenUSDT)));
+        uint256 _balanceUSDT = tokenUSDT.balanceOf(user);
+        assertEq(amountIn, _balance0 - balance0);
+        assertEq(amountOut, _balanceUSDT - balanceUSDT);
+        assertEq(amountOut, balance1 - _balance1);
     }
 }
