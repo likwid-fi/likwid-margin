@@ -462,7 +462,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             : (_status.key.currency1, _status.key.currency0);
         uint256 rateLast = hook.marginFees().getBorrowRateCumulativeLast(_status, _position.marginForOne);
         uint256 borrowAmount = _position.borrowAmount * rateLast / _position.rateCumulativeLast;
-        require(checkAmount(borrowToken, msg.sender, address(hook), borrowAmount), "INSUFFICIENT_AMOUNT");
+        if (!checkAmount(borrowToken, msg.sender, address(hook), borrowAmount)) {
+            revert InsufficientAmount(borrowAmount);
+        }
         uint256 liquidateValue = 0;
         if (borrowToken == CurrencyLibrary.ADDRESS_ZERO) {
             liquidateValue = borrowAmount;
@@ -479,6 +481,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         hook.release{value: liquidateValue}(params);
         profit = _position.marginAmount + _position.marginTotal;
         marginToken.transfer(address(this), msg.sender, profit);
+        if (msg.value > liquidateValue) {
+            transferNative(msg.sender, msg.value - liquidateValue);
+        }
         _burnPosition(positionId);
     }
 

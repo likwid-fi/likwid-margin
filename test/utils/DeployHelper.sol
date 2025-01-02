@@ -103,7 +103,7 @@ contract DeployHelper is Test {
         key = PoolKey({currency0: currency0, currency1: currency1, fee: 3000, tickSpacing: 1, hooks: hookManager});
         nativeKey = PoolKey({
             currency0: CurrencyLibrary.ADDRESS_ZERO,
-            currency1: currency1,
+            currency1: currencyB,
             fee: 3000,
             tickSpacing: 1,
             hooks: hookManager
