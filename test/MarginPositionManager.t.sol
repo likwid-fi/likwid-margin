@@ -131,12 +131,14 @@ contract MarginPositionManagerTest is DeployHelper {
         assertGt(positionId, 0);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
         console.log("before repay positionId:%s,position.borrowAmount:%s", positionId, position.borrowAmount);
-        console.log("before repay tokenA.balance:%s tokenB.balance:%s", tokenA.balanceOf(user), tokenB.balanceOf(user));
         uint256 releaseAmount = 0.01 ether;
         tokenA.approve(address(hookManager), releaseAmount);
         marginPositionManager.close(positionId, 30000, 0, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
-        console.log("after repay tokenA.balance:%s tokenB.balance:%s", tokenA.balanceOf(user), tokenB.balanceOf(user));
+        console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
+        vm.warp(3600 * 10);
+        marginPositionManager.close(positionId, 1000000, 0, UINT256_MAX);
+        newPosition = marginPositionManager.getPosition(positionId);
         console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
     }
 
@@ -608,6 +610,63 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: poolId,
             marginForOne: false,
+            leverage: 3,
+            marginAmount: payValue,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMinAmount: 0,
+            recipient: user,
+            deadline: block.timestamp + 1000
+        });
+
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+
+        position = marginPositionManager.getPosition(positionId);
+        console.log(
+            "positionId:%s,position.borrowAmount:%s,rateCumulativeLast:%s",
+            positionId,
+            position.borrowAmount,
+            position.rateCumulativeLast
+        );
+        HookStatus memory _status = hookManager.getStatus(poolId);
+        console.log("reserve0:%s,reserve1:%s", uint256(_status.realReserve0), uint256(_status.realReserve1));
+        console.log(
+            "mirrorReserve0:%s,mirrorReserve1:%s", uint256(_status.mirrorReserve0), uint256(_status.mirrorReserve1)
+        );
+    }
+
+    function test_hook_margin_usdts_buy() public {
+        address user = address(this);
+        PoolId poolId = usdtKey.toId();
+        uint256 rate = marginFees.getBorrowRate(address(hookManager), poolId, false);
+        assertEq(rate, 50000);
+        uint256 positionId;
+        uint256 borrowAmount;
+        uint256 payValue = 0.01 ether;
+        MarginParams memory params = MarginParams({
+            poolId: poolId,
+            marginForOne: true,
+            leverage: 3,
+            marginAmount: payValue,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMinAmount: 0,
+            recipient: user,
+            deadline: block.timestamp + 1000
+        });
+
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        console.log(
+            "positionId:%s,position.borrowAmount:%s,rateCumulativeLast:%s",
+            positionId,
+            position.borrowAmount,
+            position.rateCumulativeLast
+        );
+
+        params = MarginParams({
+            poolId: poolId,
+            marginForOne: true,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,

@@ -21,6 +21,8 @@ import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PriceMath} from "./libraries/PriceMath.sol";
 import {TimeUtils} from "./libraries/TimeUtils.sol";
 
+import {console} from "forge-std/console.sol";
+
 contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     using CurrencyUtils for Currency;
     using CurrencyLibrary for Currency;
@@ -302,13 +304,13 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         uint256 positionId,
         uint256 releaseMargin,
         uint256 releaseTotal,
-        uint256 repayAmount,
+        uint256 repayMillionth,
         uint256 repayRawAmount,
         uint256 rateLast
     ) internal {
         // update position
         MarginPosition storage sPosition = _positions[positionId];
-        sPosition.borrowAmount -= uint128(repayAmount);
+        sPosition.borrowAmount = uint128(uint256(sPosition.borrowAmount) * (ONE_MILLION - repayMillionth) / ONE_MILLION);
 
         if (sPosition.borrowAmount == 0) {
             _burnPosition(positionId);
@@ -349,6 +351,12 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
                 pnlMinAmount < int256(releaseMargin + releaseTotal) - int256(params.releaseAmount),
                 "InsufficientOutputReceived"
             );
+            console.log(
+                "releaseMargin:%s, releaseTotal:%s, params.releaseAmount:%s",
+                releaseMargin,
+                releaseTotal,
+                params.releaseAmount
+            );
             marginToken.transfer(address(this), msg.sender, releaseMargin + releaseTotal - params.releaseAmount);
         } else {
             uint256 marginAmount = _position.marginAmount * (ONE_MILLION - repayMillionth) / ONE_MILLION;
@@ -375,7 +383,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             positionId,
             releaseMargin + userMarginAmount,
             releaseTotal,
-            params.repayAmount,
+            repayMillionth,
             params.rawBorrowAmount,
             _position.rateCumulativeLast
         );

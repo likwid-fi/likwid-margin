@@ -95,11 +95,8 @@ contract DeployHelper is Test {
         tokenB.mint(address(this), 2 ** 255);
 
         tokenA.approve(address(hookManager), type(uint256).max);
-        tokenA.approve(address(marginPositionManager), type(uint256).max);
         tokenB.approve(address(hookManager), type(uint256).max);
-        tokenB.approve(address(marginPositionManager), type(uint256).max);
         tokenUSDT.approve(address(hookManager), type(uint256).max);
-        tokenUSDT.approve(address(marginPositionManager), type(uint256).max);
         key = PoolKey({currency0: currency0, currency1: currency1, fee: 3000, tickSpacing: 1, hooks: hookManager});
         nativeKey = PoolKey({
             currency0: CurrencyLibrary.ADDRESS_ZERO,
@@ -123,6 +120,9 @@ contract DeployHelper is Test {
 
         marginChecker = new MarginChecker(address(this));
         marginPositionManager = new MarginPositionManager(address(this), marginChecker);
+        tokenA.approve(address(marginPositionManager), type(uint256).max);
+        tokenB.approve(address(marginPositionManager), type(uint256).max);
+        tokenUSDT.approve(address(marginPositionManager), type(uint256).max);
         marginPositionManager.setHook(address(hookManager));
         hookManager.addPositionManager(address(marginPositionManager));
         marginPositionManager.setMarginOracle(address(marginOracle));
