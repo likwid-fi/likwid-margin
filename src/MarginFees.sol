@@ -29,8 +29,6 @@ contract MarginFees is IMarginFees, Owned {
     uint24 public dynamicFeeDurationSeconds = 120;
     uint24 public dynamicFeeUnit = 10;
     address public feeTo;
-    uint24 protocolFee = 3000; // 0.3%
-    uint24 protocolMarginFee = 5000; // 0.5%
 
     RateStatus public rateStatus;
 
@@ -166,14 +164,6 @@ contract MarginFees is IMarginFees, Owned {
 
     function setRateStatus(RateStatus calldata _status) external onlyOwner {
         rateStatus = _status;
-    }
-
-    function setProtocolFee(uint24 _protocolFee) external onlyOwner {
-        protocolFee = _protocolFee;
-    }
-
-    function setProtocolMarginFee(uint24 _protocolMarginFee) external onlyOwner {
-        protocolMarginFee = _protocolMarginFee;
     }
 
     function setDynamicFeeDurationSeconds(uint24 _dynamicFeeDurationSeconds) external onlyOwner {
