@@ -156,8 +156,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         returns (uint256 marginWithoutFee, uint256 borrowAmount)
     {
         HookStatus memory status = hook.getStatus(poolId);
-        uint24 _initialLTV = hook.marginFees().getInitialLTV(address(hook), poolId);
-        uint256 marginTotal = marginAmount * leverage * _initialLTV / ONE_MILLION;
+        uint256 marginTotal = marginAmount * leverage;
         borrowAmount = hook.getAmountIn(poolId, marginForOne, marginTotal);
         marginWithoutFee = marginTotal * (ONE_MILLION - status.feeStatus.marginFee) / ONE_MILLION;
     }
@@ -168,7 +167,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         returns (uint256 marginMax, uint256 borrowAmount)
     {
         HookStatus memory status = hook.getStatus(poolId);
-        uint24 _initialLTV = hook.marginFees().getInitialLTV(address(hook), poolId);
         (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) =
             hook.marginLiquidity().getPoolSupplies(address(hook), poolId);
         uint256 marginReserve0 = (_totalSupply - retainSupply0) * status.realReserve0 / _totalSupply;
@@ -178,7 +176,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             marginMaxTotal -= 1000;
         }
         borrowAmount = hook.getAmountIn(poolId, marginForOne, marginMaxTotal);
-        marginMax = marginMaxTotal * ONE_MILLION / leverage / _initialLTV;
+        marginMax = marginMaxTotal / leverage;
     }
 
     function margin(MarginParams memory params) external payable ensure(params.deadline) returns (uint256, uint256) {
@@ -411,9 +409,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
                 amountNeed = reserveMargin * borrowAmount / reserveBorrow;
             }
 
-            uint24 _liquidationLTV = hook.marginFees().getLiquidationLTV(address(hook), _position.poolId);
+            uint24 marginLevel = hook.marginFees().getMarginLevel(address(hook), _position.poolId);
             liquidated =
-                amountNeed > uint256(_position.marginAmount) * _liquidationLTV / ONE_MILLION + _position.marginTotal;
+                amountNeed > uint256(_position.marginAmount) * marginLevel / ONE_MILLION + _position.marginTotal;
         }
     }
 

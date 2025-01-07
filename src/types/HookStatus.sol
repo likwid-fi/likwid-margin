@@ -21,8 +21,7 @@ struct HookStatus {
 }
 
 struct FeeStatus {
-    uint24 initialLTV; // 50%
-    uint24 liquidationLTV; // 90%
+    uint24 marginLevel; // 90%
     uint24 marginFee; // 15000 = 1.5%
 }
 

@@ -24,8 +24,7 @@ contract MarginFees is IMarginFees, Owned {
     uint256 public constant ONE_BILLION = 10 ** 9;
     uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
 
-    uint24 initialLTV = 500000; // 50%
-    uint24 liquidationLTV = 900000; // 90%
+    uint24 marginLevel = 900000; // 90%
     uint24 public dynamicFeeDurationSeconds = 120;
     uint24 public dynamicFeeUnit = 10;
     address public feeTo;
@@ -44,14 +43,9 @@ contract MarginFees is IMarginFees, Owned {
         feeTo = initialOwner;
     }
 
-    function getInitialLTV(address hook, PoolId poolId) external view returns (uint24 _initialLTV) {
+    function getMarginLevel(address hook, PoolId poolId) external view returns (uint24 _marginLevel) {
         HookStatus memory status = IMarginHookManager(hook).getStatus(poolId);
-        _initialLTV = status.feeStatus.initialLTV == 0 ? initialLTV : status.feeStatus.initialLTV;
-    }
-
-    function getLiquidationLTV(address hook, PoolId poolId) external view returns (uint24 _liquidationLTV) {
-        HookStatus memory status = IMarginHookManager(hook).getStatus(poolId);
-        _liquidationLTV = status.feeStatus.liquidationLTV == 0 ? liquidationLTV : status.feeStatus.liquidationLTV;
+        _marginLevel = status.feeStatus.marginLevel == 0 ? marginLevel : status.feeStatus.marginLevel;
     }
 
     function getPoolFees(address hook, PoolId poolId) external view returns (uint24 _fee, uint24 _marginFee) {
@@ -153,9 +147,8 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     // ******************** OWNER CALL ********************
-    function setLTV(uint24 _initialLTV, uint24 _liquidationLTV) external onlyOwner {
-        initialLTV = _initialLTV;
-        liquidationLTV = _liquidationLTV;
+    function setMarginLevel(uint24 _marginLevel) external onlyOwner {
+        marginLevel = _marginLevel;
     }
 
     function setFeeTo(address _feeTo) external onlyOwner {

@@ -10,9 +10,7 @@ import {HookStatus} from "../types/HookStatus.sol";
 import {IMarginLiquidity} from "./IMarginLiquidity.sol";
 
 interface IMarginFees {
-    function getInitialLTV(address hook, PoolId poolId) external view returns (uint24 _initialLTV);
-
-    function getLiquidationLTV(address hook, PoolId poolId) external view returns (uint24 _liquidationLTV);
+    function getMarginLevel(address hook, PoolId poolId) external view returns (uint24 _marginLevel);
 
     function feeTo() external view returns (address);
 
