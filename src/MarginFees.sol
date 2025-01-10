@@ -9,7 +9,7 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {TruncatedOracle} from "./libraries/TruncatedOracle.sol";
 import {RateStatus} from "./types/RateStatus.sol";
-import {HookStatus, BalanceStatus, FeeStatus} from "./types/HookStatus.sol";
+import {HookStatus, BalanceStatus} from "./types/HookStatus.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {TimeUtils} from "./libraries/TimeUtils.sol";
@@ -24,7 +24,8 @@ contract MarginFees is IMarginFees, Owned {
     uint256 public constant ONE_BILLION = 10 ** 9;
     uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
 
-    uint24 marginLevel = 900000; // 90%
+    uint24 public constant minMarginLevel = 1200000; // 120%
+    uint24 public constant liquidationMarginLevel = 1100000; // 90%
     uint24 public dynamicFeeDurationSeconds = 120;
     uint24 public dynamicFeeUnit = 10;
     address public feeTo;
@@ -43,16 +44,16 @@ contract MarginFees is IMarginFees, Owned {
         feeTo = initialOwner;
     }
 
-    function getMarginLevel(address hook, PoolId poolId) external view returns (uint24 _marginLevel) {
-        HookStatus memory status = IMarginHookManager(hook).getStatus(poolId);
-        _marginLevel = status.feeStatus.marginLevel == 0 ? marginLevel : status.feeStatus.marginLevel;
+    function getMarginLevels() external pure returns (uint24 _minMarginLevel, uint24 _liquidationMarginLevel) {
+        _minMarginLevel = minMarginLevel;
+        _liquidationMarginLevel = liquidationMarginLevel;
     }
 
     function getPoolFees(address hook, PoolId poolId) external view returns (uint24 _fee, uint24 _marginFee) {
         IMarginHookManager hookManager = IMarginHookManager(hook);
         HookStatus memory status = hookManager.getStatus(poolId);
         _fee = dynamicFee(status);
-        _marginFee = status.feeStatus.marginFee;
+        _marginFee = status.marginFee;
     }
 
     function dynamicFee(HookStatus memory status) public view returns (uint24 _fee) {
@@ -147,9 +148,6 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     // ******************** OWNER CALL ********************
-    function setMarginLevel(uint24 _marginLevel) external onlyOwner {
-        marginLevel = _marginLevel;
-    }
 
     function setFeeTo(address _feeTo) external onlyOwner {
         feeTo = _feeTo;

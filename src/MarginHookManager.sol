@@ -25,7 +25,7 @@ import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
 import {MarginParams, ReleaseParams} from "./types/MarginParams.sol";
-import {HookStatus, BalanceStatus, FeeStatus} from "./types/HookStatus.sol";
+import {HookStatus, BalanceStatus} from "./types/HookStatus.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams.sol";
 
 contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
@@ -157,7 +157,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         status.rate0CumulativeLast = ONE_BILLION;
         status.rate1CumulativeLast = ONE_BILLION;
         status.blockTimestampLast = uint32(block.timestamp % 2 ** 32);
-        status.feeStatus.marginFee = 15000; // 1.5%
+        status.marginFee = 15000; // 1.5%
         hookStatusStore[id] = status;
         poolManager.initialize(key, SQRT_RATIO_1_1);
         emit Initialize(id, key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks);
@@ -480,8 +480,8 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         marginOracle = _oracle;
     }
 
-    function setFeeStatus(PoolId poolId, FeeStatus calldata feeStatus) external onlyOwner {
-        hookStatusStore[poolId].feeStatus = feeStatus;
+    function setFeeStatus(PoolId poolId, uint24 _marginFee) external onlyOwner {
+        hookStatusStore[poolId].marginFee = _marginFee;
     }
 
     // ******************** MARGIN FUNCTIONS ********************
@@ -515,7 +515,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         require(marginReserves >= marginTotal, "TOKEN_NOT_ENOUGH");
         borrowAmount = _getAmountIn(status, zeroForOne, marginTotal);
         // send total token
-        marginWithoutFee = marginTotal * (ONE_MILLION - status.feeStatus.marginFee) / ONE_MILLION;
+        marginWithoutFee = marginTotal * (ONE_MILLION - status.marginFee) / ONE_MILLION;
 
         marginCurrency.settle(poolManager, address(this), marginWithoutFee, true);
         marginCurrency.take(poolManager, _positionManager, marginWithoutFee, false);

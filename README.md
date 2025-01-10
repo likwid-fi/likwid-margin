@@ -51,6 +51,15 @@ anvil
 source ../envs/likwid-margin.env
 forge script script/DeployAll.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
 forge script script/DeployHook.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
+forge script script/DeployOracle.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
+forge script script/DeployFees.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
+forge script script/DeployMirror.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
+forge script script/DeployMockToken.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
+```
+
+### Verify
+
+```shell
 ## --num-of-optimizations 1000000 default:200
 forge verify-contract \
     --chain-id 11155111 \
@@ -79,13 +88,6 @@ forge verify-contract \
     --compiler-version v0.8.26+commit.8a97fa7a \
     0x6E0EE135EcD02516cB26a8D4f7F7B8dF0b1E748D \
     src/MarginRouter.sol:MarginRouter
-
-
-forge script script/DeployOracle.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
-forge script script/DeployFees.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
-forge script script/DeployMirror.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
-
-forge script script/DeployMockToken.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
 forge verify-contract \
     --chain-id 11155111 \
     --evm-version cancun \

@@ -127,6 +127,13 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
     }
 
+    function getPositions(uint256[] calldata positionIds) external view returns (MarginPosition[] memory _position) {
+        _position = new MarginPosition[](positionIds.length);
+        for (uint256 i = 0; i < positionIds.length; i++) {
+            _position[i] = getPosition(positionIds[i]);
+        }
+    }
+
     function getPositionId(PoolId poolId, bool marginForOne, address owner)
         external
         view
@@ -150,6 +157,20 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
     }
 
+    function checkMinMarginLevel(MarginParams memory params, HookStatus memory _status)
+        internal
+        view
+        returns (bool valid)
+    {
+        uint24 minMarginLevel = hook.marginFees().minMarginLevel();
+        (uint256 reserve0, uint256 reserve1) =
+            (_status.realReserve0 + _status.mirrorReserve0, _status.realReserve1 + _status.mirrorReserve1);
+        (uint256 reserveBorrow, uint256 reserveMargin) =
+            params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+        uint256 amountDebt = reserveMargin * params.borrowAmount / reserveBorrow;
+        valid = params.marginAmount + params.marginTotal >= amountDebt * minMarginLevel / ONE_MILLION;
+    }
+
     function getMarginTotal(PoolId poolId, bool marginForOne, uint24 leverage, uint256 marginAmount)
         external
         view
@@ -158,7 +179,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         HookStatus memory status = hook.getStatus(poolId);
         uint256 marginTotal = marginAmount * leverage;
         borrowAmount = hook.getAmountIn(poolId, marginForOne, marginTotal);
-        marginWithoutFee = marginTotal * (ONE_MILLION - status.feeStatus.marginFee) / ONE_MILLION;
+        marginWithoutFee = marginTotal * (ONE_MILLION - status.marginFee) / ONE_MILLION;
     }
 
     function getMarginMax(PoolId poolId, bool marginForOne, uint24 leverage)
@@ -173,6 +194,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         uint256 marginReserve1 = (_totalSupply - retainSupply1) * status.realReserve1 / _totalSupply;
         uint256 marginMaxTotal = (marginForOne ? marginReserve1 : marginReserve0);
         if (marginMaxTotal > 1000) {
+            (uint256 reserve0, uint256 reserve1) = hook.getReserves(poolId);
+            uint256 marginMaxReserve = (marginForOne ? reserve1 : reserve0) * 8 / 100;
+            marginMaxTotal = Math.min(marginMaxTotal, marginMaxReserve);
             marginMaxTotal -= 1000;
         }
         borrowAmount = hook.getAmountIn(poolId, marginForOne, marginMaxTotal);
@@ -191,6 +215,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         params = hook.margin(params);
         uint256 rateLast = hook.marginFees().getBorrowRateCumulativeLast(_status, params.marginForOne);
         if (params.borrowAmount < params.borrowMinAmount) revert InsufficientBorrowReceived();
+        if (!checkMinMarginLevel(params, _status)) revert InsufficientAmount(params.marginAmount);
         if (positionId == 0) {
             _mint(params.recipient, (positionId = _nextId++));
             emit Mint(params.poolId, msg.sender, params.recipient, positionId);
@@ -390,7 +415,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     function _checkLiquidate(MarginPosition memory _position)
         private
         view
-        returns (bool liquidated, uint256 amountNeed)
+        returns (bool liquidated, uint256 amountDebt)
     {
         if (_position.rateCumulativeLast > 0) {
             uint256 rateLast =
@@ -400,26 +425,25 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
                 (uint256 reserve0, uint256 reserve1) = hook.getReserves(_position.poolId);
                 (uint256 reserveBorrow, uint256 reserveMargin) =
                     _position.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
-                amountNeed = reserveMargin * borrowAmount / reserveBorrow;
+                amountDebt = reserveMargin * borrowAmount / reserveBorrow;
             } else {
                 (uint224 reserves,) = IMarginOracleReader(marginOracle).observeNow(_position.poolId, address(hook));
                 (uint256 reserveBorrow, uint256 reserveMargin) = _position.marginForOne
                     ? (reserves.getReverse0(), reserves.getReverse1())
                     : (reserves.getReverse1(), reserves.getReverse0());
-                amountNeed = reserveMargin * borrowAmount / reserveBorrow;
+                amountDebt = reserveMargin * borrowAmount / reserveBorrow;
             }
 
-            uint24 marginLevel = hook.marginFees().getMarginLevel(address(hook), _position.poolId);
-            liquidated =
-                amountNeed > uint256(_position.marginAmount) * marginLevel / ONE_MILLION + _position.marginTotal;
+            uint24 marginLevel = hook.marginFees().liquidationMarginLevel();
+            liquidated = _position.marginAmount + _position.marginTotal < amountDebt * marginLevel / ONE_MILLION;
         }
     }
 
     function checkLiquidate(uint256 positionId) public view returns (bool liquidated, uint256 releaseAmount) {
         MarginPosition memory _position = _positions[positionId];
-        uint256 amountNeed;
-        (liquidated, amountNeed) = _checkLiquidate(_position);
-        releaseAmount = Math.min(amountNeed, _position.marginAmount + _position.marginTotal);
+        uint256 amountDebt;
+        (liquidated, amountDebt) = _checkLiquidate(_position);
+        releaseAmount = Math.min(amountDebt, _position.marginAmount + _position.marginTotal);
     }
 
     function liquidateBurn(uint256 positionId, bytes calldata signature) external returns (uint256 profit) {

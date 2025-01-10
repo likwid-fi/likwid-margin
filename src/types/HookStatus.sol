@@ -9,6 +9,7 @@ struct HookStatus {
     uint112 realReserve1;
     uint112 mirrorReserve0;
     uint112 mirrorReserve1;
+    uint24 marginFee; // 15000 = 1.5%
     uint32 blockTimestampLast;
     uint112 interestRatio0X112;
     uint112 interestRatio1X112;
@@ -17,12 +18,6 @@ struct HookStatus {
     uint32 marginTimestampLast;
     uint224 lastPrice1X112;
     PoolKey key;
-    FeeStatus feeStatus;
-}
-
-struct FeeStatus {
-    uint24 marginLevel; // 90%
-    uint24 marginFee; // 15000 = 1.5%
 }
 
 struct BalanceStatus {
