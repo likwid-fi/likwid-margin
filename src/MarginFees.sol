@@ -25,6 +25,7 @@ contract MarginFees is IMarginFees, Owned {
     uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
 
     uint24 public constant liquidationMarginLevel = 1100000; // 110%
+    uint24 public marginFee = 3000; // 0.3%
     uint24 public dynamicFeeDurationSeconds = 120;
     uint24 public dynamicFeeUnit = 10;
     address public feeTo;
@@ -47,7 +48,7 @@ contract MarginFees is IMarginFees, Owned {
         IMarginHookManager hookManager = IMarginHookManager(hook);
         HookStatus memory status = hookManager.getStatus(poolId);
         _fee = dynamicFee(status);
-        _marginFee = status.marginFee;
+        _marginFee = status.marginFee == 0 ? marginFee : status.marginFee;
     }
 
     function dynamicFee(HookStatus memory status) public view returns (uint24 _fee) {

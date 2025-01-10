@@ -157,7 +157,6 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         status.rate0CumulativeLast = ONE_BILLION;
         status.rate1CumulativeLast = ONE_BILLION;
         status.blockTimestampLast = uint32(block.timestamp % 2 ** 32);
-        status.marginFee = 15000; // 1.5%
         hookStatusStore[id] = status;
         poolManager.initialize(key, SQRT_RATIO_1_1);
         emit Initialize(id, key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks);

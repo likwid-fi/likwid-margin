@@ -62,6 +62,14 @@ contract MarginHookManagerTest is DeployHelper {
         hookManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), marginLiquidity.getLevelPool(uPoolId, 4));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
+        removeParams =
+            RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidityHalf, deadline: type(uint256).max});
+        hookManager.removeLiquidity(removeParams);
+        HookStatus memory status = hookManager.getStatus(poolId);
+        assertEq(status.marginFee, 0);
+        (uint24 _fee, uint24 _marginFee) = marginFees.getPoolFees(address(hookManager), poolId);
+        assertEq(_fee, 3000);
+        assertEq(_marginFee, 3000);
     }
 
     function test_hook_liquidity_tokens() public {

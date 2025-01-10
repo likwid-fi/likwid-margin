@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 
 import {MarginOracle} from "../src/MarginOracle.sol";
 import {MarginLiquidity} from "../src/MarginLiquidity.sol";
+import {MarginHookManager} from "../src/MarginHookManager.sol";
 
 contract TestsScript is Script {
     address marginLiquidity = 0xDD0AebD45cd5c339e366fB7DEF71143C78585a6f;
@@ -15,6 +16,7 @@ contract TestsScript is Script {
     function run() public {
         vm.startBroadcast();
         // MarginLiquidity(marginLiquidity).addHooks(hookAddress);
+        // MarginHookManager(hookAddress).setFeeStatus()
         vm.stopBroadcast();
     }
 }
