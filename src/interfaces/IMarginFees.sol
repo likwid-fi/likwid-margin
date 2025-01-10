@@ -10,8 +10,6 @@ import {HookStatus} from "../types/HookStatus.sol";
 import {IMarginLiquidity} from "./IMarginLiquidity.sol";
 
 interface IMarginFees {
-    function minMarginLevel() external view returns (uint24);
-
     function liquidationMarginLevel() external view returns (uint24);
 
     function feeTo() external view returns (address);

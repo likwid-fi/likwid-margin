@@ -62,7 +62,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     uint256 public constant ONE_BILLION = 10 ** 9;
     uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
     uint256 private _nextId = 1;
-    uint256 public marginMinAmount = 0.1 ether;
+    uint24 public minMarginLevel = 1170000; // 117%
     IMarginHookManager private hook;
     IMarginChecker public checker;
     address public marginOracle;
@@ -107,6 +107,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
 
     function getHook() external view returns (address _hook) {
         _hook = address(hook);
+    }
+
+    function setMinMarginLevel(uint24 _minMarginLevel) external onlyOwner {
+        minMarginLevel = _minMarginLevel;
     }
 
     function setMarginOracle(address _oracle) external onlyOwner {
@@ -162,7 +166,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         view
         returns (bool valid)
     {
-        uint24 minMarginLevel = hook.marginFees().minMarginLevel();
         (uint256 reserve0, uint256 reserve1) =
             (_status.realReserve0 + _status.mirrorReserve0, _status.realReserve1 + _status.mirrorReserve1);
         (uint256 reserveBorrow, uint256 reserveMargin) =
@@ -195,7 +198,18 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         uint256 marginMaxTotal = (marginForOne ? marginReserve1 : marginReserve0);
         if (marginMaxTotal > 1000) {
             (uint256 reserve0, uint256 reserve1) = hook.getReserves(poolId);
-            uint256 marginMaxReserve = (marginForOne ? reserve1 : reserve0) * 8 / 100;
+            uint256 marginMaxReserve = (marginForOne ? reserve1 : reserve0);
+            uint24 part = 400;
+            if (leverage == 2) {
+                part = 200;
+            } else if (leverage == 3) {
+                part = 100;
+            } else if (leverage == 4) {
+                part = 40;
+            } else if (leverage == 5) {
+                part = 9;
+            }
+            marginMaxReserve = marginMaxReserve * part / 1000;
             marginMaxTotal = Math.min(marginMaxTotal, marginMaxReserve);
             marginMaxTotal -= 1000;
         }

@@ -884,4 +884,46 @@ contract MarginPositionManagerTest is DeployHelper {
         assertGt(positions[0].borrowAmount, 0);
         assertGt(positions[1].borrowAmount, 0);
     }
+
+    function leverageMax(uint24 leverage) public {
+        address user = address(this);
+        PoolId poolId1 = nativeKey.toId();
+        uint256 positionId;
+        uint256 borrowAmount;
+        (uint256 payValue, uint256 borrowAmountEstimate) = marginPositionManager.getMarginMax(poolId1, false, leverage);
+        MarginParams memory params = MarginParams({
+            poolId: poolId1,
+            marginForOne: false,
+            leverage: leverage,
+            marginAmount: payValue,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMinAmount: 0,
+            recipient: user,
+            deadline: block.timestamp + 1000
+        });
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        assertEq(positionId, 1);
+        assertEq(borrowAmountEstimate / 1000, borrowAmount / 1000);
+    }
+
+    function test_OneLeverage() public {
+        leverageMax(1);
+    }
+
+    function test_TwoLeverage() public {
+        leverageMax(2);
+    }
+
+    function test_ThreeLeverage() public {
+        leverageMax(3);
+    }
+
+    function test_FourLeverage() public {
+        leverageMax(4);
+    }
+
+    function test_FiveLeverage() public {
+        leverageMax(5);
+    }
 }

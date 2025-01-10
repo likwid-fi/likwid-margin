@@ -55,6 +55,7 @@ forge script script/DeployOracle.s.sol --broadcast --rpc-url https://ethereum-se
 forge script script/DeployFees.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
 forge script script/DeployMirror.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
 forge script script/DeployMockToken.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
+forge script script/DeployPositionManager.s.sol --broadcast --rpc-url https://ethereum-sepolia.publicnode.com --private-key $PRIKEY
 ```
 
 ### Verify

@@ -24,8 +24,7 @@ contract MarginFees is IMarginFees, Owned {
     uint256 public constant ONE_BILLION = 10 ** 9;
     uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
 
-    uint24 public constant minMarginLevel = 1200000; // 120%
-    uint24 public constant liquidationMarginLevel = 1100000; // 90%
+    uint24 public constant liquidationMarginLevel = 1100000; // 110%
     uint24 public dynamicFeeDurationSeconds = 120;
     uint24 public dynamicFeeUnit = 10;
     address public feeTo;
@@ -42,11 +41,6 @@ contract MarginFees is IMarginFees, Owned {
             mHigh: 10000
         });
         feeTo = initialOwner;
-    }
-
-    function getMarginLevels() external pure returns (uint24 _minMarginLevel, uint24 _liquidationMarginLevel) {
-        _minMarginLevel = minMarginLevel;
-        _liquidationMarginLevel = liquidationMarginLevel;
     }
 
     function getPoolFees(address hook, PoolId poolId) external view returns (uint24 _fee, uint24 _marginFee) {
