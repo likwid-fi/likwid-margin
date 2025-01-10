@@ -513,8 +513,9 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         uint256 marginTotal = params.marginAmount * params.leverage;
         require(marginReserves >= marginTotal, "TOKEN_NOT_ENOUGH");
         borrowAmount = _getAmountIn(status, zeroForOne, marginTotal);
+        (, uint24 marginFee) = marginFees.getPoolFees(address(this), params.poolId);
         // send total token
-        marginWithoutFee = marginTotal * (ONE_MILLION - status.marginFee) / ONE_MILLION;
+        marginWithoutFee = marginTotal * (ONE_MILLION - marginFee) / ONE_MILLION;
 
         marginCurrency.settle(poolManager, address(this), marginWithoutFee, true);
         marginCurrency.take(poolManager, _positionManager, marginWithoutFee, false);

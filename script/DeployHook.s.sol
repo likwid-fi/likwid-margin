@@ -16,11 +16,11 @@ contract DeployHookScript is Script {
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
     address manager = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
     address owner = 0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1;
-    address mirrorTokenManager = 0x3012A1E5c713FFb5CcCA46624c3f653653896999;
-    address marginLiquidity = 0xDD0AebD45cd5c339e366fB7DEF71143C78585a6f;
-    address marginChecker = 0x571371a6De330F4CEdF6a575E509e3603b765164;
-    address marginOracle = 0xfB2495C71142b4243e3C0CeA7301e38894f1d90E;
-    address marginFees = 0xB51794D6333D5995ef3fd5a2f791481aa06c5DB0;
+    address mirrorTokenManager = 0x59F8A8B628020030Ab1565526BA0a030751f4D18;
+    address marginLiquidity = 0xd1fd8b2db8afB4594Fad5571218d367CFec1A940;
+    address marginChecker = 0x095a62236c2A1cc685a9B2be6658a6F3CB3fcaA3;
+    address marginOracle = 0xf3220c5c4e95B025511Ceae99bcD645DbA46D895;
+    address marginFees = 0x73591f031219B91bCc3e0AB72C1EE3c0612F25B2;
 
     function setUp() public {}
 

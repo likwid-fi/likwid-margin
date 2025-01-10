@@ -179,10 +179,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         view
         returns (uint256 marginWithoutFee, uint256 borrowAmount)
     {
-        HookStatus memory status = hook.getStatus(poolId);
+        (, uint24 marginFee) = hook.marginFees().getPoolFees(address(hook), poolId);
         uint256 marginTotal = marginAmount * leverage;
         borrowAmount = hook.getAmountIn(poolId, marginForOne, marginTotal);
-        marginWithoutFee = marginTotal * (ONE_MILLION - status.marginFee) / ONE_MILLION;
+        marginWithoutFee = marginTotal * (ONE_MILLION - marginFee) / ONE_MILLION;
     }
 
     function getMarginMax(PoolId poolId, bool marginForOne, uint24 leverage)
