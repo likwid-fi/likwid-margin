@@ -17,7 +17,7 @@ library TruncatedOracle {
     error TargetPredatesOldestObservation(uint32 oldestTimestamp, uint32 targetTimestamp);
 
     /// @notice This is the max amount of millionth price1X112 in either direction that the pool is allowed to move at one time
-    uint32 constant MAX_PRICE_SECOND_MOVE = 1500; // 0.15%/second
+    uint32 constant MAX_PRICE_SECOND_MOVE = 3000; // 0.3%/second
 
     struct Observation {
         // the block timestamp of the observation

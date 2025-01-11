@@ -932,4 +932,11 @@ contract MarginPositionManagerTest is DeployHelper {
         leverageMax(true, 5);
         leverageMax(false, 5);
     }
+
+    function test_getPositionsZero() public view {
+        uint256[] memory positionIds = new uint256[](2);
+        positionIds[0] = 1;
+        positionIds[1] = 2;
+        marginPositionManager.getPositions(positionIds);
+    }
 }

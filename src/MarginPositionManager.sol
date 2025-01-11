@@ -133,6 +133,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
 
     function estimatePNL(uint256 positionId, uint256 repayMillionth) public view returns (int256 pnlMinAmount) {
         MarginPosition memory _position = getPosition(positionId);
+        if (_position.borrowAmount == 0) {
+            return 0;
+        }
         uint256 repayAmount = uint256(_position.borrowAmount) * repayMillionth / ONE_MILLION;
         uint256 releaseAmount = hook.getAmountIn(_position.poolId, !_position.marginForOne, repayAmount);
         uint256 sendValue = uint256(_position.marginTotal) * repayMillionth / ONE_MILLION;
