@@ -10,16 +10,16 @@ import {IMarginHookManager} from "../src/interfaces/IMarginHookManager.sol";
 contract DeployPositionManagerScript is Script {
     MarginPositionManager marginPositionManager;
     address owner = 0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1;
-    address checker = 0x4ADb006B9385340EDC67df6E110416CB3fB7dbc5;
-    address hookAddress = 0xF184EB360ad249048e248630f3C6217997278888;
-    address marginOracle = 0x93EE4A9C8Ea86A6C90C6bc1B7B1e9D1BfA2d77b5;
+    address checker = 0x095a62236c2A1cc685a9B2be6658a6F3CB3fcaA3;
+    address marginOracle = 0xf3220c5c4e95B025511Ceae99bcD645DbA46D895;
+    address hookAddress = 0x59036D328EFF4dAb2E33E04a60A5D810Df90C888;
 
     function setUp() public {}
 
     function run() public {
         vm.startBroadcast();
         marginPositionManager = new MarginPositionManager(owner, IMarginChecker(checker));
-        console2.log("marginPositionManager", address(marginPositionManager));
+        console2.log("marginPositionManager:", address(marginPositionManager));
         marginPositionManager.setHook(hookAddress);
         marginPositionManager.setMarginOracle(marginOracle);
         IMarginHookManager(hookAddress).addPositionManager(address(marginPositionManager));

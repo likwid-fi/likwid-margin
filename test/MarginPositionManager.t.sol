@@ -9,7 +9,7 @@ import {MarginRouter} from "../src/MarginRouter.sol";
 import {HookParams} from "../src/types/HookParams.sol";
 import {HookStatus} from "../src/types/HookStatus.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
-import {MarginPosition} from "../src/types/MarginPosition.sol";
+import {MarginPosition, MarginPositionVo} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
@@ -879,21 +879,22 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256[] memory positionIds = new uint256[](2);
         positionIds[0] = 1;
         positionIds[1] = 2;
-        MarginPosition[] memory positions = marginPositionManager.getPositions(positionIds);
+        MarginPositionVo[] memory positions = marginPositionManager.getPositions(positionIds);
         assertGt(positions.length, 0);
-        assertGt(positions[0].borrowAmount, 0);
-        assertGt(positions[1].borrowAmount, 0);
+        assertGt(positions[0].position.borrowAmount, 0);
+        assertGt(positions[1].position.borrowAmount, 0);
     }
 
-    function leverageMax(uint24 leverage) public {
+    function leverageMax(bool marginForOne, uint24 leverage) public {
         address user = address(this);
         PoolId poolId1 = nativeKey.toId();
         uint256 positionId;
         uint256 borrowAmount;
-        (uint256 payValue, uint256 borrowAmountEstimate) = marginPositionManager.getMarginMax(poolId1, false, leverage);
+        (uint256 payValue, uint256 borrowAmountEstimate) =
+            marginPositionManager.getMarginMax(poolId1, marginForOne, leverage);
         MarginParams memory params = MarginParams({
             poolId: poolId1,
-            marginForOne: false,
+            marginForOne: marginForOne,
             leverage: leverage,
             marginAmount: payValue,
             marginTotal: 0,
@@ -903,27 +904,32 @@ contract MarginPositionManagerTest is DeployHelper {
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
-        assertEq(positionId, 1);
+        assertGt(positionId, 0);
         assertEq(borrowAmountEstimate / 1000, borrowAmount / 1000);
     }
 
     function test_OneLeverage() public {
-        leverageMax(1);
+        leverageMax(true, 1);
+        leverageMax(false, 1);
     }
 
     function test_TwoLeverage() public {
-        leverageMax(2);
+        leverageMax(true, 2);
+        leverageMax(false, 2);
     }
 
     function test_ThreeLeverage() public {
-        leverageMax(3);
+        leverageMax(true, 3);
+        leverageMax(false, 3);
     }
 
     function test_FourLeverage() public {
-        leverageMax(4);
+        leverageMax(true, 4);
+        leverageMax(false, 4);
     }
 
     function test_FiveLeverage() public {
-        leverageMax(5);
+        leverageMax(true, 5);
+        leverageMax(false, 5);
     }
 }

@@ -14,3 +14,8 @@ struct MarginPosition {
     uint128 rawBorrowAmount;
     uint256 rateCumulativeLast;
 }
+
+struct MarginPositionVo {
+    MarginPosition position;
+    int256 pnl;
+}

@@ -13,7 +13,7 @@ import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 import {IMarginChecker} from "./interfaces/IMarginChecker.sol";
-import {MarginPosition} from "./types/MarginPosition.sol";
+import {MarginPosition, MarginPositionVo} from "./types/MarginPosition.sol";
 import {HookStatus} from "./types/HookStatus.sol";
 import {MarginParams, ReleaseParams} from "./types/MarginParams.sol";
 import {Math} from "./libraries/Math.sol";
@@ -131,10 +131,19 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
     }
 
-    function getPositions(uint256[] calldata positionIds) external view returns (MarginPosition[] memory _position) {
-        _position = new MarginPosition[](positionIds.length);
+    function estimatePNL(uint256 positionId, uint256 repayMillionth) public view returns (int256 pnlMinAmount) {
+        MarginPosition memory _position = getPosition(positionId);
+        uint256 repayAmount = uint256(_position.borrowAmount) * repayMillionth / ONE_MILLION;
+        uint256 releaseAmount = hook.getAmountIn(_position.poolId, !_position.marginForOne, repayAmount);
+        uint256 sendValue = uint256(_position.marginTotal) * repayMillionth / ONE_MILLION;
+        pnlMinAmount = int256(sendValue) - int256(releaseAmount);
+    }
+
+    function getPositions(uint256[] calldata positionIds) external view returns (MarginPositionVo[] memory _position) {
+        _position = new MarginPositionVo[](positionIds.length);
         for (uint256 i = 0; i < positionIds.length; i++) {
-            _position[i] = getPosition(positionIds[i]);
+            _position[i].position = getPosition(positionIds[i]);
+            _position[i].pnl = estimatePNL(positionIds[i], ONE_MILLION);
         }
     }
 
@@ -199,7 +208,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (marginMaxTotal > 1000) {
             (uint256 reserve0, uint256 reserve1) = hook.getReserves(poolId);
             uint256 marginMaxReserve = (marginForOne ? reserve1 : reserve0);
-            uint24 part = 400;
+            uint24 part = 380;
             if (leverage == 2) {
                 part = 200;
             } else if (leverage == 3) {
@@ -330,14 +339,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             transferNative(msg.sender, msg.value - sendValue);
         }
         emit Repay(_position.poolId, msg.sender, positionId, repayAmount);
-    }
-
-    function estimatePNL(uint256 positionId, uint256 repayMillionth) external view returns (int256 pnlMinAmount) {
-        MarginPosition memory _position = getPosition(positionId);
-        uint256 repayAmount = uint256(_position.borrowAmount) * repayMillionth / ONE_MILLION;
-        uint256 releaseAmount = hook.getAmountIn(_position.poolId, !_position.marginForOne, repayAmount);
-        uint256 sendValue = uint256(_position.marginAmount + _position.marginTotal) * repayMillionth / ONE_MILLION;
-        pnlMinAmount = int256(sendValue) - int256(releaseAmount);
     }
 
     function close(
