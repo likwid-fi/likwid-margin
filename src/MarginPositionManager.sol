@@ -245,7 +245,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (positionId == 0) {
             _mint(params.recipient, (positionId = _nextId++));
             emit Mint(params.poolId, msg.sender, params.recipient, positionId);
-            _positions[positionId] = MarginPosition({
+            MarginPosition memory _position = MarginPosition({
                 poolId: params.poolId,
                 marginForOne: params.marginForOne,
                 marginAmount: uint128(params.marginAmount),
@@ -254,17 +254,20 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
                 rawBorrowAmount: uint128(params.borrowAmount),
                 rateCumulativeLast: rateLast
             });
-            _borrowPositions[params.poolId][params.marginForOne][params.recipient] = positionId;
-        } else {
-            MarginPosition storage _position = _positions[positionId];
             (bool liquidated,) = _checkLiquidate(_position);
             require(!liquidated, "liquidated");
+            _borrowPositions[params.poolId][params.marginForOne][params.recipient] = positionId;
+            _positions[positionId] = _position;
+        } else {
+            MarginPosition storage _position = _positions[positionId];
+            uint256 borrowAmount = uint256(_position.borrowAmount) * rateLast / _position.rateCumulativeLast;
             _position.marginAmount += uint128(params.marginAmount);
             _position.marginTotal += uint128(params.marginTotal);
             _position.rawBorrowAmount += uint128(params.borrowAmount);
-            _position.borrowAmount =
-                uint128(uint256(_position.borrowAmount) * rateLast / _position.rateCumulativeLast + params.borrowAmount);
+            _position.borrowAmount = uint128(borrowAmount + params.borrowAmount);
             _position.rateCumulativeLast = rateLast;
+            (bool liquidated,) = _checkLiquidate(_position);
+            require(!liquidated, "liquidated");
         }
         emit Margin(
             params.poolId,
@@ -435,10 +438,14 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         view
         returns (bool liquidated, uint256 amountDebt)
     {
-        if (_position.rateCumulativeLast > 0) {
-            uint256 rateLast =
-                hook.marginFees().getBorrowRateCumulativeLast(address(hook), _position.poolId, _position.marginForOne);
-            uint256 borrowAmount = uint256(_position.borrowAmount) * rateLast / _position.rateCumulativeLast;
+        if (_position.borrowAmount > 0) {
+            uint256 borrowAmount = uint256(_position.borrowAmount);
+            if (_position.rateCumulativeLast > 0) {
+                uint256 rateLast = hook.marginFees().getBorrowRateCumulativeLast(
+                    address(hook), _position.poolId, _position.marginForOne
+                );
+                borrowAmount = borrowAmount * rateLast / _position.rateCumulativeLast;
+            }
             if (marginOracle == address(0)) {
                 (uint256 reserve0, uint256 reserve1) = hook.getReserves(_position.poolId);
                 (uint256 reserveBorrow, uint256 reserveMargin) =
