@@ -19,3 +19,10 @@ struct MarginPositionVo {
     MarginPosition position;
     int256 pnl;
 }
+
+struct BurnParams {
+    PoolId poolId;
+    bool marginForOne; // true: currency1 is marginToken, false: currency0 is marginToken
+    uint256[] positionIds;
+    bytes signature;
+}
