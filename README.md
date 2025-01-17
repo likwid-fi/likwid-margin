@@ -25,6 +25,7 @@ forge build
 
 ```shell
 forge test
+forge test -vvv --match-test xxx
 ```
 
 ### Format

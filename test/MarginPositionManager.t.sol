@@ -9,7 +9,7 @@ import {MarginRouter} from "../src/MarginRouter.sol";
 import {HookParams} from "../src/types/HookParams.sol";
 import {HookStatus} from "../src/types/HookStatus.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
-import {MarginPosition, MarginPositionVo} from "../src/types/MarginPosition.sol";
+import {MarginPosition, MarginPositionVo, BurnParams} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
@@ -938,5 +938,75 @@ contract MarginPositionManagerTest is DeployHelper {
         positionIds[0] = 1;
         positionIds[1] = 2;
         marginPositionManager.getPositions(positionIds);
+    }
+
+    function test_liquidateBurn() public {
+        uint256 length = 100;
+        uint256[] memory positionIds = new uint256[](length);
+        for (uint256 i = 0; i < length; i++) {
+            address user = vm.addr(i + 1);
+            uint256 positionId;
+            uint256 borrowAmount;
+            uint256 payValue = 0.0001 ether;
+            MarginParams memory params = MarginParams({
+                poolId: nativeKey.toId(),
+                marginForOne: false,
+                leverage: 3,
+                marginAmount: payValue,
+                marginTotal: 0,
+                borrowAmount: 0,
+                borrowMinAmount: 0,
+                recipient: user,
+                deadline: block.timestamp + 1000
+            });
+
+            (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+            console.log(
+                "hookManager.balance:%s,marginPositionManager.balance:%s",
+                address(hookManager).balance,
+                address(marginPositionManager).balance
+            );
+            console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
+            MarginPosition memory position = marginPositionManager.getPosition(positionId);
+            console.log(
+                "positionId:%s,position.borrowAmount:%s,rateCumulativeLast:%s",
+                positionId,
+                position.borrowAmount,
+                position.rateCumulativeLast
+            );
+
+            positionId = marginPositionManager.getPositionId(nativeKey.toId(), false, user);
+            assertGt(positionId, 0);
+            position = marginPositionManager.getPosition(positionId);
+            positionIds[i] = positionId;
+        }
+        for (uint256 i = 0; i < length; i++) {
+            uint256 positionId = positionIds[i];
+            (bool liquidated, uint256 amountNeed) = marginPositionManager.checkLiquidate(positionId);
+            console.log("positionId:%s,liquidated:%s,amountNeed:%s", positionId, liquidated, amountNeed);
+            uint256 amountIn = 0.1 ether;
+            uint256 swapIndex = 0;
+            address user = address(this);
+            while (!liquidated) {
+                MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+                    poolId: nativeKey.toId(),
+                    zeroForOne: true,
+                    to: user,
+                    amountIn: amountIn,
+                    amountOut: 0,
+                    amountOutMin: 0,
+                    deadline: type(uint256).max
+                });
+                swapRouter.exactInput{value: amountIn}(swapParams);
+                (liquidated, amountNeed) = marginPositionManager.checkLiquidate(positionId);
+                swapIndex++;
+                console.log("positionId:%s,amountNeed:%s,swapIndex:%s", positionId, amountNeed, swapIndex);
+                vm.warp(30 * swapIndex);
+            }
+        }
+
+        BurnParams memory burnParams =
+            BurnParams({poolId: nativeKey.toId(), marginForOne: false, positionIds: positionIds, signature: ""});
+        marginPositionManager.liquidateBurn(burnParams);
     }
 }
