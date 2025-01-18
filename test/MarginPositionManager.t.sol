@@ -961,20 +961,7 @@ contract MarginPositionManagerTest is DeployHelper {
             });
 
             (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
-            console.log(
-                "hookManager.balance:%s,marginPositionManager.balance:%s",
-                address(hookManager).balance,
-                address(marginPositionManager).balance
-            );
-            console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
             MarginPosition memory position = marginPositionManager.getPosition(positionId);
-            console.log(
-                "positionId:%s,position.borrowAmount:%s,rateCumulativeLast:%s",
-                positionId,
-                position.borrowAmount,
-                position.rateCumulativeLast
-            );
-
             positionId = marginPositionManager.getPositionId(nativeKey.toId(), false, user);
             assertGt(positionId, 0);
             position = marginPositionManager.getPosition(positionId);
@@ -983,7 +970,6 @@ contract MarginPositionManagerTest is DeployHelper {
         for (uint256 i = 0; i < length; i++) {
             uint256 positionId = positionIds[i];
             (bool liquidated, uint256 amountNeed) = marginPositionManager.checkLiquidate(positionId);
-            console.log("positionId:%s,liquidated:%s,amountNeed:%s", positionId, liquidated, amountNeed);
             uint256 amountIn = 0.1 ether;
             uint256 swapIndex = 0;
             address user = address(this);
@@ -1000,13 +986,15 @@ contract MarginPositionManagerTest is DeployHelper {
                 swapRouter.exactInput{value: amountIn}(swapParams);
                 (liquidated, amountNeed) = marginPositionManager.checkLiquidate(positionId);
                 swapIndex++;
-                console.log("positionId:%s,amountNeed:%s,swapIndex:%s", positionId, amountNeed, swapIndex);
                 vm.warp(30 * swapIndex);
             }
         }
-
+        MarginPosition memory _position = marginPositionManager.getPosition(1);
+        assertGt(_position.borrowAmount, 0);
         BurnParams memory burnParams =
             BurnParams({poolId: nativeKey.toId(), marginForOne: false, positionIds: positionIds, signature: ""});
         marginPositionManager.liquidateBurn(burnParams);
+        _position = marginPositionManager.getPosition(1);
+        assertEq(_position.borrowAmount, 0);
     }
 }
