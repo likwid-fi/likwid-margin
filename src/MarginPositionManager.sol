@@ -427,13 +427,12 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         uint256 releaseMargin = uint256(_position.marginAmount) * repayMillionth / ONE_MILLION;
         uint256 releaseTotal = uint256(_position.marginTotal) * repayMillionth / ONE_MILLION;
         int256 pnlAmount = int256(releaseTotal) - int256(params.releaseAmount);
+        require(pnlMinAmount == 0 || pnlMinAmount <= pnlAmount, "InsufficientOutputReceived");
         if (pnlAmount >= 0) {
-            require(pnlMinAmount <= pnlAmount, "InsufficientOutputReceived");
             if (pnlAmount > 0) {
                 marginToken.transfer(address(this), msg.sender, uint256(pnlAmount) + releaseMargin);
             }
         } else {
-            require(pnlMinAmount >= pnlAmount, "InsufficientOutputReceived");
             if (uint256(-pnlAmount) < releaseMargin) {
                 marginToken.transfer(address(this), msg.sender, releaseMargin - uint256(-pnlAmount));
             } else if (uint256(-pnlAmount) < uint256(_position.marginAmount)) {
