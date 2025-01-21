@@ -125,7 +125,6 @@ contract DeployHelper is Test {
         tokenUSDT.approve(address(marginPositionManager), type(uint256).max);
         marginPositionManager.setHook(address(hookManager));
         hookManager.addPositionManager(address(marginPositionManager));
-        marginPositionManager.setMarginOracle(address(marginOracle));
         hookManager.setMarginOracle(address(marginOracle));
         swapRouter = new MarginRouter(address(this), manager, hookManager);
         tokenA.approve(address(swapRouter), type(uint256).max);

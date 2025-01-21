@@ -12,6 +12,8 @@ import {IMarginFees} from "../interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "../interfaces/IMarginLiquidity.sol";
 
 interface IMarginHookManager is IImmutableState {
+    function marginOracle() external view returns (address);
+
     function marginFees() external view returns (IMarginFees);
 
     function marginLiquidity() external view returns (IMarginLiquidity);
