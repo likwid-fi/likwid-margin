@@ -163,8 +163,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
         uint256 repayAmount = uint256(_position.borrowAmount) * repayMillionth / ONE_MILLION;
         uint256 releaseAmount = hook.getAmountIn(_position.poolId, !_position.marginForOne, repayAmount);
-        uint256 sendValue = uint256(_position.marginTotal) * repayMillionth / ONE_MILLION;
-        pnlAmount = int256(sendValue) - int256(releaseAmount);
+        uint256 releaseTotal = uint256(_position.marginTotal) * repayMillionth / ONE_MILLION;
+        pnlAmount = int256(releaseTotal) - int256(releaseAmount);
     }
 
     function estimatePNL(uint256 positionId, uint256 repayMillionth) public view returns (int256 pnlAmount) {
@@ -426,19 +426,18 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         params.releaseAmount = hook.getAmountIn(_position.poolId, !_position.marginForOne, params.repayAmount);
         uint256 releaseMargin = uint256(_position.marginAmount) * repayMillionth / ONE_MILLION;
         uint256 releaseTotal = uint256(_position.marginTotal) * repayMillionth / ONE_MILLION;
-        int256 pnlAmount = int256(releaseMargin + releaseTotal) - int256(params.releaseAmount);
+        int256 pnlAmount = int256(releaseTotal) - int256(params.releaseAmount);
         if (pnlAmount >= 0) {
             require(pnlMinAmount <= pnlAmount, "InsufficientOutputReceived");
             if (pnlAmount > 0) {
-                marginToken.transfer(address(this), msg.sender, uint256(pnlAmount));
+                marginToken.transfer(address(this), msg.sender, uint256(pnlAmount) + releaseMargin);
             }
         } else {
-            uint256 marginAmount = uint256(_position.marginAmount) - releaseMargin;
-            if (releaseMargin + releaseTotal + marginAmount >= params.releaseAmount) {
-                require(
-                    pnlMinAmount > int256(releaseMargin + releaseTotal) - int256(params.releaseAmount),
-                    "InsufficientOutputReceived"
-                );
+            require(pnlMinAmount >= pnlAmount, "InsufficientOutputReceived");
+            if (uint256(-pnlAmount) < releaseMargin) {
+                marginToken.transfer(address(this), msg.sender, releaseMargin - uint256(-pnlAmount));
+            } else if (uint256(-pnlAmount) < uint256(_position.marginAmount)) {
+                releaseMargin = uint256(-pnlAmount);
             } else {
                 // liquidated
                 revert PositionLiquidated();
@@ -451,9 +450,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             bool success = marginToken.approve(address(hook), params.releaseAmount);
             require(success, "APPROVE_ERR");
             hook.release(params);
-        }
-        if (pnlAmount < 0) {
-            releaseMargin += uint256(-pnlAmount);
         }
         emit Close(
             _position.poolId, msg.sender, positionId, releaseMargin, releaseTotal, params.rawBorrowAmount, pnlAmount
