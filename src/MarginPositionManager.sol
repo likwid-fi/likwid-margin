@@ -44,21 +44,13 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         uint256 borrowAmount,
         bool marginForOne
     );
-    event Repay(
+    event RepayClose(
         PoolId indexed poolId,
         address indexed sender,
         uint256 positionId,
         uint256 releaseMarginAmount,
         uint256 releaseMarginTotal,
-        uint256 repayRawAmount,
-        int256 pnlAmount
-    );
-    event Close(
-        PoolId indexed poolId,
-        address indexed sender,
-        uint256 positionId,
-        uint256 releaseMarginAmount,
-        uint256 releaseMarginTotal,
+        uint256 repayAmount,
         uint256 repayRawAmount,
         int256 pnlAmount
     );
@@ -329,7 +321,16 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         uint256 releaseTotal = uint256(_position.marginTotal) * repayAmount / borrowAmount;
         bool success = marginToken.transfer(address(this), msg.sender, releaseMargin + releaseTotal);
         require(success, "RELEASE_TRANSFER_ERR");
-        emit Repay(_position.poolId, msg.sender, positionId, releaseMargin, releaseTotal, repayRawAmount, pnlAmount);
+        emit RepayClose(
+            _position.poolId,
+            msg.sender,
+            positionId,
+            releaseMargin,
+            releaseTotal,
+            repayAmount,
+            repayRawAmount,
+            pnlAmount
+        );
         if (_position.borrowAmount == 0) {
             _burnPosition(positionId, BurnType.CLOSE);
         } else {
@@ -450,8 +451,15 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             require(success, "APPROVE_ERR");
             hook.release(params);
         }
-        emit Close(
-            _position.poolId, msg.sender, positionId, releaseMargin, releaseTotal, params.rawBorrowAmount, pnlAmount
+        emit RepayClose(
+            _position.poolId,
+            msg.sender,
+            positionId,
+            releaseMargin,
+            releaseTotal,
+            params.repayAmount,
+            params.rawBorrowAmount,
+            pnlAmount
         );
         close(
             positionId,

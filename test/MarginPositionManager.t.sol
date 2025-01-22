@@ -133,11 +133,13 @@ contract MarginPositionManagerTest is DeployHelper {
         console.log("before repay positionId:%s,position.borrowAmount:%s", positionId, position.borrowAmount);
         uint256 releaseAmount = 0.01 ether;
         tokenA.approve(address(hookManager), releaseAmount);
-        marginPositionManager.close(positionId, 30000, 0, UINT256_MAX);
+        int256 pnlAmount = marginPositionManager.estimatePNL(positionId, 30000);
+        marginPositionManager.close(positionId, 30000, pnlAmount, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
         console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
         vm.warp(3600 * 10);
-        marginPositionManager.close(positionId, 1000000, 0, UINT256_MAX);
+        pnlAmount = marginPositionManager.estimatePNL(positionId, 1000000);
+        marginPositionManager.close(positionId, 1000000, pnlAmount, UINT256_MAX);
         newPosition = marginPositionManager.getPosition(positionId);
         console.log("after repay positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
     }
