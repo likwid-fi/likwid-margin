@@ -17,18 +17,12 @@ interface IMarginChecker {
         view
         returns (uint256 reserveBorrow, uint256 reserveMargin);
 
-    function checkLiquidate(address manager, uint256 positionId)
-        external
-        view
-        returns (bool liquidated, uint256 releaseAmount);
+    function checkLiquidate(address manager, uint256 positionId) external view returns (bool liquidated);
 
-    function checkLiquidate(MarginPosition memory _position, address hook)
-        external
-        view
-        returns (bool liquidated, uint256 amountDebt);
+    function checkLiquidate(MarginPosition memory _position, address hook) external view returns (bool liquidated);
 
     function checkLiquidate(PoolId poolId, bool marginForOne, address hook, MarginPosition[] memory inPositions)
         external
         view
-        returns (bool[] memory liquidatedList, uint256[] memory amountDebtList);
+        returns (bool[] memory liquidatedList, uint256[] memory borrowAmountList);
 }

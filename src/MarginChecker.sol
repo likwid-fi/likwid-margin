@@ -58,36 +58,25 @@ contract MarginChecker is IMarginChecker, Owned {
         }
     }
 
-    function checkLiquidate(address manager, uint256 positionId)
-        public
-        view
-        returns (bool liquidated, uint256 releaseAmount)
-    {
+    function checkLiquidate(address manager, uint256 positionId) public view returns (bool liquidated) {
         IMarginPositionManager positionManager = IMarginPositionManager(manager);
         MarginPosition memory _position = positionManager.getPosition(positionId);
-        uint256 amountDebt;
-        (liquidated, amountDebt) = checkLiquidate(_position, positionManager.getHook());
-        releaseAmount = Math.min(amountDebt, _position.marginAmount + _position.marginTotal);
+        liquidated = checkLiquidate(_position, positionManager.getHook());
     }
 
     function checkLiquidate(address manager, uint256[] calldata positionIds)
         external
         view
-        returns (bool[] memory liquidatedList, uint256[] memory releaseAmountList)
+        returns (bool[] memory liquidatedList)
     {
         liquidatedList = new bool[](positionIds.length);
-        releaseAmountList = new uint256[](positionIds.length);
         for (uint256 i = 0; i < positionIds.length; i++) {
             uint256 positionId = positionIds[i];
-            (liquidatedList[i], releaseAmountList[i]) = checkLiquidate(manager, positionId);
+            liquidatedList[i] = checkLiquidate(manager, positionId);
         }
     }
 
-    function checkLiquidate(MarginPosition memory _position, address hook)
-        public
-        view
-        returns (bool liquidated, uint256 amountDebt)
-    {
+    function checkLiquidate(MarginPosition memory _position, address hook) public view returns (bool liquidated) {
         if (_position.borrowAmount > 0) {
             IMarginHookManager hookManager = IMarginHookManager(hook);
             uint256 borrowAmount = uint256(_position.borrowAmount);
@@ -97,17 +86,16 @@ contract MarginChecker is IMarginChecker, Owned {
                 borrowAmount = borrowAmount * rateLast / _position.rateCumulativeLast;
             }
             (uint256 reserveBorrow, uint256 reserveMargin) = getReserves(_position.poolId, _position.marginForOne, hook);
-            amountDebt = reserveMargin * borrowAmount / reserveBorrow;
-
+            uint256 debtAmount = reserveMargin * borrowAmount / reserveBorrow;
             uint24 marginLevel = hookManager.marginFees().liquidationMarginLevel();
-            liquidated = _position.marginAmount + _position.marginTotal < amountDebt * marginLevel / ONE_MILLION;
+            liquidated = _position.marginAmount + _position.marginTotal < debtAmount * marginLevel / ONE_MILLION;
         }
     }
 
     function checkLiquidate(PoolId poolId, bool marginForOne, address hook, MarginPosition[] memory inPositions)
         external
         view
-        returns (bool[] memory liquidatedList, uint256[] memory amountDebtList)
+        returns (bool[] memory liquidatedList, uint256[] memory borrowAmountList)
     {
         IMarginHookManager hookManager = IMarginHookManager(hook);
         (uint256 reserveBorrow, uint256 reserveMargin) = getReserves(poolId, marginForOne, hook);
@@ -115,19 +103,19 @@ contract MarginChecker is IMarginChecker, Owned {
         uint256 rateLast = hookManager.marginFees().getBorrowRateCumulativeLast(hook, poolId, marginForOne);
         bytes32 bytes32PoolId = PoolId.unwrap(poolId);
         liquidatedList = new bool[](inPositions.length);
-        amountDebtList = new uint256[](inPositions.length);
+        borrowAmountList = new uint256[](inPositions.length);
         for (uint256 i = 0; i < inPositions.length; i++) {
             MarginPosition memory _position = inPositions[i];
             if (PoolId.unwrap(_position.poolId) == bytes32PoolId && _position.marginForOne == marginForOne) {
                 if (_position.borrowAmount > 0) {
                     uint256 borrowAmount = uint256(_position.borrowAmount);
+                    uint256 allMarginAmount = _position.marginAmount + _position.marginTotal;
                     if (_position.rateCumulativeLast > 0) {
                         borrowAmount = borrowAmount * rateLast / _position.rateCumulativeLast;
                     }
-                    amountDebtList[i] = reserveMargin * borrowAmount / reserveBorrow;
-
-                    liquidatedList[i] =
-                        _position.marginAmount + _position.marginTotal < amountDebtList[i] * marginLevel / ONE_MILLION;
+                    uint256 debtAmount = reserveMargin * borrowAmount / reserveBorrow;
+                    liquidatedList[i] = allMarginAmount < debtAmount * marginLevel / ONE_MILLION;
+                    borrowAmountList[i] = borrowAmount;
                 }
             }
         }

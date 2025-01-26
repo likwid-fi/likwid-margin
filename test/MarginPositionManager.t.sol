@@ -410,8 +410,7 @@ contract MarginPositionManagerTest is DeployHelper {
         positionId = marginPositionManager.getPositionId(nativeKey.toId(), false, user);
         assertGt(positionId, 0);
         position = marginPositionManager.getPosition(positionId);
-        (bool liquidated, uint256 amountNeed) = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
-        console.log("liquidated:%s,amountNeed:%s", liquidated, amountNeed);
+        bool liquidated = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
         uint256 amountIn = 0.1 ether;
         uint256 swapIndex = 0;
         while (!liquidated) {
@@ -425,13 +424,13 @@ contract MarginPositionManagerTest is DeployHelper {
                 deadline: type(uint256).max
             });
             swapRouter.exactInput{value: amountIn}(swapParams);
-            (liquidated, amountNeed) = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
+            liquidated = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
             swapIndex++;
-            console.log("amountNeed:%s,swapIndex:%s", amountNeed, swapIndex);
             vm.warp(30 * swapIndex);
         }
         console.log(
-            "before liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
+            "before swapIndex:%s, liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
+            swapIndex,
             address(hookManager).balance,
             address(marginPositionManager).balance
         );
@@ -486,8 +485,7 @@ contract MarginPositionManagerTest is DeployHelper {
         positionId = marginPositionManager.getPositionId(nativeKey.toId(), false, user);
         assertGt(positionId, 0);
         position = marginPositionManager.getPosition(positionId);
-        (bool liquidated, uint256 amountNeed) = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
-        console.log("liquidated:%s,amountNeed:%s", liquidated, amountNeed);
+        bool liquidated = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
         uint256 amountIn = 0.1 ether;
         uint256 swapIndex = 0;
         while (!liquidated) {
@@ -501,13 +499,13 @@ contract MarginPositionManagerTest is DeployHelper {
                 deadline: type(uint256).max
             });
             swapRouter.exactInput{value: amountIn}(swapParams);
-            (liquidated, amountNeed) = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
+            liquidated = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
             swapIndex++;
-            console.log("amountNeed:%s,swapIndex:%s", amountNeed, swapIndex);
             vm.warp(30 * swapIndex);
         }
         console.log(
-            "before liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
+            "before swapIndex:%s, liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
+            swapIndex,
             address(hookManager).balance,
             address(marginPositionManager).balance
         );
@@ -813,9 +811,8 @@ contract MarginPositionManagerTest is DeployHelper {
         positionId = marginPositionManager.getPositionId(poolId, false, user);
         assertGt(positionId, 0);
         position = marginPositionManager.getPosition(positionId);
-        (bool liquidated, uint256 releaseAmount) =
-            marginChecker.checkLiquidate(address(marginPositionManager), positionId);
-        console.log("liquidated:%s,releaseAmount:%s", liquidated, releaseAmount);
+        bool liquidated = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
+        console.log("liquidated:%s", liquidated);
         {
             uint256 amountIn = 0.1 ether;
             uint256 swapIndex = 0;
@@ -830,9 +827,8 @@ contract MarginPositionManagerTest is DeployHelper {
                     deadline: type(uint256).max
                 });
                 swapRouter.exactInput{value: amountIn}(swapParams);
-                (liquidated, releaseAmount) = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
+                liquidated = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
                 swapIndex++;
-                console.log("releaseAmount:%s,swapIndex:%s", releaseAmount, swapIndex);
                 vm.warp(30 * swapIndex);
             }
         }
@@ -952,6 +948,7 @@ contract MarginPositionManagerTest is DeployHelper {
     function test_liquidateBurn() public {
         uint256 length = 100;
         uint256[] memory positionIds = new uint256[](length);
+        uint256 debtAmount = 0;
         for (uint256 i = 0; i < length; i++) {
             address user = vm.addr(i + 1);
             uint256 positionId;
@@ -975,11 +972,12 @@ contract MarginPositionManagerTest is DeployHelper {
             assertGt(positionId, 0);
             position = marginPositionManager.getPosition(positionId);
             positionIds[i] = positionId;
+            debtAmount += position.marginAmount + position.marginTotal;
         }
+        assertEq(debtAmount, address(marginPositionManager).balance);
         for (uint256 i = 0; i < length; i++) {
             uint256 positionId = positionIds[i];
-            (bool liquidated, uint256 amountNeed) =
-                marginChecker.checkLiquidate(address(marginPositionManager), positionId);
+            bool liquidated = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
             uint256 amountIn = 0.1 ether;
             uint256 swapIndex = 0;
             address user = address(this);
@@ -994,7 +992,7 @@ contract MarginPositionManagerTest is DeployHelper {
                     deadline: type(uint256).max
                 });
                 swapRouter.exactInput{value: amountIn}(swapParams);
-                (liquidated, amountNeed) = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
+                liquidated = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
                 swapIndex++;
                 vm.warp(30 * swapIndex);
             }
@@ -1006,5 +1004,6 @@ contract MarginPositionManagerTest is DeployHelper {
         marginPositionManager.liquidateBurn(burnParams);
         _position = marginPositionManager.getPosition(1);
         assertEq(_position.borrowAmount, 0);
+        assertEq(0, address(marginPositionManager).balance);
     }
 }
