@@ -19,8 +19,26 @@ contract MarginChecker is IMarginChecker, Owned {
     using PriceMath for uint224;
 
     uint256 public constant ONE_MILLION = 10 ** 6;
+    uint24 liquidateMillion = 10 ** 4;
+    uint24[] leverageParts = [380, 200, 100, 40, 9];
 
     constructor(address initialOwner) Owned(initialOwner) {}
+
+    function setLiquidateMillion(uint24 _liquidateMillion) external onlyOwner {
+        liquidateMillion = _liquidateMillion;
+    }
+
+    function getLiquidateMillion() external view returns (uint24) {
+        return liquidateMillion;
+    }
+
+    function setLeverageParts(uint24[] calldata _leverageParts) external onlyOwner {
+        leverageParts = _leverageParts;
+    }
+
+    function getLeverageParts() external view returns (uint24[] memory) {
+        return leverageParts;
+    }
 
     function checkLiquidate(address, uint256, bytes calldata) external pure returns (bool) {
         return true;
@@ -58,28 +76,24 @@ contract MarginChecker is IMarginChecker, Owned {
         }
     }
 
-    function checkLiquidate(address manager, uint256 positionId) public view returns (bool liquidated) {
+    function checkLiquidate(address manager, uint256 positionId)
+        public
+        view
+        returns (bool liquidated, uint256 borrowAmount)
+    {
         IMarginPositionManager positionManager = IMarginPositionManager(manager);
         MarginPosition memory _position = positionManager.getPosition(positionId);
-        liquidated = checkLiquidate(_position, positionManager.getHook());
+        return checkLiquidate(_position, positionManager.getHook());
     }
 
-    function checkLiquidate(address manager, uint256[] calldata positionIds)
-        external
+    function checkLiquidate(MarginPosition memory _position, address hook)
+        public
         view
-        returns (bool[] memory liquidatedList)
+        returns (bool liquidated, uint256 borrowAmount)
     {
-        liquidatedList = new bool[](positionIds.length);
-        for (uint256 i = 0; i < positionIds.length; i++) {
-            uint256 positionId = positionIds[i];
-            liquidatedList[i] = checkLiquidate(manager, positionId);
-        }
-    }
-
-    function checkLiquidate(MarginPosition memory _position, address hook) public view returns (bool liquidated) {
         if (_position.borrowAmount > 0) {
             IMarginHookManager hookManager = IMarginHookManager(hook);
-            uint256 borrowAmount = uint256(_position.borrowAmount);
+            borrowAmount = uint256(_position.borrowAmount);
             if (_position.rateCumulativeLast > 0) {
                 uint256 rateLast =
                     hookManager.marginFees().getBorrowRateCumulativeLast(hook, _position.poolId, _position.marginForOne);
@@ -89,6 +103,19 @@ contract MarginChecker is IMarginChecker, Owned {
             uint256 debtAmount = reserveMargin * borrowAmount / reserveBorrow;
             uint24 marginLevel = hookManager.marginFees().liquidationMarginLevel();
             liquidated = _position.marginAmount + _position.marginTotal < debtAmount * marginLevel / ONE_MILLION;
+        }
+    }
+
+    function checkLiquidate(address manager, uint256[] calldata positionIds)
+        external
+        view
+        returns (bool[] memory liquidatedList, uint256[] memory borrowAmountList)
+    {
+        liquidatedList = new bool[](positionIds.length);
+        borrowAmountList = new uint256[](positionIds.length);
+        for (uint256 i = 0; i < positionIds.length; i++) {
+            uint256 positionId = positionIds[i];
+            (liquidatedList[i], borrowAmountList[i]) = checkLiquidate(manager, positionId);
         }
     }
 

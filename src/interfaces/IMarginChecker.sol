@@ -5,6 +5,10 @@ import {PoolId} from "v4-core/types/PoolId.sol";
 import {MarginPosition, MarginPositionVo, BurnParams} from "../types/MarginPosition.sol";
 
 interface IMarginChecker {
+    function getLiquidateMillion() external view returns (uint24);
+
+    function getLeverageParts() external view returns (uint24[] memory);
+
     function checkLiquidate(address sender, uint256 positionId, bytes calldata signature)
         external
         view
@@ -17,9 +21,15 @@ interface IMarginChecker {
         view
         returns (uint256 reserveBorrow, uint256 reserveMargin);
 
-    function checkLiquidate(address manager, uint256 positionId) external view returns (bool liquidated);
+    function checkLiquidate(address manager, uint256 positionId)
+        external
+        view
+        returns (bool liquidated, uint256 borrowAmount);
 
-    function checkLiquidate(MarginPosition memory _position, address hook) external view returns (bool liquidated);
+    function checkLiquidate(MarginPosition memory _position, address hook)
+        external
+        view
+        returns (bool liquidated, uint256 borrowAmount);
 
     function checkLiquidate(PoolId poolId, bool marginForOne, address hook, MarginPosition[] memory inPositions)
         external

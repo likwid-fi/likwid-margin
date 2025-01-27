@@ -18,6 +18,7 @@
     "keccak",
     "LMPM",
     "mload",
+    "PRIKEY",
     "returndata",
     "solmate",
     "SSTOREs",
