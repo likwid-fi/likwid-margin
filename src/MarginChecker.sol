@@ -19,28 +19,33 @@ contract MarginChecker is IMarginChecker, Owned {
     using PriceMath for uint224;
 
     uint256 public constant ONE_MILLION = 10 ** 6;
-    uint24 liquidateMillion = 10 ** 4;
-    uint24[] leverageParts = [380, 200, 100, 40, 9];
+    uint24 callerProfit = 10 ** 4;
+    uint24 protocolProfit = 0;
+    uint24[] leverageThousandths = [380, 200, 100, 40, 9];
 
     constructor(address initialOwner) Owned(initialOwner) {}
 
-    function setLiquidateMillion(uint24 _liquidateMillion) external onlyOwner {
-        liquidateMillion = _liquidateMillion;
+    function setCallerProfit(uint24 _callerProfit) external onlyOwner {
+        callerProfit = _callerProfit;
     }
 
-    function getLiquidateMillion() external view returns (uint24) {
-        return liquidateMillion;
+    function setProtocolProfit(uint24 _protocolProfit) external onlyOwner {
+        protocolProfit = _protocolProfit;
     }
 
-    function setLeverageParts(uint24[] calldata _leverageParts) external onlyOwner {
-        leverageParts = _leverageParts;
+    function getProfitMillions() external view returns (uint24, uint24) {
+        return (callerProfit, protocolProfit);
     }
 
-    function getLeverageParts() external view returns (uint24[] memory) {
-        return leverageParts;
+    function setLeverageParts(uint24[] calldata _leverageThousandths) external onlyOwner {
+        leverageThousandths = _leverageThousandths;
     }
 
-    function checkLiquidate(address, uint256, bytes calldata) external pure returns (bool) {
+    function getThousandthsByLeverage() external view returns (uint24[] memory) {
+        return leverageThousandths;
+    }
+
+    function checkValidity(address, uint256, bytes calldata) external pure returns (bool) {
         return true;
     }
 

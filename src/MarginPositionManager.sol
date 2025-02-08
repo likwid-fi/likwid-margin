@@ -233,7 +233,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (marginMaxTotal > 1000) {
             (uint256 reserve0, uint256 reserve1) = hook.getReserves(poolId);
             uint256 marginMaxReserve = (marginForOne ? reserve1 : reserve0);
-            uint24 part = checker.getLeverageParts()[leverage - 1];
+            uint24 part = checker.getThousandthsByLeverage()[leverage - 1];
             marginMaxReserve = marginMaxReserve * part / 1000;
             marginMaxTotal = Math.min(marginMaxTotal, marginMaxReserve);
             marginMaxTotal -= 1000;
@@ -476,8 +476,28 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         return liquidateBurn(params);
     }
 
+    function liquidateProfit(uint256 marginAmount, BurnParams memory params)
+        internal
+        returns (Currency marginToken, uint256 profit, uint256 protocolProfit)
+    {
+        (uint24 callerProfitMillion, uint24 protocolProfitMillion) = checker.getProfitMillions();
+        HookStatus memory _status = hook.getStatus(params.poolId);
+        marginToken = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
+        if (callerProfitMillion > 0) {
+            profit = marginAmount * callerProfitMillion / ONE_MILLION;
+            marginToken.transfer(address(this), msg.sender, profit);
+        }
+        if (protocolProfitMillion > 0) {
+            address feeTo = hook.marginFees().feeTo();
+            if (feeTo != address(0)) {
+                protocolProfit = marginAmount * protocolProfitMillion / ONE_MILLION;
+                marginToken.transfer(address(this), feeTo, protocolProfit);
+            }
+        }
+    }
+
     function liquidateBurn(BurnParams memory params) public returns (uint256 profit) {
-        require(checker.checkLiquidate(msg.sender, 0, params.signature), "AUTH_ERROR");
+        require(checker.checkValidity(msg.sender, 0, params.signature), "AUTH_ERROR");
         MarginPosition[] memory inPositions = new MarginPosition[](params.positionIds.length);
         for (uint256 i = 0; i < params.positionIds.length; i++) {
             inPositions[i] = _positions[params.positionIds[i]];
@@ -514,18 +534,15 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             if (marginAmount == 0) {
                 return profit;
             }
-            profit = marginAmount * checker.getLiquidateMillion() / ONE_MILLION;
-            HookStatus memory _status = hook.getStatus(params.poolId);
-            Currency marginToken = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
-            releaseAmount = assetAmount - profit;
+            uint256 protocolProfit;
+            Currency marginToken;
+            (marginToken, profit, protocolProfit) = liquidateProfit(marginAmount, params);
+            releaseAmount = assetAmount - profit - protocolProfit;
             if (marginToken == CurrencyLibrary.ADDRESS_ZERO) {
                 liquidateValue = releaseAmount;
             } else {
                 bool success = marginToken.approve(address(hook), releaseAmount);
                 require(success, "APPROVE_ERR");
-            }
-            if (profit > 0) {
-                marginToken.transfer(address(this), msg.sender, profit);
             }
         }
         if (releaseAmount > 0) {
@@ -543,7 +560,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     }
 
     function liquidateCall(uint256 positionId, bytes calldata signature) external payable returns (uint256 profit) {
-        require(checker.checkLiquidate(msg.sender, positionId, signature), "AUTH_ERROR");
+        require(checker.checkValidity(msg.sender, positionId, signature), "AUTH_ERROR");
         (bool liquidated, uint256 borrowAmount) = checker.checkLiquidate(address(this), positionId);
         if (!liquidated) {
             return profit;
