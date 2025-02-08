@@ -464,7 +464,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     }
 
     function liquidateBurn(uint256 positionId, bytes calldata signature) external returns (uint256 profit) {
-        require(checker.checkLiquidate(msg.sender, positionId, signature), "AUTH_ERROR");
+        require(checker.checkValidity(msg.sender, positionId, signature), "AUTH_ERROR");
         MarginPosition memory _position = _positions[positionId];
         BurnParams memory params = BurnParams({
             poolId: _position.poolId,
