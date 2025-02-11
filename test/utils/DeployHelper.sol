@@ -10,7 +10,6 @@ import {MarginRouter} from "../../src/MarginRouter.sol";
 import {MarginOracle} from "../../src/MarginOracle.sol";
 import {MarginFees} from "../../src/MarginFees.sol";
 import {MarginChecker} from "../../src/MarginChecker.sol";
-import {HookParams} from "../../src/types/HookParams.sol";
 import {HookStatus} from "../../src/types/HookStatus.sol";
 import {MarginParams} from "../../src/types/MarginParams.sol";
 import {MarginPosition} from "../../src/types/MarginPosition.sol";

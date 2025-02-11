@@ -25,7 +25,8 @@ import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
 import {MarginParams, ReleaseParams} from "./types/MarginParams.sol";
-import {HookStatus, BalanceStatus} from "./types/HookStatus.sol";
+import {HookStatus} from "./types/HookStatus.sol";
+import {BalanceStatus} from "./types/BalanceStatus.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams.sol";
 
 contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
@@ -346,6 +347,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
 
     // ******************** SELF CALL ********************
 
+    /// @inheritdoc IMarginHookManager
     function addLiquidity(AddLiquidityParams calldata params)
         external
         payable
@@ -403,6 +405,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         key.currency1.take(poolManager, address(this), amount1, true);
     }
 
+    /// @inheritdoc IMarginHookManager
     function removeLiquidity(RemoveLiquidityParams calldata params)
         external
         ensure(params.deadline)
@@ -485,6 +488,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
 
     // ******************** MARGIN FUNCTIONS ********************
 
+    /// @inheritdoc IMarginHookManager
     function margin(MarginParams memory params) external positionOnly returns (MarginParams memory) {
         bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (msg.sender, params)));
         (params.marginTotal, params.borrowAmount) = abi.decode(result, (uint256, uint256));
@@ -524,6 +528,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         _update(status.key, true, 0, 0);
     }
 
+    /// @inheritdoc IMarginHookManager
     function release(ReleaseParams memory params) external payable positionOnly returns (uint256) {
         bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRelease, (params)));
         return abi.decode(result, (uint256));

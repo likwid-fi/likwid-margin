@@ -119,22 +119,12 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         require(success, "TRANSFER_FAILED");
     }
 
-    function setHook(address _hook) external onlyOwner {
-        hook = IMarginHookManager(_hook);
-    }
-
+    /// @inheritdoc IMarginPositionManager
     function getHook() external view returns (address _hook) {
         _hook = address(hook);
     }
 
-    function setMinMarginLevel(uint24 _minMarginLevel) external onlyOwner {
-        minMarginLevel = _minMarginLevel;
-    }
-
-    function setMarginChecker(address _checker) external onlyOwner {
-        checker = IMarginChecker(_checker);
-    }
-
+    /// @inheritdoc IMarginPositionManager
     function getPosition(uint256 positionId) public view returns (MarginPosition memory _position) {
         _position = _positions[positionId];
         if (_position.rateCumulativeLast > 0) {
@@ -159,6 +149,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         pnlAmount = int256(releaseTotal) - int256(releaseAmount);
     }
 
+    /// @inheritdoc IMarginPositionManager
     function estimatePNL(uint256 positionId, uint256 repayMillionth) public view returns (int256 pnlAmount) {
         MarginPosition memory _position = getPosition(positionId);
         pnlAmount = _estimatePNL(_position, repayMillionth);
@@ -208,6 +199,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         valid = params.marginAmount + params.marginTotal >= debtAmount * minMarginLevel / ONE_MILLION;
     }
 
+    /// @inheritdoc IMarginPositionManager
     function getMarginTotal(PoolId poolId, bool marginForOne, uint24 leverage, uint256 marginAmount)
         external
         view
@@ -219,6 +211,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         marginWithoutFee = marginTotal * (ONE_MILLION - marginFee) / ONE_MILLION;
     }
 
+    /// @inheritdoc IMarginPositionManager
     function getMarginMax(PoolId poolId, bool marginForOne, uint24 leverage)
         external
         view
@@ -242,6 +235,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         marginMax = marginMaxTotal / leverage;
     }
 
+    /// @inheritdoc IMarginPositionManager
     function margin(MarginParams memory params) external payable ensure(params.deadline) returns (uint256, uint256) {
         HookStatus memory _status = hook.getStatus(params.poolId);
         Currency marginToken = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
@@ -332,6 +326,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
     }
 
+    /// @inheritdoc IMarginPositionManager
     function repay(uint256 positionId, uint256 repayAmount, uint256 deadline) external payable ensure(deadline) {
         require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
         MarginPosition memory _position = getPosition(positionId);
@@ -395,9 +390,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
     }
 
+    /// @inheritdoc IMarginPositionManager
     function close(uint256 positionId, uint256 repayMillionth, int256 pnlMinAmount, uint256 deadline)
         external
-        payable
         ensure(deadline)
     {
         require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
@@ -598,11 +593,13 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         _burnPosition(positionId, BurnType.LIQUIDATE);
     }
 
+    /// @inheritdoc IMarginPositionManager
     function getMaxDecrease(uint256 positionId) external view returns (uint256 maxAmount) {
         MarginPosition memory _position = getPosition(positionId);
         maxAmount = checker.getMaxDecrease(_position, address(hook));
     }
 
+    /// @inheritdoc IMarginPositionManager
     function modify(uint256 positionId, int256 changeAmount) external payable {
         require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
         MarginPosition storage _position = _positions[positionId];
@@ -636,4 +633,18 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     }
 
     receive() external payable onlyMargin {}
+
+    // ******************** OWNER CALL ********************
+
+    function setHook(address _hook) external onlyOwner {
+        hook = IMarginHookManager(_hook);
+    }
+
+    function setMinMarginLevel(uint24 _minMarginLevel) external onlyOwner {
+        minMarginLevel = _minMarginLevel;
+    }
+
+    function setMarginChecker(address _checker) external onlyOwner {
+        checker = IMarginChecker(_checker);
+    }
 }

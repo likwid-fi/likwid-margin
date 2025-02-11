@@ -33,6 +33,7 @@ contract MarginChecker is IMarginChecker, Owned {
         protocolProfit = _protocolProfit;
     }
 
+    /// @inheritdoc IMarginChecker
     function getProfitMillions() external view returns (uint24, uint24) {
         return (callerProfit, protocolProfit);
     }
@@ -41,14 +42,17 @@ contract MarginChecker is IMarginChecker, Owned {
         leverageThousandths = _leverageThousandths;
     }
 
+    /// @inheritdoc IMarginChecker
     function getThousandthsByLeverage() external view returns (uint24[] memory) {
         return leverageThousandths;
     }
 
+    /// @inheritdoc IMarginChecker
     function checkValidity(address, uint256, bytes calldata) external pure returns (bool) {
         return true;
     }
 
+    /// @inheritdoc IMarginChecker
     function getMaxDecrease(MarginPosition memory _position, address hook) external view returns (uint256 maxAmount) {
         (uint256 reserve0, uint256 reserve1) = IMarginHookManager(hook).getReserves(_position.poolId);
         (uint256 reserveBorrow, uint256 reserveMargin) =
@@ -64,6 +68,7 @@ contract MarginChecker is IMarginChecker, Owned {
         }
     }
 
+    /// @inheritdoc IMarginChecker
     function getReserves(PoolId poolId, bool marginForOne, address hook)
         public
         view
@@ -81,6 +86,7 @@ contract MarginChecker is IMarginChecker, Owned {
         }
     }
 
+    /// @inheritdoc IMarginChecker
     function checkLiquidate(address manager, uint256 positionId)
         public
         view
@@ -91,6 +97,7 @@ contract MarginChecker is IMarginChecker, Owned {
         return checkLiquidate(_position, positionManager.getHook());
     }
 
+    /// @inheritdoc IMarginChecker
     function checkLiquidate(MarginPosition memory _position, address hook)
         public
         view
@@ -111,6 +118,7 @@ contract MarginChecker is IMarginChecker, Owned {
         }
     }
 
+    /// @inheritdoc IMarginChecker
     function checkLiquidate(address manager, uint256[] calldata positionIds)
         external
         view
@@ -124,6 +132,7 @@ contract MarginChecker is IMarginChecker, Owned {
         }
     }
 
+    /// @inheritdoc IMarginChecker
     function checkLiquidate(PoolId poolId, bool marginForOne, address hook, MarginPosition[] memory inPositions)
         external
         view

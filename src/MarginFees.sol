@@ -9,7 +9,7 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {TruncatedOracle} from "./libraries/TruncatedOracle.sol";
 import {RateStatus} from "./types/RateStatus.sol";
-import {HookStatus, BalanceStatus} from "./types/HookStatus.sol";
+import {HookStatus} from "./types/HookStatus.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {TimeUtils} from "./libraries/TimeUtils.sol";
@@ -44,6 +44,7 @@ contract MarginFees is IMarginFees, Owned {
         feeTo = initialOwner;
     }
 
+    /// @inheritdoc IMarginFees
     function getPoolFees(address hook, PoolId poolId) external view returns (uint24 _fee, uint24 _marginFee) {
         IMarginHookManager hookManager = IMarginHookManager(hook);
         HookStatus memory status = hookManager.getStatus(poolId);
@@ -51,6 +52,7 @@ contract MarginFees is IMarginFees, Owned {
         _marginFee = status.marginFee == 0 ? marginFee : status.marginFee;
     }
 
+    /// @inheritdoc IMarginFees
     function dynamicFee(HookStatus memory status) public view returns (uint24 _fee) {
         uint32 blockTS = uint32(block.timestamp % 2 ** 32);
         uint256 timeElapsed;
@@ -80,6 +82,7 @@ contract MarginFees is IMarginFees, Owned {
         _reserve1 = status.realReserve1 + status.mirrorReserve1;
     }
 
+    /// @inheritdoc IMarginFees
     function getBorrowRateByReserves(uint256 realReserve, uint256 mirrorReserve) public view returns (uint256 rate) {
         rate = rateStatus.rateBase;
         if (mirrorReserve == 0) {
@@ -97,6 +100,7 @@ contract MarginFees is IMarginFees, Owned {
         return rate + useLevel * rateStatus.mLow;
     }
 
+    /// @inheritdoc IMarginFees
     function getBorrowRateCumulativeLast(HookStatus memory status, bool marginForOne) public view returns (uint256) {
         (, uint256 timeElapsed) = status.blockTimestampLast.getTimeElapsedMillisecond();
         uint256 saveLast = marginForOne ? status.rate0CumulativeLast : status.rate1CumulativeLast;
@@ -104,6 +108,7 @@ contract MarginFees is IMarginFees, Owned {
         return saveLast * rateLast / ONE_BILLION;
     }
 
+    /// @inheritdoc IMarginFees
     function getBorrowRateCumulativeLast(address hook, PoolId poolId, bool marginForOne)
         external
         view
@@ -116,12 +121,14 @@ contract MarginFees is IMarginFees, Owned {
         return saveLast * rateLast / ONE_BILLION;
     }
 
+    /// @inheritdoc IMarginFees
     function getBorrowRate(HookStatus memory status, bool marginForOne) public view returns (uint256) {
         uint256 realReserve = marginForOne ? status.realReserve0 : status.realReserve1;
         uint256 mirrorReserve = marginForOne ? status.mirrorReserve0 : status.mirrorReserve1;
         return getBorrowRateByReserves(realReserve, mirrorReserve);
     }
 
+    /// @inheritdoc IMarginFees
     function getBorrowRate(address hook, PoolId poolId, bool marginForOne) external view returns (uint256) {
         HookStatus memory status = IMarginHookManager(hook).getStatus(poolId);
         return getBorrowRate(status, marginForOne);
@@ -132,10 +139,12 @@ contract MarginFees is IMarginFees, Owned {
         interest1 = status.interestRatio1X112.mul(status.realReserve1 + status.mirrorReserve1).decode();
     }
 
+    /// @inheritdoc IMarginFees
     function getInterests(HookStatus calldata status) external pure returns (uint112 interest0, uint112 interest1) {
         (interest0, interest1) = _getInterests(status);
     }
 
+    /// @inheritdoc IMarginFees
     function getInterests(address hook, PoolId poolId) external view returns (uint112 interest0, uint112 interest1) {
         IMarginHookManager hookManager = IMarginHookManager(hook);
         HookStatus memory status = hookManager.getStatus(poolId);

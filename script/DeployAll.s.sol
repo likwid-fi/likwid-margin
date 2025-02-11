@@ -6,6 +6,7 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {HookMiner} from "../test/utils/HookMiner.sol";
 import {IMarginHookManager} from "../src/interfaces/IMarginHookManager.sol";
+import {MarginHookManager} from "../src/MarginHookManager.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginLiquidity} from "../src/MarginLiquidity.sol";
 import {MarginChecker} from "../src/MarginChecker.sol";
@@ -62,8 +63,8 @@ contract DeployAllScript is Script {
         // verify proper create2 usage
         require(deployedHook == hookAddress, "DeployScript: hook address mismatch");
         marginPositionManager.setHook(hookAddress);
-        IMarginHookManager(hookAddress).addPositionManager(address(marginPositionManager));
-        IMarginHookManager(hookAddress).setMarginOracle(address(marginOracle));
+        MarginHookManager(hookAddress).addPositionManager(address(marginPositionManager));
+        MarginHookManager(hookAddress).setMarginOracle(address(marginOracle));
         console2.log("hookAddress:", hookAddress);
         marginLiquidity.addHooks(hookAddress);
         MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), IMarginHookManager(hookAddress));

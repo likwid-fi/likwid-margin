@@ -7,7 +7,6 @@ import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
 import {MarginOracle} from "../src/MarginOracle.sol";
-import {HookParams} from "../src/types/HookParams.sol";
 import {HookStatus} from "../src/types/HookStatus.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";

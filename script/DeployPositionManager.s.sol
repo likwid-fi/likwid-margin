@@ -6,7 +6,7 @@ import "forge-std/Script.sol";
 import {MarginChecker} from "../src/MarginChecker.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {IMarginChecker} from "../src/interfaces/IMarginChecker.sol";
-import {IMarginHookManager} from "../src/interfaces/IMarginHookManager.sol";
+import {MarginHookManager} from "../src/MarginHookManager.sol";
 
 contract DeployPositionManagerScript is Script {
     MarginPositionManager marginPositionManager;
@@ -25,7 +25,7 @@ contract DeployPositionManagerScript is Script {
         // marginPositionManager = new MarginPositionManager(owner, IMarginChecker(checker));
         console2.log("marginPositionManager:", address(marginPositionManager));
         marginPositionManager.setHook(hookAddress);
-        IMarginHookManager(hookAddress).addPositionManager(address(marginPositionManager));
+        MarginHookManager(hookAddress).addPositionManager(address(marginPositionManager));
         vm.stopBroadcast();
     }
 }
