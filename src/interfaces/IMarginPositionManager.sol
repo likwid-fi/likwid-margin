@@ -17,9 +17,9 @@ interface IMarginPositionManager is IERC721 {
 
     /// @notice Return the PNL amount of the position with the given ID and repayment ratio
     /// @param positionId The ID of the position to retrieve
-    /// @param repayMillionth   The repayment ratio is calculated as one millionth
+    /// @param closeMillionth   The repayment ratio is calculated as one millionth
     /// @return pnlAmount The PNL amount of the position
-    function estimatePNL(uint256 positionId, uint256 repayMillionth) external view returns (int256 pnlAmount);
+    function estimatePNL(uint256 positionId, uint256 closeMillionth) external view returns (int256 pnlAmount);
 
     /// @notice Get the marginTotal amount and borrow amount for the given pool, leverage, and marginAmount
     /// @param poolId The ID of the pool
@@ -58,10 +58,10 @@ interface IMarginPositionManager is IERC721 {
 
     /// @notice Close the margin position
     /// @param positionId The id of position
-    /// @param repayMillionth The repayment ratio is calculated as one millionth
+    /// @param closeMillionth The repayment ratio is calculated as one millionth
     /// @param pnlMinAmount The minimum PNL amount to close the position
     /// @param deadline Deadline for the transaction
-    function close(uint256 positionId, uint256 repayMillionth, int256 pnlMinAmount, uint256 deadline) external;
+    function close(uint256 positionId, uint256 closeMillionth, int256 pnlMinAmount, uint256 deadline) external;
 
     /// @notice Get the maximum decrease amount for the given position
     /// @param positionId The ID of the position

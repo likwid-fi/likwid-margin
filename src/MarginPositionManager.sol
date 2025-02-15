@@ -135,7 +135,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
     }
 
-    function _estimatePNL(MarginPosition memory _position, uint256 repayMillionth)
+    function _estimatePNL(MarginPosition memory _position, uint256 closeMillionth)
         internal
         view
         returns (int256 pnlAmount)
@@ -143,16 +143,16 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (_position.borrowAmount == 0) {
             return 0;
         }
-        uint256 repayAmount = uint256(_position.borrowAmount) * repayMillionth / ONE_MILLION;
+        uint256 repayAmount = uint256(_position.borrowAmount) * closeMillionth / ONE_MILLION;
         uint256 releaseAmount = hook.getAmountIn(_position.poolId, !_position.marginForOne, repayAmount);
-        uint256 releaseTotal = uint256(_position.marginTotal) * repayMillionth / ONE_MILLION;
+        uint256 releaseTotal = uint256(_position.marginTotal) * closeMillionth / ONE_MILLION;
         pnlAmount = int256(releaseTotal) - int256(releaseAmount);
     }
 
     /// @inheritdoc IMarginPositionManager
-    function estimatePNL(uint256 positionId, uint256 repayMillionth) public view returns (int256 pnlAmount) {
+    function estimatePNL(uint256 positionId, uint256 closeMillionth) public view returns (int256 pnlAmount) {
         MarginPosition memory _position = getPosition(positionId);
-        pnlAmount = _estimatePNL(_position, repayMillionth);
+        pnlAmount = _estimatePNL(_position, closeMillionth);
     }
 
     function getPositions(uint256[] calldata positionIds) external view returns (MarginPositionVo[] memory _position) {
@@ -391,12 +391,12 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     }
 
     /// @inheritdoc IMarginPositionManager
-    function close(uint256 positionId, uint256 repayMillionth, int256 pnlMinAmount, uint256 deadline)
+    function close(uint256 positionId, uint256 closeMillionth, int256 pnlMinAmount, uint256 deadline)
         external
         ensure(deadline)
     {
         require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
-        require(repayMillionth <= ONE_MILLION, "MILLIONTH_ERROR");
+        require(closeMillionth <= ONE_MILLION, "MILLIONTH_ERROR");
         MarginPosition memory _position = getPosition(positionId);
         HookStatus memory _status = hook.getStatus(_position.poolId);
         Currency marginToken = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;
@@ -409,10 +409,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             releaseAmount: 0,
             deadline: deadline
         });
-        params.repayAmount = uint256(_position.borrowAmount) * repayMillionth / ONE_MILLION;
+        params.repayAmount = uint256(_position.borrowAmount) * closeMillionth / ONE_MILLION;
         params.releaseAmount = hook.getAmountIn(_position.poolId, !_position.marginForOne, params.repayAmount);
-        uint256 releaseMargin = uint256(_position.marginAmount) * repayMillionth / ONE_MILLION;
-        uint256 releaseTotal = uint256(_position.marginTotal) * repayMillionth / ONE_MILLION;
+        uint256 releaseMargin = uint256(_position.marginAmount) * closeMillionth / ONE_MILLION;
+        uint256 releaseTotal = uint256(_position.marginTotal) * closeMillionth / ONE_MILLION;
         int256 pnlAmount = int256(releaseTotal) - int256(params.releaseAmount);
         require(pnlMinAmount == 0 || pnlMinAmount <= pnlAmount, "InsufficientOutputReceived");
         if (pnlAmount >= 0) {
