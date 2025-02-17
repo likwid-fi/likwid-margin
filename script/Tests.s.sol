@@ -15,7 +15,7 @@ interface IMarginPositionManager {
     function getHook() external view returns (address _hook);
     function margin(MarginParams memory params) external payable returns (uint256, uint256);
     function getPosition(uint256 positionId) external view returns (MarginPosition memory _position);
-    function estimatePNL(uint256 positionId, uint256 repayMillionth) external view returns (int256 pnlMinAmount);
+    function estimatePNL(uint256 positionId, uint256 closeMillionth) external view returns (int256 pnlMinAmount);
 }
 
 contract TestsScript is Script {

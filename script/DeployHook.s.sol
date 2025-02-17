@@ -9,6 +9,7 @@ import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginLiquidity} from "../src/MarginLiquidity.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
+import {MarginHookManager} from "../src/MarginHookManager.sol";
 import {IMarginHookManager} from "../src/interfaces/IMarginHookManager.sol";
 import {IMarginChecker} from "../src/interfaces/IMarginChecker.sol";
 
@@ -54,8 +55,8 @@ contract DeployHookScript is Script {
         // verify proper create2 usage
         require(deployedHook == hookAddress, "DeployScript: hook address mismatch");
         marginPositionManager.setHook(hookAddress);
-        IMarginHookManager(hookAddress).addPositionManager(address(marginPositionManager));
-        IMarginHookManager(hookAddress).setMarginOracle(marginOracle);
+        MarginHookManager(hookAddress).addPositionManager(address(marginPositionManager));
+        MarginHookManager(hookAddress).setMarginOracle(marginOracle);
         console2.log("hookAddress:", hookAddress);
         MarginLiquidity(marginLiquidity).addHooks(hookAddress);
         MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), IMarginHookManager(hookAddress));
