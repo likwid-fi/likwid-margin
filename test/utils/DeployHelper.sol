@@ -89,6 +89,7 @@ contract DeployHelper is Test {
             new MarginHookManager{salt: salt}(address(this), manager, mirrorTokenManager, marginLiquidity, marginFees);
         assertEq(address(hookManager), hookAddress);
         marginLiquidity.addHooks(hookAddress);
+        mirrorTokenManager.addHooks(hookAddress);
 
         tokenA.mint(address(this), 2 ** 255);
         tokenB.mint(address(this), 2 ** 255);

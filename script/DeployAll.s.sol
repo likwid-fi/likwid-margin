@@ -67,6 +67,7 @@ contract DeployAllScript is Script {
         MarginHookManager(hookAddress).setMarginOracle(address(marginOracle));
         console2.log("hookAddress:", hookAddress);
         marginLiquidity.addHooks(hookAddress);
+        mirrorTokenManager.addHooks(hookAddress);
         MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), IMarginHookManager(hookAddress));
         console2.log("swapRouter:", address(swapRouter));
 

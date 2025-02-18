@@ -84,6 +84,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
     }
 
     function addLiquidity(address receiver, uint256 id, uint8 level, uint256 amount) external onlyHook {
+        require(level >= 1 && level <= 4, "LEVEL_ERROR");
         uint256 levelId = (id & LP_FLAG) + level;
         unchecked {
             _mint(msg.sender, id, amount);
@@ -93,6 +94,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
     }
 
     function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount) external onlyHook {
+        require(level >= 1 && level <= 4, "LEVEL_ERROR");
         uint256 levelId = (id & LP_FLAG) + level;
         unchecked {
             _burn(msg.sender, id, amount);
