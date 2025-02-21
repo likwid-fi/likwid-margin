@@ -1,9 +1,9 @@
 methods {
     // ERC20 standard
-    function _.name()                                           external => NONDET; // can we use PER_CALLEE_CONSTANT?
-    function _.symbol()                                         external => NONDET; // can we use PER_CALLEE_CONSTANT?
-    function _.decimals()                                       external => PER_CALLEE_CONSTANT;
-    function _.totalSupply()                                    external => totalSupplyCVL(calledContract) expect uint256;
+//    function _.name()                                           external => NONDET; // can we use PER_CALLEE_CONSTANT?
+//    function _.symbol()                                         external => NONDET; // can we use PER_CALLEE_CONSTANT?
+//    function _.decimals()                                       external => PER_CALLEE_CONSTANT;
+//    function _.totalSupply()                                    external => totalSupplyCVL(calledContract) expect uint256;
     function _.balanceOf(address a)                             external => balanceOfCVL(calledContract, a) expect uint256;
     function _.allowance(address a, address b)                  external => allowanceCVL(calledContract, a, b) expect uint256;
     function _.approve(address a, uint256 x)                    external with (env e) => approveCVL(calledContract, e.msg.sender, a, x) expect bool;
