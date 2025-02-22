@@ -14,3 +14,7 @@ docs/
 
 # Dotenv file
 .env
+
+# Certora
+.certora_internal/
+emv*
