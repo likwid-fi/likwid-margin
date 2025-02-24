@@ -6,6 +6,7 @@ import "./CVLMath.spec";
 */
 
 methods {
+    /*
     function Math.mulDiv(uint256 x, uint256 y, uint256 denominator, Math.Rounding rounding) internal returns (uint256) =>
         mulDivCVL(x,y,denominator,rounding);
 
@@ -13,6 +14,6 @@ methods {
         mulDivDownCVL(x,y,denominator);
 
     function Math.average(uint256 a, uint256 b) internal returns (uint256) => averageCVL(a,b);
-
+    */
     function Math.sqrt(uint256 a) internal returns (uint256) => sqrtCVL(a);
 }

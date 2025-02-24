@@ -1,4 +1,4 @@
-import "./ERC20Cvl.spec";
+import "./CVLERC20.spec";
 import "./MathSummary.spec";
 
 methods {
@@ -28,7 +28,7 @@ definition alwaysReverting(method f) returns bool = false
     || f.selector == sig:afterDonate(address,PoolManager.PoolKey,uint256,uint256,bytes).selector;
 
 // excluding methods whose body is just `revert <msg>;
-use builtin rule sanity filtered{f -> !alwaysReverting(f) /*&& f.contract == currentContract*/}
+use builtin rule sanity filtered{f -> !alwaysReverting(f) && f.contract == currentContract}
 
 rule alwaysRevert(method f) filtered{f -> alwaysReverting(f)}
 {

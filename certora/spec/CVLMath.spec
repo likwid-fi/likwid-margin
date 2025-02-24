@@ -31,7 +31,7 @@ definition relativeErrorBound(mathint x, mathint y, mathint err) returns bool =
 │ Division-pessimistic summaries (assumes no overflow)                                                                                 
 └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 */
-
+/*
 function mulDivCVL_pessim(uint256 x, uint256 y, uint256 denominator, Math.Rounding rounding) returns uint256 {
     if(rounding == Math.Rounding.Floor) {
         return mulDivDownCVL_pessim(x,y,denominator);
@@ -42,7 +42,7 @@ function mulDivCVL_pessim(uint256 x, uint256 y, uint256 denominator, Math.Roundi
         assert false;
     }
     return 0;
-}
+}*/
 
 function divUpCVL_pessim(uint256 x, uint256 y) returns uint256 {
     assert y !=0, "divUp error: cannot divide by zero";

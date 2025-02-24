@@ -6,6 +6,7 @@ import { SafeCast } from "lib/v4-periphery/lib/v4-core/src/libraries/SafeCast.so
 import { BalanceDelta } from "lib/v4-periphery/lib/v4-core/src/types/BalanceDelta.sol"; 
 import { ERC6909Claims } from "lib/v4-periphery/lib/v4-core/src/ERC6909Claims.sol";
 import { PoolKey } from "lib/v4-periphery/lib/v4-core/src/types/PoolKey.sol";
+import { CurrencyLibrary, Currency } from "lib/v4-periphery/lib/v4-core/src/types/Currency.sol";
 
 interface IPoolManager {
     /// @notice All interactions on the contract that account deltas require unlocking. A caller that calls `unlock` must implement
@@ -29,6 +30,14 @@ interface IPoolManager {
     /// @param sqrtPriceX96 The initial square root price
     /// @return tick The initial tick of the pool
     function initialize(PoolKey memory key, uint160 sqrtPriceX96) external returns (int24 tick);
+
+    /// @notice Called by the user to net out some value owed to the user
+    /// @dev Will revert if the requested amount is not available, consider using `mint` instead
+    /// @dev Can also be used as a mechanism for free flash loans
+    /// @param currency The currency to withdraw from the pool manager
+    /// @param to The address to withdraw to
+    /// @param amount The amount of currency to withdraw
+    function take(Currency currency, address to, uint256 amount) external;
 }
 
 contract PoolManager is IPoolManager, ERC6909Claims {
@@ -59,6 +68,14 @@ contract PoolManager is IPoolManager, ERC6909Claims {
     function burn(address from, uint256 id, uint256 amount) external onlyWhenUnlocked {
         _currencyDelta[id][msg.sender] += amount.toInt128();
         _burnFrom(from, id, amount);
+    }
+
+    function take(Currency currency, address to, uint256 amount) external onlyWhenUnlocked {
+        unchecked {
+            // negation must be safe as amount is not negative
+            _currencyDelta[CurrencyLibrary.toId(currency)][msg.sender] -= amount.toInt128();
+            currency.transfer(to, amount);
+        }
     }
 
     /// @inheritdoc IPoolManager
