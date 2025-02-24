@@ -38,14 +38,38 @@ interface IPoolManager {
     /// @param to The address to withdraw to
     /// @param amount The amount of currency to withdraw
     function take(Currency currency, address to, uint256 amount) external;
+
+    /// @notice Called by the user to pay what is owed
+    /// @return paid The amount of currency settled
+    function settle() external payable returns (uint256 paid);
+
+    
+    /// @notice Called by the user to move value into ERC6909 balance
+    /// @param to The address to mint the tokens to
+    /// @param id The currency address to mint to ERC6909s, as a uint256
+    /// @param amount The amount of currency to mint
+    /// @dev The id is converted to a uint160 to correspond to a currency address
+    /// If the upper 12 bytes are not 0, they will be 0-ed out
+    function mint(address to, uint256 id, uint256 amount) external;
+
+    /// @notice Writes the current ERC20 balance of the specified currency to transient storage
+    /// This is used to checkpoint balances for the manager and derive deltas for the caller.
+    /// @dev This MUST be called before any ERC20 tokens are sent into the contract, but can be skipped
+    /// for native tokens because the amount to settle is determined by the sent value.
+    /// However, if an ERC20 token has been synced and not settled, and the caller instead wants to settle
+    /// native funds, this function can be called with the native currency to then be able to settle the native currency
+    function sync(Currency currency) external;
 }
 
 contract PoolManager is IPoolManager, ERC6909Claims {
     using SafeCast for uint256;
 
     bool private __unlocked;
-
-    mapping(uint256 /* currency ID */ => mapping(address /* account */ => int128)) private _currencyDelta;
+    address private _synchedCurrency;
+    uint256 private _synchedReserves;
+    /// Mock for the transient storage in the Pool Manager.
+    /// Every successful call to the PM must end with ALL of the mapping values being zero.
+    mapping(address /* currency */ => mapping(address /* account */ => int128)) private _currencyDelta;
 
     /// @notice This will revert if the contract is locked
     modifier onlyWhenUnlocked() {
@@ -66,15 +90,62 @@ contract PoolManager is IPoolManager, ERC6909Claims {
 
     /// @inheritdoc IPoolManager
     function burn(address from, uint256 id, uint256 amount) external onlyWhenUnlocked {
-        _currencyDelta[id][msg.sender] += amount.toInt128();
+        address currency = Currency.unwrap(CurrencyLibrary.fromId(id));
+        _currencyDelta[currency][msg.sender] += amount.toInt128();
         _burnFrom(from, id, amount);
+    }
+
+    function mint(address to, uint256 id, uint256 amount) external onlyWhenUnlocked {
+        address currency = Currency.unwrap(CurrencyLibrary.fromId(id));
+        unchecked {
+            // negation must be safe as amount is not negative
+            _currencyDelta[currency][msg.sender] -= amount.toInt128();
+            _mint(to, id, amount);
+        }
     }
 
     function take(Currency currency, address to, uint256 amount) external onlyWhenUnlocked {
         unchecked {
             // negation must be safe as amount is not negative
-            _currencyDelta[CurrencyLibrary.toId(currency)][msg.sender] -= amount.toInt128();
+            _currencyDelta[Currency.unwrap(currency)][msg.sender] -= amount.toInt128();
             currency.transfer(to, amount);
+        }
+    }
+
+    /// @inheritdoc IPoolManager
+    function settle() external payable onlyWhenUnlocked returns (uint256) {
+        return _settle(msg.sender);
+    }
+
+    // if settling native, integrators should still call `sync` first to avoid DoS attack vectors
+    function _settle(address recipient) internal returns (uint256 paid) {
+        address currency = _synchedCurrency;
+
+        // if not previously synced, or the syncedCurrency slot has been reset, expects native currency to be settled
+        if (currency == address(0x0)) {
+            paid = msg.value;
+        } else {
+            if (msg.value > 0) revert();
+            // Reserves are guaranteed to be set because currency and reserves are always set together
+            uint256 reservesBefore = _synchedReserves;
+            uint256 reservesNow = Currency.wrap(currency).balanceOfSelf();
+            paid = reservesNow - reservesBefore;
+            _synchedCurrency = address(0x0);
+        }
+
+        _currencyDelta[currency][recipient] += paid.toInt128();
+    }
+
+    /// @inheritdoc IPoolManager
+    function sync(Currency currency) external {
+        // address(0) is used for the native currency
+        if (currency == Currency.wrap(address(0x0))) {
+            // The reserves balance is not used for native settling, so we only need to reset the currency.
+            _synchedCurrency = address(0x0);
+        } else {
+            uint256 balance = currency.balanceOfSelf();
+            _synchedCurrency = Currency.unwrap(currency);
+            _synchedReserves = balance;
         }
     }
 
