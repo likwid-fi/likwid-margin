@@ -1,4 +1,5 @@
 import "./ERC20Cvl.spec";
+import "./MathSummary.spec";
 
 methods {
     /// Unresolved unlock callback:
