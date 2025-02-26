@@ -46,7 +46,7 @@ contract DeployAllScript is Script {
             abi.encode(owner, manager, address(mirrorTokenManager), address(marginLiquidity), address(marginFees));
 
         uint160 flags =
-            uint160(Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+            uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
 
         // Mine a salt that will produce a hook address with the correct flags
         bytes memory creationCode = vm.getCode("MarginHookManager.sol:MarginHookManager");

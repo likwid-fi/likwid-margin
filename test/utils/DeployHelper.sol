@@ -77,7 +77,7 @@ contract DeployHelper is Test {
 
         // Deploy the hook to an address with the correct flags
         uint160 flags =
-            uint160(Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+            uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
 
         bytes memory constructorArgs =
             abi.encode(address(this), manager, mirrorTokenManager, marginLiquidity, marginFees); //Add all the necessary constructor arguments from the hook
@@ -114,9 +114,9 @@ contract DeployHelper is Test {
             hooks: hookManager
         });
 
-        hookManager.initialize(key);
-        hookManager.initialize(nativeKey);
-        hookManager.initialize(usdtKey);
+        manager.initialize(key, SQRT_RATIO_1_1);
+        manager.initialize(nativeKey, SQRT_RATIO_1_1);
+        manager.initialize(usdtKey, SQRT_RATIO_1_1);
 
         marginChecker = new MarginChecker(address(this));
         marginPositionManager = new MarginPositionManager(address(this), marginChecker);

@@ -37,7 +37,7 @@ contract DeployHookScript is Script {
         // --- Set your flags in .env --- //
         // ------------------------------ //
         uint160 flags =
-            uint160(Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+            uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
         // console2.logBytes32(bytes32(uint256(flags)));
 
         // Mine a salt that will produce a hook address with the correct flags
