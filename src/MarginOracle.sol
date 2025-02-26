@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import {IHooks} from "v4-core/interfaces/IHooks.sol";
 
 import {TruncatedOracle} from "./libraries/TruncatedOracle.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
@@ -25,6 +26,11 @@ contract MarginOracle {
         uint32[] secondsAgos;
     }
 
+    modifier onlyHooks(IHooks hooks) {
+        require(address(hooks) == msg.sender, "UNAUTHORIZED");
+        _;
+    }
+
     /// @notice The list of observations for a given pool ID
     mapping(address => mapping(PoolId => TruncatedOracle.Observation[65535])) public observations;
     /// @notice The current observation array state for the given pool ID
@@ -39,19 +45,20 @@ contract MarginOracle {
         return uint32(block.timestamp % 2 ** 32);
     }
 
-    function initialize(PoolKey calldata key, uint112 reserve0, uint112 reserve1) external {
-        PoolId id = key.toId();
-        address sender = address(key.hooks);
-        (states[sender][id].cardinality, states[sender][id].cardinalityNext) =
-            observations[sender][key.toId()].initialize(_blockTimestamp(), reserve0, reserve1);
-    }
-
-    function write(PoolKey calldata key, uint112 reserve0, uint112 reserve1) external {
+    function initialize(PoolKey calldata key, uint112 reserve0, uint112 reserve1) external onlyHooks(key.hooks) {
         PoolId id = key.toId();
         address hook = address(key.hooks);
-        require(hook == msg.sender, "ONLY_HOOK_CALL");
+        if (states[hook][id].cardinality == 0) {
+            (states[hook][id].cardinality, states[hook][id].cardinalityNext) =
+                observations[hook][key.toId()].initialize(_blockTimestamp(), reserve0, reserve1);
+        }
+    }
+
+    function write(PoolKey calldata key, uint112 reserve0, uint112 reserve1) external onlyHooks(key.hooks) {
+        PoolId id = key.toId();
+        address hook = address(key.hooks);
         ObservationState storage _state = states[hook][id];
-        (_state.index, _state.cardinalityNext) = observations[hook][key.toId()].write(
+        (_state.index, _state.cardinality) = observations[hook][id].write(
             _state.index, _blockTimestamp(), reserve0, reserve1, _state.cardinality, _state.cardinalityNext
         );
     }
