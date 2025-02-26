@@ -10,18 +10,18 @@ contract MirrorTokenManager is IMirrorTokenManager, ERC6909Claims, Owned {
 
     constructor(address initialOwner) Owned(initialOwner) {}
 
-    modifier onlyHook() {
+    modifier onlyHooks() {
         require(hooks[msg.sender], "UNAUTHORIZED");
         _;
     }
 
-    function mint(uint256 id, uint256 amount) external onlyHook {
+    function mint(uint256 id, uint256 amount) external onlyHooks {
         unchecked {
             _mint(msg.sender, id, amount);
         }
     }
 
-    function burn(uint256 id, uint256 amount) external onlyHook {
+    function burn(uint256 id, uint256 amount) external onlyHooks {
         unchecked {
             _burn(msg.sender, id, amount);
         }

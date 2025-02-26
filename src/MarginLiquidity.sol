@@ -17,7 +17,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         protocolRatio = 99; // 1/(protocolRatio+1)
     }
 
-    modifier onlyHook() {
+    modifier onlyHooks() {
         require(hooks[msg.sender], "UNAUTHORIZED");
         _;
     }
@@ -47,13 +47,13 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
     }
 
     // ********************  HOOK CALL ********************
-    function mint(address receiver, uint256 id, uint256 amount) external onlyHook {
+    function mint(address receiver, uint256 id, uint256 amount) external onlyHooks {
         unchecked {
             _mint(receiver, id, amount);
         }
     }
 
-    function burn(address sender, uint256 id, uint256 amount) external onlyHook {
+    function burn(address sender, uint256 id, uint256 amount) external onlyHooks {
         unchecked {
             _burn(sender, id, amount);
         }
@@ -61,7 +61,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
 
     function mintFee(address feeTo, uint256 _kLast, uint256 uPoolId, uint256 _reserve0, uint256 _reserve1)
         external
-        onlyHook
+        onlyHooks
         returns (bool feeOn)
     {
         feeOn = feeTo != address(0);
@@ -83,7 +83,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         }
     }
 
-    function addLiquidity(address receiver, uint256 id, uint8 level, uint256 amount) external onlyHook {
+    function addLiquidity(address receiver, uint256 id, uint8 level, uint256 amount) external onlyHooks {
         require(level >= 1 && level <= 4, "LEVEL_ERROR");
         uint256 levelId = (id & LP_FLAG) + level;
         unchecked {
@@ -93,7 +93,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         }
     }
 
-    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount) external onlyHook {
+    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount) external onlyHooks {
         require(level >= 1 && level <= 4, "LEVEL_ERROR");
         uint256 levelId = (id & LP_FLAG) + level;
         unchecked {
@@ -106,7 +106,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
     function getSupplies(uint256 uPoolId)
         external
         view
-        onlyHook
+        onlyHooks
         returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1)
     {
         (totalSupply, retainSupply0, retainSupply1) = _getPoolSupplies(msg.sender, uPoolId);
