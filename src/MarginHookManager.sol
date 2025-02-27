@@ -39,11 +39,11 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
     using CurrencyUtils for Currency;
 
     error InvalidInitialization();
+    error UpdateBalanceGuardErrorCall();
     error InsufficientLiquidityMinted();
     error InsufficientLiquidityBurnt();
     error NotPositionManager();
     error PairNotExists();
-
 
     event Mint(
         PoolId indexed poolId,
@@ -67,6 +67,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
     uint256 public constant ONE_BILLION = 10 ** 9;
     uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
     uint160 public constant SQRT_RATIO_1_1 = 79228162514264337593543950336;
+    bytes32 constant UPDATE_BALANCE_GUARD_SLOT = 0x885c9ad615c28a45189565668235695fb42940589d40d91c5c875c16cdc1bd4c;
     bytes32 constant BALANCE_0_SLOT = 0x608a02038d3023ed7e79ffc2a87ce7ad8c0bc0c5b839ddbe438db934c7b5e0e2;
     bytes32 constant BALANCE_1_SLOT = 0xba598ef587ec4c4cf493fe15321596d40159e5c3c0cbf449810c8c6894b2e5e1;
     bytes32 constant MIRROR_BALANCE_0_SLOT = 0x63450183817719ccac1ebea450ccc19412314611d078d8a8cb3ac9a1ef4de386;
@@ -100,22 +101,9 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         _;
     }
 
-    modifier positionOnly() {
+    modifier onlyPosition() {
         if (!(positionManagers[msg.sender])) revert NotPositionManager();
         _;
-    }
-
-    function _setBalances(PoolKey memory key) internal {
-        uint256 balance0 = poolManager.balanceOf(address(this), key.currency0.toId());
-        uint256 balance1 = poolManager.balanceOf(address(this), key.currency1.toId());
-        uint256 mirrorBalance0 = mirrorTokenManager.balanceOf(address(this), key.currency0.toKeyId(key));
-        uint256 mirrorBalance1 = mirrorTokenManager.balanceOf(address(this), key.currency1.toKeyId(key));
-        assembly {
-            tstore(BALANCE_0_SLOT, balance0)
-            tstore(BALANCE_1_SLOT, balance1)
-            tstore(MIRROR_BALANCE_0_SLOT, mirrorBalance0)
-            tstore(MIRROR_BALANCE_1_SLOT, mirrorBalance1)
-        }
     }
 
     function getStatus(PoolId poolId) public view returns (HookStatus memory _status) {
@@ -163,6 +151,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
     function beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
         external
         override
+        onlyPoolManager
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         HookStatus memory hookStatus = getStatus(key.toId());
@@ -225,12 +214,34 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
 
     // ******************** INTERNAL FUNCTIONS ********************
 
+    function _callSet() internal {
+        if (_notCallUpdate()) {
+            revert UpdateBalanceGuardErrorCall();
+        }
+
+        assembly ("memory-safe") {
+            tstore(UPDATE_BALANCE_GUARD_SLOT, true)
+        }
+    }
+
+    function _callUpdate() internal {
+        assembly ("memory-safe") {
+            tstore(UPDATE_BALANCE_GUARD_SLOT, false)
+        }
+    }
+
+    function _notCallUpdate() internal view returns (bool value) {
+        assembly ("memory-safe") {
+            value := tload(UPDATE_BALANCE_GUARD_SLOT)
+        }
+    }
+
     function _getBalances() internal view returns (BalanceStatus memory) {
         uint256 balance0;
         uint256 balance1;
         uint256 mirrorBalance0;
         uint256 mirrorBalance1;
-        assembly {
+        assembly ("memory-safe") {
             balance0 := tload(BALANCE_0_SLOT)
             balance1 := tload(BALANCE_1_SLOT)
             mirrorBalance0 := tload(MIRROR_BALANCE_0_SLOT)
@@ -244,6 +255,20 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         balanceStatus.balance1 = poolManager.balanceOf(address(this), key.currency1.toId());
         balanceStatus.mirrorBalance0 = mirrorTokenManager.balanceOf(address(this), key.currency0.toKeyId(key));
         balanceStatus.mirrorBalance1 = mirrorTokenManager.balanceOf(address(this), key.currency1.toKeyId(key));
+    }
+
+    function _setBalances(PoolKey memory key) internal {
+        _callSet();
+        uint256 balance0 = poolManager.balanceOf(address(this), key.currency0.toId());
+        uint256 balance1 = poolManager.balanceOf(address(this), key.currency1.toId());
+        uint256 mirrorBalance0 = mirrorTokenManager.balanceOf(address(this), key.currency0.toKeyId(key));
+        uint256 mirrorBalance1 = mirrorTokenManager.balanceOf(address(this), key.currency1.toKeyId(key));
+        assembly ("memory-safe") {
+            tstore(BALANCE_0_SLOT, balance0)
+            tstore(BALANCE_1_SLOT, balance1)
+            tstore(MIRROR_BALANCE_0_SLOT, mirrorBalance0)
+            tstore(MIRROR_BALANCE_1_SLOT, mirrorBalance1)
+        }
     }
 
     function _update(PoolKey memory key, bool fromMargin, uint112 _interest0, uint112 _interest1)
@@ -290,6 +315,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         }
         _kLast = uint256(_reserve0) * _reserve1;
         emit Sync(pooId, status.realReserve0, status.realReserve1, status.mirrorReserve0, status.mirrorReserve1);
+        _callUpdate();
     }
 
     function _update(PoolKey memory key) internal returns (uint256 _kLast) {
@@ -476,7 +502,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
     // ******************** MARGIN FUNCTIONS ********************
 
     /// @inheritdoc IMarginHookManager
-    function margin(MarginParams memory params) external positionOnly returns (MarginParams memory) {
+    function margin(MarginParams memory params) external onlyPosition returns (MarginParams memory) {
         bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (msg.sender, params)));
         (params.marginTotal, params.borrowAmount) = abi.decode(result, (uint256, uint256));
         return params;
@@ -516,7 +542,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
     }
 
     /// @inheritdoc IMarginHookManager
-    function release(ReleaseParams memory params) external payable positionOnly returns (uint256) {
+    function release(ReleaseParams memory params) external payable onlyPosition returns (uint256) {
         bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRelease, (params)));
         return abi.decode(result, (uint256));
     }
