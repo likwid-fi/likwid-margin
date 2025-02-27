@@ -1,7 +1,6 @@
 import "./CVLERC20.spec";
 import "./MathSummary.spec";
-
-using PoolManager as PM;
+import "./PoolManager.spec";
 
 methods {
     /// Unresolved unlock callback:

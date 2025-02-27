@@ -12,7 +12,7 @@ methods {
         => getAmountOutCVL(e.block.timestamp, status, zeroForOne, amountIn);
 
     function MarginHookManager._getAmountIn(MarginHookManager.HookStatus memory status, bool zeroForOne, uint256 amountOut) internal returns (uint256) with (env e)
-        => getAmountOutCVL(e.block.timestamp, status, zeroForOne, amountOut);
+        => getAmountInCVL(e.block.timestamp, status, zeroForOne, amountOut);
 }
 */
 
@@ -37,7 +37,10 @@ function getAmountInCVL(uint256 timestamp, MarginHookManager.HookStatus status, 
     uint256 reserveIn; uint256 reserveOut;
     reserveIn, reserveOut = getReservesByStatus(status, zeroForOne)
     require validReservesAndAmounts(amountOut, reserveOut, reserveIn);
+    /* Determinsic approach (has limited dependence) */
     uint256 fee = dynamicFeeCVL(timestamp, status.marginTimestampLast, zeroForOne ? reserveIn : reserveOut, zeroForOne ? reserveOut : reserveIn);
+    /* Non-deterministic approach (unconstrained) */
+    //uint256 fee; require fee < MAX_FEE_UNITS();
     return amountInCVL(amountOut, reserveOut, reserveIn, fee);
 }
 
