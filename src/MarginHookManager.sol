@@ -133,7 +133,12 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
 
     // ******************** HOOK FUNCTIONS ********************
 
-    function beforeInitialize(address, PoolKey calldata key, uint160) external override returns (bytes4) {
+    function beforeInitialize(address, PoolKey calldata key, uint160)
+        external
+        override
+        onlyPoolManager
+        returns (bytes4)
+    {
         if (address(key.hooks) != address(this)) revert InvalidInitialization();
         PoolId id = key.toId();
         HookStatus memory status;
