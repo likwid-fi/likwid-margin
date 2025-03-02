@@ -69,4 +69,12 @@ interface IMarginHookManager is IImmutableState {
     /// @param params The parameters for the release hook
     /// @return The amount of tokens repaid
     function release(ReleaseParams memory params) external payable returns (uint256);
+
+    /// @notice Collects the protocol fees for a given recipient and currency, returning the amount collected
+    /// @dev This will revert if the contract is unlocked
+    /// @param recipient The address to receive the protocol fees
+    /// @param currency The currency to withdraw
+    /// @param amount The amount of currency to withdraw
+    /// @return amountCollected The amount of currency successfully withdrawn
+    function collectProtocolFees(address recipient, Currency currency, uint256 amount) external returns (uint256);
 }

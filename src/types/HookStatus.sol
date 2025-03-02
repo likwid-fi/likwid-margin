@@ -4,6 +4,10 @@ pragma solidity ^0.8.26;
 import {Currency} from "v4-core/types/Currency.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 
+import {UQ112x112} from "../libraries/UQ112x112.sol";
+
+using HookStatusLibrary for HookStatus global;
+
 /// @notice Returns the status of a hook.
 struct HookStatus {
     /// @notice The real reserve of the first currency in the pool.(x)
@@ -32,4 +36,25 @@ struct HookStatus {
     uint224 lastPrice1X112;
     /// @notice The the key for identifying a pool
     PoolKey key;
+}
+
+library HookStatusLibrary {
+    using UQ112x112 for uint224;
+    using UQ112x112 for uint112;
+
+    function reserve0(HookStatus memory status) internal pure returns (uint112) {
+        return status.realReserve0 + status.mirrorReserve0;
+    }
+
+    function reserve1(HookStatus memory status) internal pure returns (uint112) {
+        return status.realReserve1 + status.mirrorReserve1;
+    }
+
+    function getPrice0X112(HookStatus memory status) internal pure returns (uint224) {
+        return reserve1(status).encode().div(reserve0(status));
+    }
+
+    function getPrice1X112(HookStatus memory status) internal pure returns (uint224) {
+        return reserve0(status).encode().div(reserve1(status));
+    }
 }

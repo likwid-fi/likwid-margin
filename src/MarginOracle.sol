@@ -48,9 +48,10 @@ contract MarginOracle {
     function initialize(PoolKey calldata key, uint112 reserve0, uint112 reserve1) external onlyHooks(key.hooks) {
         PoolId id = key.toId();
         address hook = address(key.hooks);
-        if (states[hook][id].cardinality == 0) {
-            (states[hook][id].cardinality, states[hook][id].cardinalityNext) =
-                observations[hook][key.toId()].initialize(_blockTimestamp(), reserve0, reserve1);
+        ObservationState storage _state = states[hook][id];
+        if (_state.cardinality == 0) {
+            (_state.cardinality, _state.cardinalityNext) =
+                observations[hook][id].initialize(_blockTimestamp(), reserve0, reserve1);
         }
     }
 
@@ -58,9 +59,14 @@ contract MarginOracle {
         PoolId id = key.toId();
         address hook = address(key.hooks);
         ObservationState storage _state = states[hook][id];
-        (_state.index, _state.cardinality) = observations[hook][id].write(
-            _state.index, _blockTimestamp(), reserve0, reserve1, _state.cardinality, _state.cardinalityNext
-        );
+        if (_state.cardinality == 0) {
+            (_state.cardinality, _state.cardinalityNext) =
+                observations[hook][id].initialize(_blockTimestamp(), reserve0, reserve1);
+        } else {
+            (_state.index, _state.cardinality) = observations[hook][id].write(
+                _state.index, _blockTimestamp(), reserve0, reserve1, _state.cardinality, _state.cardinalityNext
+            );
+        }
     }
 
     function observeNow(PoolId id, address hook)

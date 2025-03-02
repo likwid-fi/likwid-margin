@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {PoolId} from "v4-core/types/PoolId.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 
-import {Math} from "./libraries/Math.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PriceMath} from "./libraries/PriceMath.sol";
 import {MarginPosition, MarginPositionVo, BurnParams} from "./types/MarginPosition.sol";

@@ -14,6 +14,15 @@ library UQ112x112 {
         z = uint112(x / uint224(Q112)); // never overflows
     }
 
+    function add(uint112 x, uint256 y) internal pure returns (uint112 z) {
+        z = x + uint112(y);
+    }
+
+    // subtract
+    function sub(uint112 x, uint256 y) internal pure returns (uint112 z) {
+        z = x - uint112(y);
+    }
+
     function mul(uint112 x, uint256 y) internal pure returns (uint224 z) {
         z = uint224(x) * uint224(y);
     }

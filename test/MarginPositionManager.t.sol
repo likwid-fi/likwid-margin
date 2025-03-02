@@ -289,7 +289,7 @@ contract MarginPositionManagerTest is DeployHelper {
             deadline: block.timestamp + 1000
         });
         payValue = 0.001 ether;
-        vm.expectPartialRevert(MarginPositionManager.InsufficientAmount.selector);
+        vm.expectPartialRevert(MarginPositionManager.MarginTransferFailed.selector);
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         vm.stopPrank();
     }
@@ -346,13 +346,16 @@ contract MarginPositionManagerTest is DeployHelper {
 
         (uint112 interest0, uint112 interest1) = marginFees.getInterests(address(hookManager), poolId);
         console.log("interest0:%s,interest1:%s", interest0, interest1);
-        assertEq(
-            (
-                (position.borrowAmount - newPosition.borrowAmount)
-                    - (position.rawBorrowAmount - newPosition.rawBorrowAmount)
-            ) / 10,
-            interest1 / 10
-        );
+        uint256 overAmount = (position.borrowAmount - newPosition.borrowAmount)
+            - (position.rawBorrowAmount - newPosition.rawBorrowAmount);
+        overAmount -= marginFees.getProtocolFeeAmount(overAmount);
+        assertEq(overAmount / 10, interest1 / 10);
+        uint256 pFeeAmount = hookManager.protocolFeesAccrued(nativeKey.currency1);
+        console.log("pFeeAmount:%s", pFeeAmount);
+        uint256 collectFeeAmount =
+            marginFees.collectProtocolFees(address(hookManager), user, nativeKey.currency1, pFeeAmount);
+        console.log("collectFeeAmount:%s", collectFeeAmount);
+        assertEq(collectFeeAmount, pFeeAmount);
     }
 
     function test_hook_close_native() public {
@@ -566,7 +569,7 @@ contract MarginPositionManagerTest is DeployHelper {
             recipient: user,
             deadline: block.timestamp + 1000
         });
-
+        vm.warp(1000);
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         console.log(
             "hookManager.balance:%s,marginPositionManager.balance:%s",
@@ -909,31 +912,36 @@ contract MarginPositionManagerTest is DeployHelper {
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         assertGt(positionId, 0);
-        assertEq(borrowAmountEstimate / 1000, borrowAmount / 1000);
+        assertLt(borrowAmountEstimate - borrowAmount, 1000);
     }
 
     function test_OneLeverage() public {
         leverageMax(true, 1);
+        vm.warp(1000);
         leverageMax(false, 1);
     }
 
     function test_TwoLeverage() public {
         leverageMax(true, 2);
+        vm.warp(1000);
         leverageMax(false, 2);
     }
 
     function test_ThreeLeverage() public {
         leverageMax(true, 3);
+        vm.warp(1000);
         leverageMax(false, 3);
     }
 
     function test_FourLeverage() public {
         leverageMax(true, 4);
+        vm.warp(1000);
         leverageMax(false, 4);
     }
 
     function test_FiveLeverage() public {
         leverageMax(true, 5);
+        vm.warp(1000);
         leverageMax(false, 5);
     }
 

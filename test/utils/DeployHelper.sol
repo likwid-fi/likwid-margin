@@ -14,6 +14,8 @@ import {HookStatus} from "../../src/types/HookStatus.sol";
 import {MarginParams} from "../../src/types/MarginParams.sol";
 import {MarginPosition} from "../../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../../src/types/LiquidityParams.sol";
+import {MarginPosition} from "../../src/types/MarginPosition.sol";
+import {LiquidityLevel} from "../../src/libraries/LiquidityLevel.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
@@ -76,8 +78,10 @@ contract DeployHelper is Test {
             address(tokenA) < address(tokenB) ? (currencyA, currencyB) : (currencyB, currencyA);
 
         // Deploy the hook to an address with the correct flags
-        uint160 flags =
-            uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+        uint160 flags = uint160(
+            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG
+                | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
+        );
 
         bytes memory constructorArgs =
             abi.encode(address(this), manager, mirrorTokenManager, marginLiquidity, marginFees); //Add all the necessary constructor arguments from the hook

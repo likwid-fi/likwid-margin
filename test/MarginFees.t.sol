@@ -34,6 +34,7 @@ import {DeployHelper} from "./utils/DeployHelper.sol";
 contract MarginFeesTest is DeployHelper {
     function setUp() public {
         deployHookAndRouter();
+        initPoolLiquidity();
     }
 
     function test_get_borrow_rate() public view {
@@ -56,5 +57,43 @@ contract MarginFeesTest is DeployHelper {
         uint256 test = UINT256_MAX;
         uint24 test24 = uint24(test);
         assertEq(test24, type(uint24).max);
+    }
+
+    function testDynamicFee() public {
+        address user = address(this);
+        PoolId poolId = nativeKey.toId();
+        HookStatus memory status = hookManager.getStatus(poolId);
+        uint24 _beforeFee = marginFees.dynamicFee(status);
+        assertEq(_beforeFee, status.key.fee);
+        uint256 rate = marginFees.getBorrowRate(address(hookManager), poolId, false);
+        assertEq(rate, 50000);
+        uint256 positionId;
+        uint256 borrowAmount;
+        uint256 payValue = 0.1 ether;
+        MarginParams memory params = MarginParams({
+            poolId: poolId,
+            marginForOne: false,
+            leverage: 1,
+            marginAmount: payValue,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMinAmount: 0,
+            recipient: user,
+            deadline: block.timestamp + 1000
+        });
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        assertEq(address(marginPositionManager).balance, position.marginAmount + position.marginTotal);
+        uint256 _positionId = marginPositionManager.getPositionId(poolId, false, user);
+        assertEq(positionId, _positionId);
+        status = hookManager.getStatus(poolId);
+        uint24 _afterFee = marginFees.dynamicFee(status);
+        assertEq(_afterFee, 20 * status.key.fee);
+        vm.warp(10);
+        _afterFee = marginFees.dynamicFee(status);
+        assertLe(_afterFee, 20 * status.key.fee);
+        vm.warp(130);
+        _afterFee = marginFees.dynamicFee(status);
+        assertEq(_afterFee, status.key.fee);
     }
 }

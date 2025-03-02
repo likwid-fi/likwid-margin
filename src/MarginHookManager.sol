@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 // V4 core
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {BaseHook} from "v4-periphery/src/base/hooks/BaseHook.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
@@ -15,9 +16,12 @@ import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
-import {Math} from "./libraries/Math.sol";
+
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {TimeUtils} from "./libraries/TimeUtils.sol";
+import {LiquidityLevel} from "./libraries/LiquidityLevel.sol";
+import {PerLibrary} from "./libraries/PerLibrary.sol";
+import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
@@ -34,8 +38,9 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
     using UQ112x112 for uint112;
     using SafeCast for uint256;
     using TimeUtils for uint32;
-    using PoolIdLibrary for PoolKey;
-    using CurrencyLibrary for Currency;
+    using LiquidityLevel for uint8;
+    using FeeLibrary for uint24;
+    using PerLibrary for uint256;
     using CurrencyUtils for Currency;
 
     error InvalidInitialization();
@@ -63,10 +68,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
     );
 
     uint256 public constant MINIMUM_LIQUIDITY = 10 ** 3;
-    uint256 public constant ONE_MILLION = 10 ** 6;
     uint256 public constant ONE_BILLION = 10 ** 9;
-    uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
-    uint160 public constant SQRT_RATIO_1_1 = 79228162514264337593543950336;
     bytes32 constant UPDATE_BALANCE_GUARD_SLOT = 0x885c9ad615c28a45189565668235695fb42940589d40d91c5c875c16cdc1bd4c;
     bytes32 constant BALANCE_0_SLOT = 0x608a02038d3023ed7e79ffc2a87ce7ad8c0bc0c5b839ddbe438db934c7b5e0e2;
     bytes32 constant BALANCE_1_SLOT = 0xba598ef587ec4c4cf493fe15321596d40159e5c3c0cbf449810c8c6894b2e5e1;
@@ -75,14 +77,12 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
 
     IMirrorTokenManager public immutable mirrorTokenManager;
     IMarginLiquidity public immutable marginLiquidity;
+    IMarginFees public marginFees;
     address public marginOracle;
 
-    mapping(PoolId => HookStatus) public hookStatusStore;
-    mapping(address => bool) public positionManagers;
-
-    IMarginFees public marginFees;
-
-    uint256 public kLast;
+    mapping(PoolId => HookStatus) private hookStatusStore;
+    mapping(address => bool) private positionManagers;
+    mapping(Currency currency => uint256 amount) public protocolFeesAccrued;
 
     constructor(
         address initialOwner,
@@ -106,14 +106,19 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         _;
     }
 
+    modifier onlyFees() {
+        if (address(marginFees) != msg.sender) revert NotPositionManager();
+        _;
+    }
+
     function getStatus(PoolId poolId) public view returns (HookStatus memory _status) {
         _status = hookStatusStore[poolId];
         if (_status.key.currency1 == CurrencyLibrary.ADDRESS_ZERO) revert PairNotExists();
     }
 
     function _getReserves(HookStatus memory status) internal pure returns (uint256 _reserve0, uint256 _reserve1) {
-        _reserve0 = status.realReserve0 + status.mirrorReserve0;
-        _reserve1 = status.realReserve1 + status.mirrorReserve1;
+        _reserve0 = status.reserve0();
+        _reserve1 = status.reserve1();
     }
 
     function getReserves(PoolId poolId) external view returns (uint256 _reserve0, uint256 _reserve1) {
@@ -123,12 +128,12 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
 
     function getAmountIn(PoolId poolId, bool zeroForOne, uint256 amountOut) external view returns (uint256 amountIn) {
         HookStatus memory status = getStatus(poolId);
-        amountIn = _getAmountIn(status, zeroForOne, amountOut);
+        (amountIn,) = _getAmountIn(status, zeroForOne, amountOut);
     }
 
     function getAmountOut(PoolId poolId, bool zeroForOne, uint256 amountIn) external view returns (uint256 amountOut) {
         HookStatus memory status = getStatus(poolId);
-        amountOut = _getAmountOut(status, zeroForOne, amountIn);
+        (amountOut,) = _getAmountOut(status, zeroForOne, amountIn);
     }
 
     // ******************** HOOK FUNCTIONS ********************
@@ -166,12 +171,13 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
 
         uint256 specifiedAmount = exactInput ? uint256(-params.amountSpecified) : uint256(params.amountSpecified);
         uint256 unspecifiedAmount;
+        uint256 feeAmount;
         BeforeSwapDelta returnDelta;
         _setBalances(key);
         if (exactInput) {
             // in exact-input swaps, the specified token is a debt that gets paid down by the swapper
             // the unspecified token is credited to the PoolManager, that is claimed by the swapper
-            unspecifiedAmount = _getAmountOut(hookStatus, params.zeroForOne, specifiedAmount);
+            (unspecifiedAmount, feeAmount) = _getAmountOut(hookStatus, params.zeroForOne, specifiedAmount);
             specified.take(poolManager, address(this), specifiedAmount, true);
             unspecified.settle(poolManager, address(this), unspecifiedAmount, true);
             returnDelta = toBeforeSwapDelta(specifiedAmount.toInt128(), -unspecifiedAmount.toInt128());
@@ -179,10 +185,13 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
             // exactOutput
             // in exact-output swaps, the unspecified token is a debt that gets paid down by the swapper
             // the specified token is credited to the PoolManager, that is claimed by the swapper
-            unspecifiedAmount = _getAmountIn(hookStatus, params.zeroForOne, specifiedAmount);
+            (unspecifiedAmount, feeAmount) = _getAmountIn(hookStatus, params.zeroForOne, specifiedAmount);
             unspecified.take(poolManager, address(this), unspecifiedAmount, true);
             specified.settle(poolManager, address(this), specifiedAmount, true);
             returnDelta = toBeforeSwapDelta(-specifiedAmount.toInt128(), unspecifiedAmount.toInt128());
+        }
+        if (feeAmount > 0) {
+            _updateProtocolFees(specified, feeAmount);
         }
         _update(key);
         return (BaseHook.beforeSwap.selector, returnDelta, 0);
@@ -257,17 +266,28 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
 
     function _getBalances(PoolKey memory key) internal view returns (BalanceStatus memory balanceStatus) {
         balanceStatus.balance0 = poolManager.balanceOf(address(this), key.currency0.toId());
+        if (balanceStatus.balance0 > protocolFeesAccrued[key.currency0]) {
+            balanceStatus.balance0 -= protocolFeesAccrued[key.currency0];
+        } else {
+            balanceStatus.balance0 = 0;
+        }
         balanceStatus.balance1 = poolManager.balanceOf(address(this), key.currency1.toId());
+        if (balanceStatus.balance1 > protocolFeesAccrued[key.currency1]) {
+            balanceStatus.balance1 -= protocolFeesAccrued[key.currency1];
+        } else {
+            balanceStatus.balance1 = 0;
+        }
         balanceStatus.mirrorBalance0 = mirrorTokenManager.balanceOf(address(this), key.currency0.toKeyId(key));
         balanceStatus.mirrorBalance1 = mirrorTokenManager.balanceOf(address(this), key.currency1.toKeyId(key));
     }
 
     function _setBalances(PoolKey memory key) internal {
         _callSet();
-        uint256 balance0 = poolManager.balanceOf(address(this), key.currency0.toId());
-        uint256 balance1 = poolManager.balanceOf(address(this), key.currency1.toId());
-        uint256 mirrorBalance0 = mirrorTokenManager.balanceOf(address(this), key.currency0.toKeyId(key));
-        uint256 mirrorBalance1 = mirrorTokenManager.balanceOf(address(this), key.currency1.toKeyId(key));
+        BalanceStatus memory balanceStatus = _getBalances(key);
+        uint256 balance0 = balanceStatus.balance0;
+        uint256 balance1 = balanceStatus.balance1;
+        uint256 mirrorBalance0 = balanceStatus.mirrorBalance0;
+        uint256 mirrorBalance1 = balanceStatus.mirrorBalance1;
         assembly ("memory-safe") {
             tstore(BALANCE_0_SLOT, balance0)
             tstore(BALANCE_1_SLOT, balance1)
@@ -276,39 +296,33 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         }
     }
 
-    function _update(PoolKey memory key, bool fromMargin, uint112 _interest0, uint112 _interest1)
-        internal
-        returns (uint256 _kLast)
-    {
+    function _update(PoolKey memory key, bool fromMargin, uint112 _interest0, uint112 _interest1) internal {
         PoolId pooId = key.toId();
         HookStatus storage status = hookStatusStore[pooId];
         (uint32 blockTS, uint256 timeElapsed) = status.blockTimestampLast.getTimeElapsedMillisecond();
         // save margin price before changed
-        if (fromMargin && status.marginTimestampLast != blockTS) {
-            status.marginTimestampLast = blockTS;
-            status.lastPrice1X112 =
-                (status.realReserve0 + status.mirrorReserve0).encode().div(status.realReserve1 + status.mirrorReserve1);
+        if (fromMargin) {
+            if (status.marginTimestampLast != blockTS) {
+                status.marginTimestampLast = blockTS;
+                status.lastPrice1X112 = status.getPrice1X112();
+            }
+            if (status.lastPrice1X112 == 0) status.lastPrice1X112 = status.getPrice1X112();
         }
 
-        uint256 rate0Last = ONE_BILLION
-            + marginFees.getBorrowRateByReserves(status.realReserve0, status.mirrorReserve0) * timeElapsed / YEAR_SECONDS;
-        uint256 rate1Last = ONE_BILLION
-            + marginFees.getBorrowRateByReserves(status.realReserve1, status.mirrorReserve1) * timeElapsed / YEAR_SECONDS;
-        status.rate0CumulativeLast = status.rate0CumulativeLast * rate0Last / ONE_BILLION;
-        status.rate1CumulativeLast = status.rate1CumulativeLast * rate1Last / ONE_BILLION;
+        (status.rate0CumulativeLast, status.rate1CumulativeLast) =
+            marginFees.getBorrowRateCumulativeLast(status, timeElapsed);
+
         status.blockTimestampLast = blockTS;
-        BalanceStatus memory balanceStatus = _getBalances();
-        BalanceStatus memory nowBalanceStatus = _getBalances(key);
+        BalanceStatus memory beforeStatus = _getBalances();
+        BalanceStatus memory afterStatus = _getBalances(key);
 
-        status.realReserve0 = status.realReserve0 + uint112(nowBalanceStatus.balance0) - uint112(balanceStatus.balance0);
-        status.realReserve1 = status.realReserve1 + uint112(nowBalanceStatus.balance1) - uint112(balanceStatus.balance1);
-        status.mirrorReserve0 =
-            status.mirrorReserve0 + uint112(nowBalanceStatus.mirrorBalance0) - uint112(balanceStatus.mirrorBalance0);
-        status.mirrorReserve1 =
-            status.mirrorReserve1 + uint112(nowBalanceStatus.mirrorBalance1) - uint112(balanceStatus.mirrorBalance1);
+        status.realReserve0 = status.realReserve0.add(afterStatus.balance0).sub(beforeStatus.balance0);
+        status.realReserve1 = status.realReserve1.add(afterStatus.balance1).sub(beforeStatus.balance1);
+        status.mirrorReserve0 = status.mirrorReserve0.add(afterStatus.mirrorBalance0).sub(beforeStatus.mirrorBalance0);
+        status.mirrorReserve1 = status.mirrorReserve1.add(afterStatus.mirrorBalance1).sub(beforeStatus.mirrorBalance1);
 
-        uint112 _reserve0 = status.realReserve0 + status.mirrorReserve0;
-        uint112 _reserve1 = status.realReserve1 + status.mirrorReserve1;
+        uint112 _reserve0 = status.reserve0();
+        uint112 _reserve1 = status.reserve1();
         if (marginOracle != address(0)) {
             IMarginOracleWriter(marginOracle).write(status.key, _reserve0, _reserve1);
         }
@@ -318,30 +332,37 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         if (_interest1 > 0) {
             status.interestRatio1X112 = uint112(_interest1.encode().div(_reserve1));
         }
-        _kLast = uint256(_reserve0) * _reserve1;
         emit Sync(pooId, status.realReserve0, status.realReserve1, status.mirrorReserve0, status.mirrorReserve1);
         _callUpdate();
     }
 
-    function _update(PoolKey memory key) internal returns (uint256 _kLast) {
-        _kLast = _update(key, false, 0, 0);
+    function _update(PoolKey memory key) internal {
+        _update(key, false, 0, 0);
+    }
+
+    function _updateProtocolFees(Currency currency, uint256 amount) internal returns (uint256 restAmount) {
+        unchecked {
+            uint256 protocolFees = marginFees.getProtocolFeeAmount(amount);
+            protocolFeesAccrued[currency] += protocolFees;
+            restAmount = amount - protocolFees;
+        }
     }
 
     // given an input amount of an asset and pair reserve, returns the maximum output amount of the other asset
     function _getAmountOut(HookStatus memory status, bool zeroForOne, uint256 amountIn)
         internal
         view
-        returns (uint256 amountOut)
+        returns (uint256 amountOut, uint256 feeAmount)
     {
         require(amountIn > 0, "INSUFFICIENT_INPUT_AMOUNT");
         (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
         (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
         require(reserveIn > 0 && reserveOut > 0, " INSUFFICIENT_LIQUIDITY");
         uint24 _fee = marginFees.dynamicFee(status);
-        uint256 ratio = ONE_MILLION - _fee;
-        uint256 amountInWithFee = amountIn * ratio;
-        uint256 numerator = amountInWithFee * reserveOut;
-        uint256 denominator = (reserveIn * ONE_MILLION) + amountInWithFee;
+        uint256 amountInWithoutFee;
+        (amountInWithoutFee, feeAmount) = _fee.deduct(amountIn);
+        uint256 numerator = amountInWithoutFee * reserveOut;
+        uint256 denominator = reserveIn + amountInWithoutFee;
         amountOut = numerator / denominator;
     }
 
@@ -349,7 +370,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
     function _getAmountIn(HookStatus memory status, bool zeroForOne, uint256 amountOut)
         internal
         view
-        returns (uint256 amountIn)
+        returns (uint256 amountIn, uint256 feeAmount)
     {
         require(amountOut > 0, "INSUFFICIENT_OUTPUT_AMOUNT");
         (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
@@ -357,10 +378,10 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         require(reserveIn > 0 && reserveOut > 0, "INSUFFICIENT_LIQUIDITY");
         require(amountOut < reserveOut, "OUTPUT_AMOUNT_OVERFLOW");
         uint24 _fee = marginFees.dynamicFee(status);
-        uint256 ratio = ONE_MILLION - _fee;
-        uint256 numerator = reserveIn * amountOut * ONE_MILLION;
-        uint256 denominator = (reserveOut - amountOut) * ratio;
-        amountIn = (numerator / denominator) + 1;
+        uint256 numerator = reserveIn * amountOut;
+        uint256 denominator = (reserveOut - amountOut);
+        uint256 amountInWithoutFee = (numerator / denominator) + 1;
+        (amountIn, feeAmount) = _fee.attach(amountInWithoutFee);
     }
 
     // ******************** SELF CALL ********************
@@ -377,15 +398,13 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         _setBalances(status.key);
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
         (uint112 interest0, uint112 interest1) = marginFees.getInterests(status);
-        bool feeOn;
         {
             (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
-            feeOn = marginLiquidity.mintFee(marginFees.feeTo(), kLast, uPoolId, _reserve0, _reserve1);
             uint256 _totalSupply = marginLiquidity.balanceOf(address(this), uPoolId);
             if (_reserve1 > 0 && _totalSupply > MINIMUM_LIQUIDITY) {
-                uint256 upValue = _reserve0 * (ONE_MILLION + params.tickUpper) / _reserve1;
-                uint256 downValue = _reserve0 * (ONE_MILLION - params.tickLower) / _reserve1;
-                uint256 inValue = params.amount0 * ONE_MILLION / params.amount1;
+                uint256 upValue = _reserve0.upperMillion(_reserve1, params.tickUpper);
+                uint256 downValue = _reserve0.lowerMillion(_reserve1, params.tickLower);
+                uint256 inValue = params.amount0.mulMillionDiv(params.amount1);
                 require(inValue >= downValue && inValue <= upValue, "OUT_OF_RANGE");
             }
 
@@ -407,8 +426,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         poolManager.unlock(
             abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, params.amount0, params.amount1))
         );
-        uint256 _kLast = _update(status.key, false, interest0, interest1);
-        if (feeOn) kLast = _kLast;
+        _update(status.key, false, interest0, interest1);
         emit Mint(params.poolId, msg.sender, params.to, liquidity, params.amount0, params.amount1);
     }
 
@@ -433,44 +451,44 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         _setBalances(status.key);
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
         (uint112 interest0, uint112 interest1) = marginFees.getInterests(status);
-        bool feeOn;
         {
             (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
-            feeOn = marginLiquidity.mintFee(marginFees.feeTo(), kLast, uPoolId, _reserve0, _reserve1);
             (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) = marginLiquidity.getSupplies(uPoolId);
-            // zero enable margin
-            if (params.level == 3 || params.level == 4) {
-                amount0 = params.liquidity * _reserve0 / _totalSupply;
-                uint256 staticAmount0 = retainSupply0 * _reserve0 / _totalSupply;
-                require(
-                    status.realReserve0 > staticAmount0 && status.realReserve0 - staticAmount0 >= amount0,
-                    "NOT_ENOUGH_RESERVE0"
-                );
-                interest0 = interest0.scaleDown(amount0, _reserve0);
-            } else {
-                amount0 = params.liquidity * (_reserve0 - interest0) / _totalSupply;
-                require(status.realReserve0 >= amount0, "NOT_ENOUGH_RESERVE0");
-            }
-            // one enable margin
-            if (params.level == 2 || params.level == 4) {
-                amount1 = params.liquidity * _reserve1 / _totalSupply;
-                uint256 staticAmount1 = retainSupply1 * _reserve1 / _totalSupply;
-                require(
-                    status.realReserve1 > staticAmount1 && status.realReserve1 - staticAmount1 >= amount1,
-                    "NOT_ENOUGH_RESERVE1"
-                );
+            uint256 maxReserve0 = status.realReserve0;
+            uint256 maxReserve1 = status.realReserve1;
+            // currency0 enable margin,can claim interest1
+            if (params.level.zeroForMargin()) {
+                amount1 = Math.mulDiv(params.liquidity, _reserve1, _totalSupply);
+                uint256 retainAmount0 = Math.mulDiv(retainSupply0, _reserve0, _totalSupply);
+                if (maxReserve0 > retainAmount0) {
+                    maxReserve0 -= retainAmount0;
+                } else {
+                    maxReserve0 = 0;
+                }
                 interest1 = interest1.scaleDown(amount1, _reserve1);
             } else {
-                amount1 = params.liquidity * (_reserve1 - interest1) / _totalSupply;
-                require(status.realReserve1 >= amount1, "NOT_ENOUGH_RESERVE1");
+                amount1 = Math.mulDiv(params.liquidity, (_reserve1 - interest1), _totalSupply);
             }
+            // currency1 enable margin,can claim interest0
+            if (params.level.oneForMargin()) {
+                amount0 = Math.mulDiv(params.liquidity, _reserve0, _totalSupply);
+                uint256 retainAmount1 = Math.mulDiv(retainSupply1, _reserve1, _totalSupply);
+                if (maxReserve1 > retainAmount1) {
+                    maxReserve1 -= retainAmount1;
+                } else {
+                    maxReserve1 = 0;
+                }
+                interest0 = interest0.scaleDown(amount0, _reserve0);
+            } else {
+                amount0 = Math.mulDiv(params.liquidity, (_reserve0 - interest0), _totalSupply);
+            }
+            require(amount0 <= maxReserve0 && amount1 <= maxReserve1, "NOT_ENOUGH_RESERVE");
             if (amount0 == 0 || amount1 == 0) revert InsufficientLiquidityBurnt();
         }
 
         marginLiquidity.removeLiquidity(msg.sender, uPoolId, params.level, params.liquidity);
         poolManager.unlock(abi.encodeCall(this.handleRemoveLiquidity, (msg.sender, status.key, amount0, amount1)));
-        uint256 _kLast = _update(status.key, false, interest0, interest1);
-        if (feeOn) kLast = _kLast;
+        _update(status.key, false, interest0, interest1);
         emit Burn(params.poolId, msg.sender, params.liquidity, amount0, amount1);
     }
 
@@ -534,11 +552,14 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         }
         uint256 marginTotal = params.marginAmount * params.leverage;
         require(marginReserves >= marginTotal, "TOKEN_NOT_ENOUGH");
-        borrowAmount = _getAmountIn(status, zeroForOne, marginTotal);
+        (borrowAmount,) = _getAmountIn(status, zeroForOne, marginTotal);
         (, uint24 marginFee) = marginFees.getPoolFees(address(this), params.poolId);
         // send total token
-        marginWithoutFee = marginTotal * (ONE_MILLION - marginFee) / ONE_MILLION;
-
+        uint256 marginFeeAmount;
+        (marginWithoutFee, marginFeeAmount) = marginFee.deduct(marginTotal);
+        if (marginFeeAmount > 0) {
+            _updateProtocolFees(marginCurrency, marginFeeAmount);
+        }
         marginCurrency.settle(poolManager, address(this), marginWithoutFee, true);
         marginCurrency.take(poolManager, _positionManager, marginWithoutFee, false);
         // mint mirror token
@@ -559,27 +580,53 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
             ? (status.key.currency0, status.key.currency1)
             : (status.key.currency1, status.key.currency0);
         (uint112 interest0, uint112 interest1) = marginFees.getInterests(status);
+        uint256 interest;
         if (params.releaseAmount > 0) {
             // release margin
             marginCurrency.settle(poolManager, params.payer, params.releaseAmount, false);
             marginCurrency.take(poolManager, address(this), params.releaseAmount, true);
             if (params.repayAmount > params.rawBorrowAmount) {
                 uint256 overRepay = params.repayAmount - params.rawBorrowAmount;
-                uint256 interest = overRepay * params.releaseAmount / params.repayAmount;
-                params.marginForOne ? interest1 += uint112(interest) : interest0 += uint112(interest);
+                interest = overRepay * params.releaseAmount / params.repayAmount;
             }
         } else if (params.repayAmount > 0) {
             // repay borrow
             borrowCurrency.settle(poolManager, params.payer, params.repayAmount, false);
             borrowCurrency.take(poolManager, address(this), params.repayAmount, true);
             if (params.repayAmount > params.rawBorrowAmount) {
-                uint256 interest = params.repayAmount - params.rawBorrowAmount;
-                params.marginForOne ? interest0 += uint112(interest) : interest1 += uint112(interest);
+                interest = params.repayAmount - params.rawBorrowAmount;
             }
         }
         // burn mirror token
         mirrorTokenManager.burn(borrowCurrency.toKeyId(status.key), params.rawBorrowAmount);
-        _update(status.key, true, interest0, interest1);
+        if (interest > 0) {
+            interest = _updateProtocolFees(borrowCurrency, interest);
+            params.marginForOne ? interest0 += uint112(interest) : interest1 += uint112(interest);
+            _update(status.key, true, interest0, interest1);
+        } else {
+            _update(status.key, true, 0, 0);
+        }
         return params.repayAmount;
+    }
+
+    /// @inheritdoc IMarginHookManager
+    function collectProtocolFees(address recipient, Currency currency, uint256 amount)
+        external
+        onlyFees
+        returns (uint256)
+    {
+        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleCollectFees, (recipient, currency, amount)));
+        return abi.decode(result, (uint256));
+    }
+
+    function handleCollectFees(address recipient, Currency currency, uint256 amount)
+        external
+        selfOnly
+        returns (uint256 amountCollected)
+    {
+        amountCollected = (amount == 0) ? protocolFeesAccrued[currency] : amount;
+        protocolFeesAccrued[currency] -= amountCollected;
+        currency.settle(poolManager, address(this), amountCollected, true);
+        currency.take(poolManager, recipient, amountCollected, false);
     }
 }

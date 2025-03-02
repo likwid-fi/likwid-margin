@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
 import {UQ112x112} from "./libraries/UQ112x112.sol";
+import {FeeLibrary} from "./libraries/FeeLibrary.sol";
+import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {TruncatedOracle} from "./libraries/TruncatedOracle.sol";
 import {RateStatus} from "./types/RateStatus.sol";
 import {HookStatus} from "./types/HookStatus.sol";
@@ -19,6 +23,8 @@ contract MarginFees is IMarginFees, Owned {
     using UQ112x112 for uint224;
     using PoolIdLibrary for PoolKey;
     using TimeUtils for uint32;
+    using FeeLibrary for uint24;
+    using PerLibrary for uint256;
 
     uint256 public constant ONE_MILLION = 10 ** 6;
     uint256 public constant ONE_BILLION = 10 ** 9;
@@ -26,6 +32,7 @@ contract MarginFees is IMarginFees, Owned {
 
     uint24 public constant liquidationMarginLevel = 1100000; // 110%
     uint24 public marginFee = 3000; // 0.3%
+    uint24 public protocolFee = 50000; // 5%
     uint24 public dynamicFeeDurationSeconds = 120;
     uint24 public dynamicFeeUnit = 10;
     address public feeTo;
@@ -64,15 +71,23 @@ contract MarginFees is IMarginFees, Owned {
         _fee = status.key.fee;
         uint256 lastPrice1X112 = status.lastPrice1X112;
         if (timeElapsed < dynamicFeeDurationSeconds && lastPrice1X112 > 0) {
+            uint256 timeDiff = uint256(dynamicFeeDurationSeconds - timeElapsed);
             (uint256 _reserve0, uint256 _reserve1) = _getReserves(status);
             uint224 price1X112 = UQ112x112.encode(uint112(_reserve0)).div(uint112(_reserve1));
             uint256 priceDiff = price1X112 > lastPrice1X112 ? price1X112 - lastPrice1X112 : lastPrice1X112 - price1X112;
-            uint256 dFee = priceDiff * 1000 * dynamicFeeUnit * (dynamicFeeDurationSeconds - timeElapsed)
-                / (lastPrice1X112 * dynamicFeeDurationSeconds) * _fee / 1000 + _fee;
+            uint256 timeMul = timeDiff.mulMillionDiv(uint256(dynamicFeeDurationSeconds));
+            uint256 feeUp = Math.mulDiv(priceDiff * dynamicFeeUnit * _fee, timeMul, lastPrice1X112).divMillion();
+            uint256 dFee = feeUp + _fee;
             if (dFee >= ONE_MILLION) {
                 _fee = uint24(ONE_MILLION) - 1;
             } else {
                 _fee = uint24(dFee);
+                if (timeElapsed == 0) {
+                    uint24 oneBlockFee = 20 * status.key.fee;
+                    if (oneBlockFee > _fee) {
+                        _fee = oneBlockFee;
+                    }
+                }
             }
         }
     }
@@ -98,6 +113,19 @@ contract MarginFees is IMarginFees, Owned {
             useLevel = rateStatus.useMiddleLevel;
         }
         return rate + useLevel * rateStatus.mLow;
+    }
+
+    function getBorrowRateCumulativeLast(HookStatus memory status, uint256 timeElapsed)
+        external
+        view
+        returns (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast)
+    {
+        uint256 rate0 = getBorrowRateByReserves(status.realReserve0, status.mirrorReserve0);
+        uint256 rate0Last = ONE_BILLION + rate0 * timeElapsed / YEAR_SECONDS;
+        rate0CumulativeLast = status.rate0CumulativeLast * rate0Last / ONE_BILLION;
+        uint256 rate1 = getBorrowRateByReserves(status.realReserve1, status.mirrorReserve1);
+        uint256 rate1Last = ONE_BILLION + rate1 * timeElapsed / YEAR_SECONDS;
+        rate1CumulativeLast = status.rate1CumulativeLast * rate1Last / ONE_BILLION;
     }
 
     /// @inheritdoc IMarginFees
@@ -151,10 +179,19 @@ contract MarginFees is IMarginFees, Owned {
         (interest0, interest1) = _getInterests(status);
     }
 
+    /// @inheritdoc IMarginFees
+    function getProtocolFeeAmount(uint256 totalFee) external view returns (uint256 feeAmount) {
+        feeAmount = protocolFee.part(totalFee);
+    }
+
     // ******************** OWNER CALL ********************
 
     function setFeeTo(address _feeTo) external onlyOwner {
         feeTo = _feeTo;
+    }
+
+    function setProtocolFee(uint24 _protocolFee) external onlyOwner {
+        protocolFee = _protocolFee;
     }
 
     function setRateStatus(RateStatus calldata _status) external onlyOwner {
@@ -167,5 +204,14 @@ contract MarginFees is IMarginFees, Owned {
 
     function setDynamicFeeUnit(uint24 _dynamicFeeUnit) external onlyOwner {
         dynamicFeeUnit = _dynamicFeeUnit;
+    }
+
+    /// @inheritdoc IMarginFees
+    function collectProtocolFees(address hook, address recipient, Currency currency, uint256 amount)
+        external
+        onlyOwner
+        returns (uint256)
+    {
+        return IMarginHookManager(hook).collectProtocolFees(recipient, currency, amount);
     }
 }

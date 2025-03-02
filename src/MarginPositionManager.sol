@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
@@ -15,10 +16,11 @@ import {IMarginChecker} from "./interfaces/IMarginChecker.sol";
 import {MarginPosition, MarginPositionVo, BurnParams} from "./types/MarginPosition.sol";
 import {HookStatus} from "./types/HookStatus.sol";
 import {MarginParams, ReleaseParams} from "./types/MarginParams.sol";
-import {Math} from "./libraries/Math.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PriceMath} from "./libraries/PriceMath.sol";
 import {TimeUtils} from "./libraries/TimeUtils.sol";
+import {PerLibrary} from "./libraries/PerLibrary.sol";
+import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 
 contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     using CurrencyUtils for Currency;
@@ -26,6 +28,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     using UQ112x112 for uint224;
     using PriceMath for uint224;
     using TimeUtils for uint32;
+    using PerLibrary for uint256;
+    using FeeLibrary for uint24;
 
     error PairNotExists();
     error PositionLiquidated();
@@ -77,7 +81,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         LIQUIDATE
     }
 
-    uint256 public constant ONE_MILLION = 10 ** 6;
     uint256 public constant ONE_BILLION = 10 ** 9;
     uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
     uint256 private _nextId = 1;
@@ -130,7 +133,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (_position.rateCumulativeLast > 0) {
             uint256 rateLast =
                 hook.marginFees().getBorrowRateCumulativeLast(address(hook), _position.poolId, _position.marginForOne);
-            _position.borrowAmount = uint128(uint256(_position.borrowAmount) * rateLast / _position.rateCumulativeLast);
+            _position.borrowAmount =
+                uint128(Math.mulDiv(uint256(_position.borrowAmount), rateLast, _position.rateCumulativeLast));
             _position.rateCumulativeLast = rateLast;
         }
     }
@@ -143,9 +147,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         if (_position.borrowAmount == 0) {
             return 0;
         }
-        uint256 repayAmount = uint256(_position.borrowAmount) * closeMillionth / ONE_MILLION;
+        uint256 repayAmount = uint256(_position.borrowAmount).mulDivMillion(closeMillionth);
         uint256 releaseAmount = hook.getAmountIn(_position.poolId, !_position.marginForOne, repayAmount);
-        uint256 releaseTotal = uint256(_position.marginTotal) * closeMillionth / ONE_MILLION;
+        uint256 releaseTotal = uint256(_position.marginTotal).mulDivMillion(closeMillionth);
         pnlAmount = int256(releaseTotal) - int256(releaseAmount);
     }
 
@@ -159,7 +163,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         _position = new MarginPositionVo[](positionIds.length);
         for (uint256 i = 0; i < positionIds.length; i++) {
             _position[i].position = getPosition(positionIds[i]);
-            _position[i].pnl = estimatePNL(positionIds[i], ONE_MILLION);
+            _position[i].pnl = estimatePNL(positionIds[i], PerLibrary.ONE_MILLION);
         }
     }
 
@@ -169,21 +173,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         returns (uint256 _positionId)
     {
         _positionId = _borrowPositions[poolId][marginForOne][owner];
-    }
-
-    function checkAmount(Currency currency, address payer, address recipient, uint256 amount)
-        internal
-        returns (bool valid)
-    {
-        if (currency.isAddressZero()) {
-            valid = msg.value >= amount;
-        } else {
-            if (payer != address(this)) {
-                valid = IERC20Minimal(Currency.unwrap(currency)).allowance(payer, recipient) >= amount;
-            } else {
-                valid = IERC20Minimal(Currency.unwrap(currency)).balanceOf(address(this)) >= amount;
-            }
-        }
     }
 
     function checkMinMarginLevel(MarginParams memory params, HookStatus memory _status)
@@ -196,7 +185,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         (uint256 reserveBorrow, uint256 reserveMargin) =
             params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
         uint256 debtAmount = reserveMargin * params.borrowAmount / reserveBorrow;
-        valid = params.marginAmount + params.marginTotal >= debtAmount * minMarginLevel / ONE_MILLION;
+        valid = params.marginAmount + params.marginTotal >= debtAmount.mulDivMillion(minMarginLevel);
     }
 
     /// @inheritdoc IMarginPositionManager
@@ -208,7 +197,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         (, uint24 marginFee) = hook.marginFees().getPoolFees(address(hook), poolId);
         uint256 marginTotal = marginAmount * leverage;
         borrowAmount = hook.getAmountIn(poolId, marginForOne, marginTotal);
-        marginWithoutFee = marginTotal * (ONE_MILLION - marginFee) / ONE_MILLION;
+        marginWithoutFee = marginFee.deductFrom(marginTotal);
     }
 
     /// @inheritdoc IMarginPositionManager
@@ -239,9 +228,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     function margin(MarginParams memory params) external payable ensure(params.deadline) returns (uint256, uint256) {
         HookStatus memory _status = hook.getStatus(params.poolId);
         Currency marginToken = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
-        if (!checkAmount(marginToken, msg.sender, address(this), params.marginAmount)) {
-            revert InsufficientAmount(params.marginAmount);
-        }
         bool success = marginToken.transfer(msg.sender, address(this), params.marginAmount);
         if (!success) revert MarginTransferFailed(params.marginAmount);
         uint256 positionId = _borrowPositions[params.poolId][params.marginForOne][params.recipient];
@@ -331,12 +317,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
         MarginPosition memory _position = getPosition(positionId);
         HookStatus memory _status = hook.getStatus(_position.poolId);
-        (Currency borrowToken, Currency marginToken) = _position.marginForOne
-            ? (_status.key.currency0, _status.key.currency1)
-            : (_status.key.currency1, _status.key.currency0);
-        if (!checkAmount(borrowToken, msg.sender, address(hook), repayAmount)) {
-            revert InsufficientAmount(repayAmount);
-        }
+        Currency marginToken = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;
         if (repayAmount > _position.borrowAmount) {
             repayAmount = _position.borrowAmount;
         }
@@ -350,7 +331,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             deadline: deadline
         });
         params.rawBorrowAmount = uint256(_position.rawBorrowAmount) * repayAmount / _position.borrowAmount;
-        int256 pnlAmount = _estimatePNL(_position, repayAmount * ONE_MILLION / _position.borrowAmount);
+        int256 pnlAmount = _estimatePNL(_position, repayAmount.mulMillionDiv(_position.borrowAmount));
         uint256 sendValue = Math.min(repayAmount, msg.value);
         hook.release{value: sendValue}(params);
         release(
@@ -396,7 +377,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         ensure(deadline)
     {
         require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
-        require(closeMillionth <= ONE_MILLION, "MILLIONTH_ERROR");
+        require(closeMillionth <= PerLibrary.ONE_MILLION, "MILLIONTH_ERROR");
         MarginPosition memory _position = getPosition(positionId);
         HookStatus memory _status = hook.getStatus(_position.poolId);
         Currency marginToken = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;
@@ -409,10 +390,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             releaseAmount: 0,
             deadline: deadline
         });
-        params.repayAmount = uint256(_position.borrowAmount) * closeMillionth / ONE_MILLION;
+        params.repayAmount = uint256(_position.borrowAmount).mulDivMillion(closeMillionth);
         params.releaseAmount = hook.getAmountIn(_position.poolId, !_position.marginForOne, params.repayAmount);
-        uint256 releaseMargin = uint256(_position.marginAmount) * closeMillionth / ONE_MILLION;
-        uint256 releaseTotal = uint256(_position.marginTotal) * closeMillionth / ONE_MILLION;
+        uint256 releaseMargin = uint256(_position.marginAmount).mulDivMillion(closeMillionth);
+        uint256 releaseTotal = uint256(_position.marginTotal).mulDivMillion(closeMillionth);
         int256 pnlAmount = int256(releaseTotal) - int256(params.releaseAmount);
         require(pnlMinAmount == 0 || pnlMinAmount <= pnlAmount, "InsufficientOutputReceived");
         if (pnlAmount >= 0) {
@@ -479,13 +460,13 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         HookStatus memory _status = hook.getStatus(params.poolId);
         marginToken = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
         if (callerProfitMillion > 0) {
-            profit = marginAmount * callerProfitMillion / ONE_MILLION;
+            profit = marginAmount.mulDivMillion(callerProfitMillion);
             marginToken.transfer(address(this), msg.sender, profit);
         }
         if (protocolProfitMillion > 0) {
             address feeTo = hook.marginFees().feeTo();
             if (feeTo != address(0)) {
-                protocolProfit = marginAmount * protocolProfitMillion / ONE_MILLION;
+                protocolProfit = marginAmount.mulDivMillion(protocolProfitMillion);
                 marginToken.transfer(address(this), feeTo, protocolProfit);
             }
         }
@@ -565,9 +546,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         (Currency borrowToken, Currency marginToken) = _position.marginForOne
             ? (_status.key.currency0, _status.key.currency1)
             : (_status.key.currency1, _status.key.currency0);
-        if (!checkAmount(borrowToken, msg.sender, address(hook), borrowAmount)) {
-            revert InsufficientAmount(borrowAmount);
-        }
         uint256 liquidateValue = 0;
         if (borrowToken == CurrencyLibrary.ADDRESS_ZERO) {
             liquidateValue = borrowAmount;
