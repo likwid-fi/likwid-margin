@@ -81,6 +81,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
     address public marginOracle;
 
     mapping(PoolId => HookStatus) private hookStatusStore;
+    mapping(PoolId => uint256) private liquidityBlockStore;
     mapping(address => bool) private positionManagers;
     mapping(Currency currency => uint256 amount) public protocolFeesAccrued;
 
@@ -394,6 +395,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         returns (uint256 liquidity)
     {
         require(params.amount0 > 0 && params.amount1 > 0, "AMOUNT_ERR");
+        liquidityBlockStore[params.poolId] = block.number;
         HookStatus memory status = getStatus(params.poolId);
         _setBalances(status.key);
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
@@ -447,6 +449,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
         ensure(params.deadline)
         returns (uint256 amount0, uint256 amount1)
     {
+        require(liquidityBlockStore[params.poolId] < block.number, "NOT_ALLOW");
         HookStatus memory status = getStatus(params.poolId);
         _setBalances(status.key);
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
