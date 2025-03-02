@@ -69,20 +69,29 @@ contract MarginChecker is IMarginChecker, Owned {
     }
 
     /// @inheritdoc IMarginChecker
+    function getOracleReserves(PoolId poolId, address hook) public view returns (uint224 reserves) {
+        address marginOracle = IMarginHookManager(hook).marginOracle();
+        if (marginOracle == address(0)) {
+            reserves = 0;
+        } else {
+            (reserves,) = IMarginOracleReader(marginOracle).observeNow(poolId, hook);
+        }
+    }
+
+    /// @inheritdoc IMarginChecker
     function getReserves(PoolId poolId, bool marginForOne, address hook)
         public
         view
         returns (uint256 reserveBorrow, uint256 reserveMargin)
     {
-        address marginOracle = IMarginHookManager(hook).marginOracle();
-        if (marginOracle == address(0)) {
+        uint224 oracleReserves = getOracleReserves(poolId, hook);
+        if (oracleReserves == 0) {
             (uint256 reserve0, uint256 reserve1) = IMarginHookManager(hook).getReserves(poolId);
             (reserveBorrow, reserveMargin) = marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
         } else {
-            (uint224 reserves,) = IMarginOracleReader(marginOracle).observeNow(poolId, hook);
             (reserveBorrow, reserveMargin) = marginForOne
-                ? (reserves.getReverse0(), reserves.getReverse1())
-                : (reserves.getReverse1(), reserves.getReverse0());
+                ? (oracleReserves.getReverse0(), oracleReserves.getReverse1())
+                : (oracleReserves.getReverse1(), oracleReserves.getReverse0());
         }
     }
 

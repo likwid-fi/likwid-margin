@@ -50,6 +50,10 @@ library HookStatusLibrary {
         return status.realReserve1 + status.mirrorReserve1;
     }
 
+    function getReserves(HookStatus memory status) internal pure returns (uint224 reserves) {
+        reserves = (uint224(reserve0(status)) << 112) + uint224(reserve1(status));
+    }
+
     function getPrice0X112(HookStatus memory status) internal pure returns (uint224) {
         return reserve1(status).encode().div(reserve0(status));
     }

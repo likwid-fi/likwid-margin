@@ -30,6 +30,12 @@ interface IMarginChecker {
     /// @return maxAmount The maximum decrease amount
     function getMaxDecrease(MarginPosition memory _position, address hook) external view returns (uint256 maxAmount);
 
+    /// @notice Get the oracle reserve amount of the pool
+    /// @param poolId  The pool id
+    /// @param hook The hook address
+    /// @return reserves The oracle reserve amount of the pool
+    function getOracleReserves(PoolId poolId, address hook) external view returns (uint224 reserves);
+
     /// @notice Get the reserve amount of the pool
     /// @param poolId  The pool id
     /// @param marginForOne  If it is margin for one

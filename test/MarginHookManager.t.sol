@@ -60,11 +60,13 @@ contract MarginHookManagerTest is DeployHelper {
         assertEq(_reserves0, _reserves1);
         RemoveLiquidityParams memory removeParams =
             RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
+        vm.roll(100);
         hookManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
         removeParams =
             RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidityHalf, deadline: type(uint256).max});
+        vm.roll(100);
         hookManager.removeLiquidity(removeParams);
         HookStatus memory status = hookManager.getStatus(poolId);
         assertEq(status.marginFee, 0);
@@ -96,6 +98,7 @@ contract MarginHookManagerTest is DeployHelper {
         assertEq(_reserves0, _reserves1);
         RemoveLiquidityParams memory removeParams =
             RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
+        vm.roll(100);
         hookManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
@@ -124,6 +127,7 @@ contract MarginHookManagerTest is DeployHelper {
         assertEq(_reserves0, _reserves1);
         RemoveLiquidityParams memory removeParams =
             RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
+        vm.roll(100);
         hookManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
@@ -180,6 +184,7 @@ contract MarginHookManagerTest is DeployHelper {
             uint256 liquidity = 0.2 ether;
             RemoveLiquidityParams memory params =
                 RemoveLiquidityParams({poolId: poolId, liquidity: liquidity, level: 4, deadline: type(uint256).max});
+            vm.roll(100);
             hookManager.removeLiquidity(params);
             vm.stopPrank();
         }

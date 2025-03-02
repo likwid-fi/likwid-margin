@@ -35,10 +35,10 @@ library TruncatedOracle {
             uint32 delta = blockTimestamp > last.blockTimestamp
                 ? blockTimestamp - last.blockTimestamp
                 : blockTimestamp + (type(uint32).max - last.blockTimestamp);
-            uint224 price1X112 = PriceMath.getReverses(reserve0, reserve1).getPrice1X112();
+            uint224 price1X112 = PriceMath.getReserves(reserve0, reserve1).getPrice1X112();
             uint224 prevPrice1X112 = last.reserves.getPrice1X112();
             reserve0 = prevPrice1X112.truncated(reserve0, reserve1, MAX_PRICE_SECOND_MOVE * delta);
-            uint224 reserves = PriceMath.getReverses(reserve0, reserve1);
+            uint224 reserves = PriceMath.getReserves(reserve0, reserve1);
 
             return Observation({
                 blockTimestamp: blockTimestamp,
@@ -52,7 +52,7 @@ library TruncatedOracle {
         internal
         returns (uint16 cardinality, uint16 cardinalityNext)
     {
-        uint224 reserves = PriceMath.getReverses(reserve0, reserve1);
+        uint224 reserves = PriceMath.getReserves(reserve0, reserve1);
         self[0] = Observation({blockTimestamp: time, reserves: reserves, price1CumulativeLast: 0});
         return (1, 1);
     }
@@ -269,7 +269,7 @@ library TruncatedOracle {
                     uint256(reserve1) * (atOrAfter.price1CumulativeLast - beforeOrAt.price1CumulativeLast)
                         / observationTimeDelta
                 ).decode();
-                uint224 reserve = PriceMath.getReverses(reserve0, reserve1);
+                uint224 reserve = PriceMath.getReserves(reserve0, reserve1);
                 return (reserve, beforeOrAt.price1CumulativeLast + reserve.getPrice1X112() * targetDelta);
             }
         }

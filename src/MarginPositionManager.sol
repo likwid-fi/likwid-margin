@@ -15,6 +15,7 @@ import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {IMarginChecker} from "./interfaces/IMarginChecker.sol";
 import {MarginPosition, MarginPositionVo, BurnParams} from "./types/MarginPosition.sol";
 import {HookStatus} from "./types/HookStatus.sol";
+import {LiquidateStatus} from "./types/LiquidateStatus.sol";
 import {MarginParams, ReleaseParams} from "./types/MarginParams.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PriceMath} from "./libraries/PriceMath.sol";
@@ -73,7 +74,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         uint256 positionId,
         uint256 marginAmount,
         uint256 marginTotal,
-        uint256 borrowAmount
+        uint256 borrowAmount,
+        uint256 oracleReserves,
+        uint256 statusReserves
     );
 
     enum BurnType {
@@ -439,26 +442,25 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         );
     }
 
-    function liquidateBurn(uint256 positionId, bytes calldata signature) external returns (uint256 profit) {
-        require(checker.checkValidity(msg.sender, positionId, signature), "AUTH_ERROR");
-        MarginPosition memory _position = _positions[positionId];
-        BurnParams memory params = BurnParams({
-            poolId: _position.poolId,
-            marginForOne: _position.marginForOne,
-            positionIds: new uint256[](1),
-            signature: signature
-        });
-        params.positionIds[0] = positionId;
-        return liquidateBurn(params);
+    function _getLiquidateStatus(PoolId poolId, bool marginForOne)
+        internal
+        view
+        returns (LiquidateStatus memory liquidateStatus)
+    {
+        HookStatus memory _status = hook.getStatus(poolId);
+        (liquidateStatus.borrowCurrency, liquidateStatus.marginCurrency) = marginForOne
+            ? (_status.key.currency0, _status.key.currency1)
+            : (_status.key.currency1, _status.key.currency0);
+        liquidateStatus.statusReserves = _status.getReserves();
+        liquidateStatus.oracleReserves = checker.getOracleReserves(poolId, address(hook));
     }
 
-    function liquidateProfit(uint256 marginAmount, BurnParams memory params)
+    function _liquidateProfit(Currency marginToken, uint256 marginAmount)
         internal
-        returns (Currency marginToken, uint256 profit, uint256 protocolProfit)
+        returns (uint256 profit, uint256 protocolProfit)
     {
         (uint24 callerProfitMillion, uint24 protocolProfitMillion) = checker.getProfitMillions();
-        HookStatus memory _status = hook.getStatus(params.poolId);
-        marginToken = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
+
         if (callerProfitMillion > 0) {
             profit = marginAmount.mulDivMillion(callerProfitMillion);
             marginToken.transfer(address(this), msg.sender, profit);
@@ -472,6 +474,19 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
     }
 
+    function liquidateBurn(uint256 positionId, bytes calldata signature) external returns (uint256 profit) {
+        require(checker.checkValidity(msg.sender, positionId, signature), "AUTH_ERROR");
+        MarginPosition memory _position = _positions[positionId];
+        BurnParams memory params = BurnParams({
+            poolId: _position.poolId,
+            marginForOne: _position.marginForOne,
+            positionIds: new uint256[](1),
+            signature: signature
+        });
+        params.positionIds[0] = positionId;
+        return liquidateBurn(params);
+    }
+
     function liquidateBurn(BurnParams memory params) public returns (uint256 profit) {
         require(checker.checkValidity(msg.sender, 0, params.signature), "AUTH_ERROR");
         MarginPosition[] memory inPositions = new MarginPosition[](params.positionIds.length);
@@ -480,29 +495,37 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         }
         (bool[] memory liquidatedList, uint256[] memory borrowAmountList) =
             checker.checkLiquidate(params.poolId, params.marginForOne, address(hook), inPositions);
-
-        uint256 releaseAmount;
-        uint256 rawBorrowAmount;
-        uint256 borrowAmount;
-        uint256 liquidateValue;
+        LiquidateStatus memory liquidateStatus = _getLiquidateStatus(params.poolId, params.marginForOne);
+        ReleaseParams memory releaseParams = ReleaseParams({
+            poolId: params.poolId,
+            marginForOne: params.marginForOne,
+            payer: address(this),
+            rawBorrowAmount: 0,
+            releaseAmount: 0,
+            repayAmount: 0,
+            deadline: block.timestamp + 1000
+        });
         {
             uint256 assetAmount;
             uint256 marginAmount;
             for (uint256 i = 0; i < params.positionIds.length; i++) {
                 if (liquidatedList[i]) {
                     uint256 positionId = params.positionIds[i];
+                    uint256 borrowAmount = borrowAmountList[i];
                     MarginPosition memory _position = inPositions[i];
                     marginAmount += _position.marginAmount;
                     assetAmount += _position.marginAmount + _position.marginTotal;
-                    borrowAmount += borrowAmountList[i];
-                    rawBorrowAmount += _position.rawBorrowAmount;
+                    releaseParams.repayAmount += borrowAmount;
+                    releaseParams.rawBorrowAmount += _position.rawBorrowAmount;
                     emit Liquidate(
-                        params.poolId,
+                        releaseParams.poolId,
                         msg.sender,
                         positionId,
                         _position.marginAmount,
                         _position.marginTotal,
-                        borrowAmountList[i]
+                        borrowAmount,
+                        liquidateStatus.oracleReserves,
+                        liquidateStatus.statusReserves
                     );
                     _burnPosition(positionId, BurnType.LIQUIDATE);
                 }
@@ -511,26 +534,17 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
                 return profit;
             }
             uint256 protocolProfit;
-            Currency marginToken;
-            (marginToken, profit, protocolProfit) = liquidateProfit(marginAmount, params);
-            releaseAmount = assetAmount - profit - protocolProfit;
-            if (marginToken == CurrencyLibrary.ADDRESS_ZERO) {
-                liquidateValue = releaseAmount;
+            (profit, protocolProfit) = _liquidateProfit(liquidateStatus.marginCurrency, marginAmount);
+            releaseParams.releaseAmount = assetAmount - profit - protocolProfit;
+        }
+        if (releaseParams.releaseAmount > 0) {
+            uint256 liquidateValue;
+            if (liquidateStatus.marginCurrency == CurrencyLibrary.ADDRESS_ZERO) {
+                liquidateValue = releaseParams.releaseAmount;
             } else {
-                bool success = marginToken.approve(address(hook), releaseAmount);
+                bool success = liquidateStatus.marginCurrency.approve(address(hook), releaseParams.releaseAmount);
                 require(success, "APPROVE_ERR");
             }
-        }
-        if (releaseAmount > 0) {
-            ReleaseParams memory releaseParams = ReleaseParams({
-                poolId: params.poolId,
-                marginForOne: params.marginForOne,
-                payer: address(this),
-                rawBorrowAmount: rawBorrowAmount,
-                releaseAmount: releaseAmount,
-                repayAmount: borrowAmount,
-                deadline: block.timestamp + 1000
-            });
             hook.release{value: liquidateValue}(releaseParams);
         }
     }
@@ -542,12 +556,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             return profit;
         }
         MarginPosition memory _position = _positions[positionId];
-        HookStatus memory _status = hook.getStatus(_position.poolId);
-        (Currency borrowToken, Currency marginToken) = _position.marginForOne
-            ? (_status.key.currency0, _status.key.currency1)
-            : (_status.key.currency1, _status.key.currency0);
-        uint256 liquidateValue = 0;
-        if (borrowToken == CurrencyLibrary.ADDRESS_ZERO) {
+        LiquidateStatus memory liquidateStatus = _getLiquidateStatus(_position.poolId, _position.marginForOne);
+
+        uint256 liquidateValue;
+        if (liquidateStatus.borrowCurrency == CurrencyLibrary.ADDRESS_ZERO) {
             liquidateValue = borrowAmount;
         }
         ReleaseParams memory params = ReleaseParams({
@@ -561,12 +573,19 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         });
         hook.release{value: liquidateValue}(params);
         profit = _position.marginAmount + _position.marginTotal;
-        marginToken.transfer(address(this), msg.sender, profit);
+        liquidateStatus.marginCurrency.transfer(address(this), msg.sender, profit);
         if (msg.value > liquidateValue) {
             transferNative(msg.sender, msg.value - liquidateValue);
         }
         emit Liquidate(
-            _position.poolId, msg.sender, positionId, _position.marginAmount, _position.marginTotal, borrowAmount
+            _position.poolId,
+            msg.sender,
+            positionId,
+            _position.marginAmount,
+            _position.marginTotal,
+            borrowAmount,
+            liquidateStatus.oracleReserves,
+            liquidateStatus.statusReserves
         );
         _burnPosition(positionId, BurnType.LIQUIDATE);
     }

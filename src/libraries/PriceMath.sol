@@ -8,7 +8,7 @@ library PriceMath {
 
     uint32 constant ONE_MILLION = 10 ** 6;
 
-    function getReverses(uint112 reserve0, uint112 reserve1) internal pure returns (uint224 reserves) {
+    function getReserves(uint112 reserve0, uint112 reserve1) internal pure returns (uint224 reserves) {
         reserves = (uint224(reserve0) << 112) + uint224(reserve1);
     }
 
