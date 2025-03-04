@@ -20,6 +20,4 @@ methods {
     ) external => NONDET; /* expects bytes4 */
 }
 
-use builtin rule sanity filtered { f -> 
-    f.contract == currentContract 
-}
+use builtin rule sanity filtered { f -> f.contract == currentContract }
