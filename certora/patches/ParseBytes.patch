@@ -1,0 +1,35 @@
+--- ./lib/v4-periphery/lib/v4-core/src/libraries/ParseBytes.sol	2025-02-24 10:27:41.872657651 +0200
++++ ./certora/patches/ParseBytes.sol	2025-03-04 11:21:03.386363649 +0200
+@@ -7,23 +7,23 @@
+ /// For parsing hook returns, note that all hooks return either bytes4 or (bytes4, 32-byte-delta) or (bytes4, 32-byte-delta, uint24).
+ library ParseBytes {
+     function parseSelector(bytes memory result) internal pure returns (bytes4 selector) {
+-        // equivalent: (selector,) = abi.decode(result, (bytes4, int256));
+-        assembly ("memory-safe") {
++        (selector,) = abi.decode(result, (bytes4, int256));
++        /*assembly ("memory-safe") {
+             selector := mload(add(result, 0x20))
+-        }
++        }*/
+     }
+ 
+     function parseFee(bytes memory result) internal pure returns (uint24 lpFee) {
+-        // equivalent: (,, lpFee) = abi.decode(result, (bytes4, int256, uint24));
+-        assembly ("memory-safe") {
++        (,, lpFee) = abi.decode(result, (bytes4, int256, uint24));
++        /*assembly ("memory-safe") {
+             lpFee := mload(add(result, 0x60))
+-        }
++        }*/
+     }
+ 
+     function parseReturnDelta(bytes memory result) internal pure returns (int256 hookReturn) {
+-        // equivalent: (, hookReturnDelta) = abi.decode(result, (bytes4, int256));
+-        assembly ("memory-safe") {
++        (, hookReturn) = abi.decode(result, (bytes4, int256));
++        /*assembly ("memory-safe") {
+             hookReturn := mload(add(result, 0x40))
+-        }
++        }*/
+     }
+ }

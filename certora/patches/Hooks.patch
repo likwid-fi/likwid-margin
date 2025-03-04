@@ -1,0 +1,30 @@
+--- ./lib/v4-periphery/lib/v4-core/src/libraries/Hooks.sol	2025-03-04 11:43:05.966135565 +0200
++++ ./certora/patches/Hooks.sol	2025-03-04 11:42:52.996139514 +0200
+@@ -129,14 +129,15 @@
+     /// @return result The complete data returned by the hook
+     function callHook(IHooks self, bytes memory data) internal returns (bytes memory result) {
+         bool success;
+-        assembly ("memory-safe") {
++        /*assembly ("memory-safe") {
+             success := call(gas(), self, 0, add(data, 0x20), mload(data), 0, 0)
+-        }
++        }*/
++        (success, result) = address(self).call(data);
+         // Revert with FailedHookCall, containing any error message to bubble up
+         if (!success) CustomRevert.bubbleUpAndRevertWith(address(self), bytes4(data), HookCallFailed.selector);
+ 
+         // The call was successful, fetch the returned data
+-        assembly ("memory-safe") {
++        /*assembly ("memory-safe") {
+             // allocate result byte array from the free memory pointer
+             result := mload(0x40)
+             // store new free memory pointer at the end of the array padded to 32 bytes
+@@ -145,7 +146,7 @@
+             mstore(result, returndatasize())
+             // copy return data to result
+             returndatacopy(add(result, 0x20), 0, returndatasize())
+-        }
++        }*/
+ 
+         // Length must be at least 32 to contain the selector. Check expected selector and returned selector match.
+         if (result.length < 32 || result.parseSelector() != data.parseSelector()) {
