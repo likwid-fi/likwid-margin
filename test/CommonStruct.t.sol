@@ -28,7 +28,7 @@ contract CommonStructTest is Test {
             hooks: IHooks(address(0))
         });
         for (uint256 i = 0; i < 100; i++) {
-            positions[i].rateCumulativeLast = i;
+            positions[i].rateCumulativeLast = i + 10000;
         }
     }
 
@@ -109,5 +109,12 @@ contract CommonStructTest is Test {
         uint128 _half1 = uint128(_half);
         assertEq(_half0, (reserve0 + _reserve0) / 2);
         assertEq(_half1, (reserve1 + _reserve1) / 2);
+    }
+
+    function testBurnPosition() public {
+        uint256 positionId = 10;
+        assertGt(positions[positionId].rateCumulativeLast, 0);
+        delete positions[positionId];
+        assertEq(positions[positionId].rateCumulativeLast, 0);
     }
 }

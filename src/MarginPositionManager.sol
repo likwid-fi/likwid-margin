@@ -84,16 +84,13 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         LIQUIDATE
     }
 
-    uint256 public constant ONE_BILLION = 10 ** 9;
-    uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
     uint256 private _nextId = 1;
     uint24 public minMarginLevel = 1170000; // 117%
     IMarginHookManager private hook;
     IMarginChecker public checker;
 
     mapping(uint256 => MarginPosition) private _positions;
-    mapping(address => uint256) private _hookPositions;
-    mapping(PoolId => mapping(bool => mapping(address => uint256))) private _borrowPositions;
+    mapping(PoolId => mapping(bool => mapping(address => uint256))) private _ownerPositionIds;
 
     constructor(address initialOwner, IMarginChecker _checker)
         ERC721("LIKWIDMarginPositionManager", "LMPM")
@@ -105,7 +102,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
     function _burnPosition(uint256 positionId, BurnType burnType) internal {
         // _burn(positionId);
         MarginPosition memory _position = _positions[positionId];
-        delete _borrowPositions[_position.poolId][_position.marginForOne][ownerOf(positionId)];
+        require(_position.rateCumulativeLast > 0, "ALREADY_BURNT");
+        delete _ownerPositionIds[_position.poolId][_position.marginForOne][ownerOf(positionId)];
         delete _positions[positionId];
         emit Burn(_position.poolId, msg.sender, positionId, uint8(burnType));
     }
@@ -175,7 +173,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         view
         returns (uint256 _positionId)
     {
-        _positionId = _borrowPositions[poolId][marginForOne][owner];
+        _positionId = _ownerPositionIds[poolId][marginForOne][owner];
     }
 
     function checkMinMarginLevel(MarginParams memory params, HookStatus memory _status)
@@ -233,7 +231,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
         Currency marginToken = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
         bool success = marginToken.transfer(msg.sender, address(this), params.marginAmount);
         if (!success) revert MarginTransferFailed(params.marginAmount);
-        uint256 positionId = _borrowPositions[params.poolId][params.marginForOne][params.recipient];
+        uint256 positionId = _ownerPositionIds[params.poolId][params.marginForOne][params.recipient];
         params = hook.margin(params);
         uint256 rateLast = hook.marginFees().getBorrowRateCumulativeLast(_status, params.marginForOne);
         if (params.borrowAmount < params.borrowMinAmount) revert InsufficientBorrowReceived();
@@ -252,7 +250,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned {
             });
             (bool liquidated,) = checker.checkLiquidate(_position, address(hook));
             require(!liquidated, "liquidated");
-            _borrowPositions[params.poolId][params.marginForOne][params.recipient] = positionId;
+            _ownerPositionIds[params.poolId][params.marginForOne][params.recipient] = positionId;
             _positions[positionId] = _position;
         } else {
             MarginPosition storage _position = _positions[positionId];
