@@ -21,7 +21,7 @@ rule removeLiquidityEndsWithZeroVirtualAccounting()
     MarginHookManager.RemoveLiquidityParams params;
     
     require zeroCurrencyDeltaForAll();
-        removeLiquidity(e, params);
+        MarginHookManager.removeLiquidity(e, params);
     assert zeroCurrencyDeltaForAll();
     /// Easier to debug
     //address token;

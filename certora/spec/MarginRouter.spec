@@ -5,6 +5,8 @@ import "./PoolManager.spec";
 using MarginHookManager as Hook;
 
 methods {
+    function Hook.getStatus(PoolManager.PoolId poolId) external returns (MarginHookManager.HookStatus memory) envfree;
+    
     /// Unresolved unlock callback:
     function _.unlockCallback(bytes) external => DISPATCHER(true);
 
@@ -25,11 +27,11 @@ methods {
     ] default HAVOC_ECF;
 
     /// This one is intended to solve the unresolution of the hook call to `beforeSwap` from within PoolManager.swap()
-    unresolved external in Hooks.callHook(address,bytes) => DISPATCH [
+    unresolved external in PoolManager.swap(PoolManager.PoolKey,IPoolManager.SwapParams,bytes) => DISPATCH [
         MarginHookManager.beforeSwap(address,PoolManager.PoolKey,IPoolManager.SwapParams,bytes)
     ] default HAVOC_ECF;
 
-    /// Pure function is summarized by a generic arbitratry mapping - this is logically sound.
+    /// Pure function is summarized by a generic arbitrary mapping - this is logically sound.
     function Hooks.hasPermission(address self, uint160 flag) internal returns (bool) => CVLHasPermission(self, flag);
 }
 
@@ -55,7 +57,7 @@ use builtin rule sanity filtered{f -> f.contract == currentContract}
 rule swapCorrectness() {
     env e;
     MarginRouter.SwapParams params;
-    MarginHookManager.HookStatus status = Hook.getStatus(e, params.poolId);
+    MarginHookManager.HookStatus status = Hook.getStatus(params.poolId);
     /// Prove this is correct.
     require status.key.hooks == Hook;
     uint256 amountOut = exactInput(e, params);
