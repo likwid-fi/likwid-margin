@@ -65,8 +65,3 @@ function transferCVL(address token, address from, address to, uint256 amount) re
     balanceByToken[token][to] = require_uint256(balanceByToken[token][to] + amount);  // We neglect overflows.
     return true;
 }
-
-function tokenAllowanceOf(address token, address account, address spender) returns uint256 {
-    if(token == 0) return max_uint256;
-    return allowanceByToken[token][account][spender];
-}
