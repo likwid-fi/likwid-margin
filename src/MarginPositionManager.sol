@@ -190,42 +190,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         valid = params.marginAmount + params.marginTotal >= debtAmount.mulDivMillion(minMarginLevel);
     }
 
-    /// @inheritdoc IMarginPositionManager
-    function getMarginTotal(PoolId poolId, bool marginForOne, uint24 leverage, uint256 marginAmount)
-        external
-        view
-        returns (uint256 marginWithoutFee, uint256 borrowAmount)
-    {
-        (, uint24 marginFee) = hook.marginFees().getPoolFees(address(hook), poolId);
-        uint256 marginTotal = marginAmount * leverage;
-        borrowAmount = hook.getAmountIn(poolId, marginForOne, marginTotal);
-        marginWithoutFee = marginFee.deductFrom(marginTotal);
-    }
-
-    /// @inheritdoc IMarginPositionManager
-    function getMarginMax(PoolId poolId, bool marginForOne, uint24 leverage)
-        external
-        view
-        returns (uint256 marginMax, uint256 borrowAmount)
-    {
-        HookStatus memory status = hook.getStatus(poolId);
-        (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) =
-            hook.marginLiquidity().getPoolSupplies(address(hook), poolId);
-        uint256 marginReserve0 = (_totalSupply - retainSupply0) * status.realReserve0 / _totalSupply;
-        uint256 marginReserve1 = (_totalSupply - retainSupply1) * status.realReserve1 / _totalSupply;
-        uint256 marginMaxTotal = (marginForOne ? marginReserve1 : marginReserve0);
-        if (marginMaxTotal > 1000) {
-            (uint256 reserve0, uint256 reserve1) = hook.getReserves(poolId);
-            uint256 marginMaxReserve = (marginForOne ? reserve1 : reserve0);
-            uint24 part = checker.getThousandthsByLeverage()[leverage - 1];
-            marginMaxReserve = marginMaxReserve * part / 1000;
-            marginMaxTotal = Math.min(marginMaxTotal, marginMaxReserve);
-            marginMaxTotal -= 1000;
-        }
-        borrowAmount = hook.getAmountIn(poolId, marginForOne, marginMaxTotal);
-        marginMax = marginMaxTotal / leverage;
-    }
-
     function checkAmount(Currency currency, address payer, address recipient, uint256 amount)
         internal
         returns (bool valid)

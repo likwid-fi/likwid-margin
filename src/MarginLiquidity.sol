@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ERC6909Claims} from "v4-core/ERC6909Claims.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 // Local
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {HookStatus} from "./types/HookStatus.sol";
 import {LiquidityLevel} from "./libraries/LiquidityLevel.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 
@@ -88,7 +89,19 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         (totalSupply, retainSupply0, retainSupply1) = _getPoolSupplies(msg.sender, uPoolId);
     }
 
-    // ******************** EXTERNAL CALL ********************
+    function getFlowReserves(PoolId poolId, HookStatus memory status)
+        external
+        view
+        onlyHooks
+        returns (uint256 reserve0, uint256 reserve1)
+    {
+        uint256 uPoolId = _getPoolId(poolId);
+        (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) = _getPoolSupplies(msg.sender, uPoolId);
+        reserve0 = Math.mulDiv(totalSupply - retainSupply0, status.realReserve0, totalSupply);
+        reserve1 = Math.mulDiv(totalSupply - retainSupply1, status.realReserve1, totalSupply);
+    }
+
+    // ********************  EXTERNAL CALL ********************
     function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId) {
         uPoolId = _getPoolId(poolId);
     }

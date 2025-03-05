@@ -21,29 +21,6 @@ interface IMarginPositionManager is IERC721 {
     /// @return pnlAmount The PNL amount of the position
     function estimatePNL(uint256 positionId, uint256 closeMillionth) external view returns (int256 pnlAmount);
 
-    /// @notice Get the marginTotal amount and borrow amount for the given pool, leverage, and marginAmount
-    /// @param poolId The ID of the pool
-    /// @param marginForOne If true, currency1 is marginToken, otherwise currency2 is marginToken
-    /// @param leverage The leverage ratio
-    /// @param marginAmount The amount of margin
-    /// @return marginWithoutFee The marginTotal amount without fee
-    /// @return borrowAmount The borrow amount
-    function getMarginTotal(PoolId poolId, bool marginForOne, uint24 leverage, uint256 marginAmount)
-        external
-        view
-        returns (uint256 marginWithoutFee, uint256 borrowAmount);
-
-    /// @notice Get the maximum marginAmount for the given pool, leverage
-    /// @param poolId The ID of the pool
-    /// @param marginForOne If true, currency1 is marginToken, otherwise currency2 is marginToken
-    /// @param leverage The leverage ratio
-    /// @return marginMax The maximum margin amount
-    /// @return borrowAmount The borrow amount
-    function getMarginMax(PoolId poolId, bool marginForOne, uint24 leverage)
-        external
-        view
-        returns (uint256 marginMax, uint256 borrowAmount);
-
     /// @notice Margin a position
     /// @param params The parameters of the margin position
     /// @return positionId The ID of the margin position

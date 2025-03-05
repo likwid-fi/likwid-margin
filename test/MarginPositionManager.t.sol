@@ -317,7 +317,7 @@ contract MarginPositionManagerTest is DeployHelper {
             deadline: block.timestamp + 1000
         });
         payValue = 0.001 ether;
-        vm.expectPartialRevert(MarginPositionManager.MarginTransferFailed.selector);
+        vm.expectPartialRevert(MarginPositionManager.InsufficientAmount.selector);
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         vm.stopPrank();
     }
@@ -585,7 +585,7 @@ contract MarginPositionManagerTest is DeployHelper {
             position.borrowAmount,
             position.rateCumulativeLast
         );
-        (payValue, borrowAmount) = marginPositionManager.getMarginMax(nativeKey.toId(), false, 3);
+        (payValue, borrowAmount) = marginChecker.getMarginMax(address(hookManager), nativeKey.toId(), false, 3);
         params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
@@ -769,7 +769,7 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256 maxAmount = marginPositionManager.getMaxDecrease(positionId);
         console.log("test_hook_modify_usdts maxAmount:%s", maxAmount);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
-        marginPositionManager.modify(positionId, -int256(maxAmount));
+        marginPositionManager.modify{value: maxAmount}(positionId, -int256(maxAmount));
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
         assertEq(position.marginAmount - maxAmount, newPosition.marginAmount);
     }
@@ -926,7 +926,7 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256 positionId;
         uint256 borrowAmount;
         (uint256 payValue, uint256 borrowAmountEstimate) =
-            marginPositionManager.getMarginMax(poolId1, marginForOne, leverage);
+            marginChecker.getMarginMax(address(hookManager), poolId1, marginForOne, leverage);
         MarginParams memory params = MarginParams({
             poolId: poolId1,
             marginForOne: marginForOne,

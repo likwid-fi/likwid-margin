@@ -3,11 +3,13 @@ pragma solidity ^0.8.26;
 
 import {PoolId} from "v4-core/types/PoolId.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
-
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
+import {HookStatus} from "./types/HookStatus.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PriceMath} from "./libraries/PriceMath.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
+import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {MarginPosition, MarginPositionVo, BurnParams} from "./types/MarginPosition.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {IMarginChecker} from "./interfaces/IMarginChecker.sol";
@@ -19,6 +21,7 @@ contract MarginChecker is IMarginChecker, Owned {
     using UQ112x112 for uint112;
     using PriceMath for uint224;
     using PerLibrary for uint256;
+    using FeeLibrary for uint24;
 
     uint256 public constant ONE_MILLION = 10 ** 6;
     uint24 callerProfit = 10 ** 4;
@@ -52,6 +55,52 @@ contract MarginChecker is IMarginChecker, Owned {
     /// @inheritdoc IMarginChecker
     function checkValidity(address, uint256, bytes calldata) external pure returns (bool) {
         return true;
+    }
+
+    /// @inheritdoc IMarginChecker
+    function getMarginTotal(address hook, PoolId poolId, bool marginForOne, uint24 leverage, uint256 marginAmount)
+        external
+        view
+        returns (uint256 marginWithoutFee, uint256 borrowAmount)
+    {
+        IMarginHookManager hookManager = IMarginHookManager(hook);
+        (, uint24 marginFee) = hookManager.marginFees().getPoolFees(address(hook), poolId);
+        uint256 marginTotal = marginAmount * leverage;
+        borrowAmount = hookManager.getAmountIn(poolId, marginForOne, marginTotal);
+        marginWithoutFee = marginFee.deductFrom(marginTotal);
+    }
+
+    function _getMarginReserve(IMarginHookManager hookManager, PoolId poolId, bool marginForOne)
+        internal
+        view
+        returns (uint256 marginReserve)
+    {
+        HookStatus memory status = hookManager.getStatus(poolId);
+        (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) =
+            hookManager.marginLiquidity().getPoolSupplies(address(hookManager), poolId);
+        uint256 marginReserve0 = Math.mulDiv(_totalSupply - retainSupply0, status.realReserve0, _totalSupply);
+        uint256 marginReserve1 = Math.mulDiv(_totalSupply - retainSupply1, status.realReserve1, _totalSupply);
+        marginReserve = (marginForOne ? marginReserve1 : marginReserve0);
+    }
+
+    /// @inheritdoc IMarginChecker
+    function getMarginMax(address hook, PoolId poolId, bool marginForOne, uint24 leverage)
+        external
+        view
+        returns (uint256 marginMax, uint256 borrowAmount)
+    {
+        IMarginHookManager hookManager = IMarginHookManager(hook);
+        uint256 marginMaxTotal = _getMarginReserve(hookManager, poolId, marginForOne);
+        if (marginMaxTotal > 1000) {
+            (uint256 reserve0, uint256 reserve1) = hookManager.getReserves(poolId);
+            uint256 marginMaxReserve = (marginForOne ? reserve1 : reserve0);
+            uint24 part = leverageThousandths[leverage - 1];
+            marginMaxReserve = marginMaxReserve * part / 1000;
+            marginMaxTotal = Math.min(marginMaxTotal, marginMaxReserve);
+            marginMaxTotal -= 1000;
+        }
+        borrowAmount = hookManager.getAmountIn(poolId, marginForOne, marginMaxTotal);
+        marginMax = marginMaxTotal / leverage;
     }
 
     /// @inheritdoc IMarginChecker
