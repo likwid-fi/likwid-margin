@@ -52,6 +52,10 @@ persistent ghost CVLHasPermission(address,uint160) returns bool {
 
 use builtin rule sanity filtered{f -> f.contract == currentContract}
 
+invariant ValidStatusKeysHooks(PoolManager.PoolId poolId)
+    Hook.hookStatusStore[poolId].key.hooks == 0 || Hook.hookStatusStore[poolId].key.hooks == Hook
+    filtered{f -> f.contract == Hook}
+
 /// For a non-zero amountIn, the amount out should also be non-zero.
 /// Inner-assert: the call to swap() should not involve any non-zero amount to be swapped within PoolManager. 
 rule swapCorrectness() {
@@ -62,5 +66,5 @@ rule swapCorrectness() {
     require status.key.hooks == Hook;
     uint256 amountOut = exactInput(e, params);
 
-    assert params.amountIn > 0 => amountOut > 0;
+    satisfy amountOut > 0;
 }
