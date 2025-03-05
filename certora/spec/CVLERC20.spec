@@ -7,6 +7,8 @@ methods {
         => transferFromCVL(calledContract, e.msg.sender, from, to, amount) expect bool;
     function _.balanceOf(address account) external => 
         tokenBalanceOf(calledContract, account) expect uint256;
+    function _.allowance(address owner, address spender) external => 
+        tokenAllowanceOf(calledContract, owner, spender) expect uint256;
 
     function Helper.fromCurrency(PoolManager.Currency) external returns (address) envfree;
     /// CurrencyLibrary transfer
@@ -41,6 +43,11 @@ function currencyTransfer(address sender, PoolManager.Currency currency, address
 function tokenBalanceOf(address token, address account) returns uint256 {
     if(token == 0) return nativeBalances[account];
     return balanceByToken[token][account];
+}
+
+function tokenAllowanceOf(address token, address account, address spender) returns uint256 {
+    if(token == 0) return max_uint256;
+    return allowanceByToken[token][account][spender];
 }
 
 function transferFromCVL(address token, address spender, address from, address to, uint256 amount) returns bool {
