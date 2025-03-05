@@ -186,6 +186,15 @@ contract PoolManager is IPoolManagerLight, ERC6909Claims {
 
         swapDelta = BalanceDelta.wrap(_swap(amountToSwap));
 
+        BalanceDelta hookDelta;
+        (swapDelta, hookDelta) = Hooks.afterSwap(key.hooks, key, params, swapDelta, hookData, beforeSwapDelta);
+
+        // if the hook doesn't have the flag to be able to return deltas, hookDelta will always be 0
+        if (hookDelta != BalanceDeltaLibrary.ZERO_DELTA) {
+            _currencyDelta[Currency.unwrap(key.currency0)][address(key.hooks)] += BalanceDeltaLibrary.amount0(hookDelta);
+            _currencyDelta[Currency.unwrap(key.currency1)][address(key.hooks)] += BalanceDeltaLibrary.amount1(hookDelta);
+        }
+
         /// _accountPoolBalanceDelta
         _currencyDelta[Currency.unwrap(key.currency0)][msg.sender] += BalanceDeltaLibrary.amount0(swapDelta);
         _currencyDelta[Currency.unwrap(key.currency1)][msg.sender] += BalanceDeltaLibrary.amount1(swapDelta);
