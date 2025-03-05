@@ -3,12 +3,28 @@ pragma solidity ^0.8.24;
 
 import { IUnlockCallback } from "lib/v4-periphery/lib/v4-core/src/interfaces/callback/IUnlockCallback.sol";
 import { SafeCast } from "lib/v4-periphery/lib/v4-core/src/libraries/SafeCast.sol";
-import { BalanceDelta } from "lib/v4-periphery/lib/v4-core/src/types/BalanceDelta.sol"; 
+import { BalanceDelta, BalanceDeltaLibrary } from "lib/v4-periphery/lib/v4-core/src/types/BalanceDelta.sol"; 
 import { ERC6909Claims } from "lib/v4-periphery/lib/v4-core/src/ERC6909Claims.sol";
 import { PoolKey } from "lib/v4-periphery/lib/v4-core/src/types/PoolKey.sol";
+import { IHooks, Hooks } from "lib/v4-periphery/lib/v4-core/src/libraries/Hooks.sol";
+import { IPoolManager } from "lib/v4-periphery/lib/v4-core/src/interfaces/IPoolManager.sol";
+import { BeforeSwapDelta } from "lib/v4-periphery/lib/v4-core/src/types/BeforeSwapDelta.sol";
 import { CurrencyLibrary, Currency } from "lib/v4-periphery/lib/v4-core/src/types/Currency.sol";
 
-interface IPoolManager {
+interface IPoolManagerLight {
+
+    /// @notice Swap against the given pool
+    /// @param key The pool to swap in
+    /// @param params The parameters for swapping
+    /// @param hookData The data to pass through to the swap hooks
+    /// @return swapDelta The balance delta of the address swapping
+    /// @dev Swapping on low liquidity pools may cause unexpected swap amounts when liquidity available is less than amountSpecified.
+    /// Additionally note that if interacting with hooks that have the BEFORE_SWAP_RETURNS_DELTA_FLAG or AFTER_SWAP_RETURNS_DELTA_FLAG
+    /// the hook may alter the swap input/output. Integrators should perform checks on the returned swapDelta.
+    function swap(PoolKey memory key, IPoolManager.SwapParams memory params, bytes calldata hookData)
+        external
+        returns (BalanceDelta swapDelta);
+
     /// @notice All interactions on the contract that account deltas require unlocking. A caller that calls `unlock` must implement
     /// `IUnlockCallback(msg.sender).unlockCallback(data)`, where they interact with the remaining functions on this contract.
     /// @dev The only functions callable without an unlocking are `initialize` and `updateDynamicLPFee`
@@ -61,7 +77,7 @@ interface IPoolManager {
     function sync(Currency currency) external;
 }
 
-contract PoolManager is IPoolManager, ERC6909Claims {
+contract PoolManager is IPoolManagerLight, ERC6909Claims {
     using SafeCast for uint256;
 
     bool private __unlocked;
@@ -77,7 +93,7 @@ contract PoolManager is IPoolManager, ERC6909Claims {
         _;
     }
 
-    /// @inheritdoc IPoolManager
+    /// @inheritdoc IPoolManagerLight
     function unlock(bytes calldata data) external override returns (bytes memory result) {
         if (__unlocked) revert("Still unlocked");
         __unlocked = true;
@@ -88,13 +104,14 @@ contract PoolManager is IPoolManager, ERC6909Claims {
         __unlocked = false;
     }
 
-    /// @inheritdoc IPoolManager
+    /// @inheritdoc IPoolManagerLight
     function burn(address from, uint256 id, uint256 amount) external onlyWhenUnlocked {
         address currency = Currency.unwrap(CurrencyLibrary.fromId(id));
         _currencyDelta[currency][msg.sender] += amount.toInt128();
         _burnFrom(from, id, amount);
     }
 
+    /// @inheritdoc IPoolManagerLight
     function mint(address to, uint256 id, uint256 amount) external onlyWhenUnlocked {
         address currency = Currency.unwrap(CurrencyLibrary.fromId(id));
         unchecked {
@@ -104,6 +121,7 @@ contract PoolManager is IPoolManager, ERC6909Claims {
         }
     }
 
+    /// @inheritdoc IPoolManagerLight
     function take(Currency currency, address to, uint256 amount) external onlyWhenUnlocked {
         unchecked {
             // negation must be safe as amount is not negative
@@ -112,7 +130,7 @@ contract PoolManager is IPoolManager, ERC6909Claims {
         }
     }
 
-    /// @inheritdoc IPoolManager
+    /// @inheritdoc IPoolManagerLight
     function settle() external payable onlyWhenUnlocked returns (uint256) {
         return _settle(msg.sender);
     }
@@ -136,7 +154,7 @@ contract PoolManager is IPoolManager, ERC6909Claims {
         _currencyDelta[currency][recipient] += paid.toInt128();
     }
 
-    /// @inheritdoc IPoolManager
+    /// @inheritdoc IPoolManagerLight
     function sync(Currency currency) external {
         // address(0) is used for the native currency
         if (currency == Currency.wrap(address(0x0))) {
@@ -149,7 +167,41 @@ contract PoolManager is IPoolManager, ERC6909Claims {
         }
     }
 
-    /// @inheritdoc IPoolManager
+    /// @inheritdoc IPoolManagerLight
     /// @dev Certora - to be summarized
     function initialize(PoolKey memory key, uint160 sqrtPriceX96) external returns (int24 tick) {}
+
+    /// @inheritdoc IPoolManagerLight
+    function swap(
+        PoolKey memory key, 
+        IPoolManager.SwapParams memory params, 
+        bytes calldata hookData
+    ) external onlyWhenUnlocked returns (BalanceDelta swapDelta) {
+        if (params.amountSpecified == 0) revert("Zero amount");
+
+        BeforeSwapDelta beforeSwapDelta;
+        int256 amountToSwap;
+        uint24 lpFeeOverride;
+        (amountToSwap, beforeSwapDelta, lpFeeOverride) = Hooks.beforeSwap(key.hooks, key, params, hookData);
+
+        swapDelta = BalanceDelta.wrap(_swap(amountToSwap));
+
+        BalanceDelta hookDelta;
+        (swapDelta, hookDelta) = Hooks.afterSwap(key.hooks, key, params, swapDelta, hookData, beforeSwapDelta);
+
+        // if the hook doesn't have the flag to be able to return deltas, hookDelta will always be 0
+        if (hookDelta != BalanceDeltaLibrary.ZERO_DELTA) {
+            _currencyDelta[Currency.unwrap(key.currency0)][address(key.hooks)] += BalanceDeltaLibrary.amount0(hookDelta);
+            _currencyDelta[Currency.unwrap(key.currency1)][address(key.hooks)] += BalanceDeltaLibrary.amount1(hookDelta);
+        }
+
+        /// _accountPoolBalanceDelta
+        _currencyDelta[Currency.unwrap(key.currency0)][msg.sender] += BalanceDeltaLibrary.amount0(swapDelta);
+        _currencyDelta[Currency.unwrap(key.currency1)][msg.sender] += BalanceDeltaLibrary.amount1(swapDelta);
+    }
+
+    /// @dev Certora - summarize via CVL and assert that amountToSwap = 0;
+    function _swap(int256 amountToSwap) internal view returns (int256 deltas) {
+        deltas = amountToSwap;
+    }
 }

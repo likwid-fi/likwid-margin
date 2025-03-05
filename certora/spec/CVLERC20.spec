@@ -45,6 +45,11 @@ function tokenBalanceOf(address token, address account) returns uint256 {
     return balanceByToken[token][account];
 }
 
+function tokenAllowanceOf(address token, address account, address spender) returns uint256 {
+    if(token == 0) return max_uint256;
+    return allowanceByToken[token][account][spender];
+}
+
 function transferFromCVL(address token, address spender, address from, address to, uint256 amount) returns bool {
     require allowanceByToken[token][from][spender] >= amount;
     bool success = transferCVL(token, from, to, amount);
