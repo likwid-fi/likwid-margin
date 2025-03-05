@@ -266,15 +266,17 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned {
     }
 
     function _getBalances(PoolKey memory key) internal view returns (BalanceStatus memory balanceStatus) {
+        uint256 protocolFees0 = protocolFeesAccrued[key.currency0];
+        uint256 protocolFees1 = protocolFeesAccrued[key.currency1];
         balanceStatus.balance0 = poolManager.balanceOf(address(this), key.currency0.toId());
-        if (balanceStatus.balance0 > protocolFeesAccrued[key.currency0]) {
-            balanceStatus.balance0 -= protocolFeesAccrued[key.currency0];
+        if (balanceStatus.balance0 > protocolFees0) {
+            balanceStatus.balance0 -= protocolFees0;
         } else {
             balanceStatus.balance0 = 0;
         }
         balanceStatus.balance1 = poolManager.balanceOf(address(this), key.currency1.toId());
-        if (balanceStatus.balance1 > protocolFeesAccrued[key.currency1]) {
-            balanceStatus.balance1 -= protocolFeesAccrued[key.currency1];
+        if (balanceStatus.balance1 > protocolFees1) {
+            balanceStatus.balance1 -= protocolFees1;
         } else {
             balanceStatus.balance1 = 0;
         }

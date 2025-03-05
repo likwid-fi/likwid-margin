@@ -51,7 +51,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -80,7 +80,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -158,7 +158,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -194,7 +194,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -225,7 +225,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -257,7 +257,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -284,7 +284,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -310,7 +310,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: 0
         });
@@ -389,7 +389,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -464,7 +464,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -539,7 +539,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -565,7 +565,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -601,7 +601,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -622,7 +622,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -658,7 +658,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -679,7 +679,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -776,7 +776,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -790,7 +790,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -864,7 +864,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -877,7 +877,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -906,7 +906,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             marginTotal: 0,
             borrowAmount: 0,
-            borrowMinAmount: 0,
+            borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
         });
@@ -968,7 +968,7 @@ contract MarginPositionManagerTest is DeployHelper {
                 marginAmount: payValue,
                 marginTotal: 0,
                 borrowAmount: 0,
-                borrowMinAmount: 0,
+                borrowMaxAmount: 0,
                 recipient: user,
                 deadline: block.timestamp + 1000
             });
@@ -1035,7 +1035,7 @@ contract MarginPositionManagerTest is DeployHelper {
                 marginAmount: payValue,
                 marginTotal: 0,
                 borrowAmount: 0,
-                borrowMinAmount: 0,
+                borrowMaxAmount: 0,
                 recipient: user,
                 deadline: block.timestamp + 1000
             });

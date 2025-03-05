@@ -61,13 +61,7 @@ contract MarginFees is IMarginFees, Owned {
 
     /// @inheritdoc IMarginFees
     function dynamicFee(HookStatus memory status) public view returns (uint24 _fee) {
-        uint32 blockTS = uint32(block.timestamp % 2 ** 32);
-        uint256 timeElapsed;
-        if (status.marginTimestampLast <= blockTS) {
-            timeElapsed = blockTS - status.marginTimestampLast;
-        } else {
-            timeElapsed = (2 ** 32 - status.marginTimestampLast) + blockTS;
-        }
+        (, uint256 timeElapsed) = status.marginTimestampLast.getTimeElapsed();
         _fee = status.key.fee;
         uint256 lastPrice1X112 = status.lastPrice1X112;
         if (timeElapsed < dynamicFeeDurationSeconds && lastPrice1X112 > 0) {

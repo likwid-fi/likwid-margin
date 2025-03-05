@@ -7,6 +7,7 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PriceMath} from "./libraries/PriceMath.sol";
+import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {MarginPosition, MarginPositionVo, BurnParams} from "./types/MarginPosition.sol";
 import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
 import {IMarginChecker} from "./interfaces/IMarginChecker.sol";
@@ -17,6 +18,7 @@ contract MarginChecker is IMarginChecker, Owned {
     using UQ112x112 for uint224;
     using UQ112x112 for uint112;
     using PriceMath for uint224;
+    using PerLibrary for uint256;
 
     uint256 public constant ONE_MILLION = 10 ** 6;
     uint24 callerProfit = 10 ** 4;
@@ -54,18 +56,16 @@ contract MarginChecker is IMarginChecker, Owned {
 
     /// @inheritdoc IMarginChecker
     function getMaxDecrease(MarginPosition memory _position, address hook) external view returns (uint256 maxAmount) {
-        (uint256 reserve0, uint256 reserve1) = IMarginHookManager(hook).getReserves(_position.poolId);
-        (uint256 reserveBorrow, uint256 reserveMargin) =
-            _position.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+        IMarginHookManager hookManager = IMarginHookManager(hook);
+        (uint256 reserveBorrow, uint256 reserveMargin) = getReserves(_position.poolId, _position.marginForOne, hook);
         uint256 debtAmount = reserveMargin * _position.borrowAmount / reserveBorrow;
-        if (debtAmount > _position.marginTotal) {
-            uint256 newMarginAmount = (debtAmount - _position.marginTotal) * 1000 / 800;
-            if (newMarginAmount < _position.marginAmount) {
-                maxAmount = _position.marginAmount - newMarginAmount;
-            }
-        } else {
-            maxAmount = uint256(_position.marginAmount) * 800 / 1000;
+        uint256 liquidationMarginLevel = hookManager.marginFees().liquidationMarginLevel();
+        uint256 liquidatedAmount = debtAmount.mulDivMillion(liquidationMarginLevel);
+        uint256 assetAmount = uint256(_position.marginAmount) + _position.marginTotal;
+        if (liquidatedAmount < assetAmount) {
+            maxAmount = Math.mulDiv(assetAmount - liquidatedAmount, 800, 1000);
         }
+        maxAmount = Math.min(uint256(_position.marginAmount), maxAmount);
     }
 
     /// @inheritdoc IMarginChecker
@@ -122,8 +122,10 @@ contract MarginChecker is IMarginChecker, Owned {
             }
             (uint256 reserveBorrow, uint256 reserveMargin) = getReserves(_position.poolId, _position.marginForOne, hook);
             uint256 debtAmount = reserveMargin * borrowAmount / reserveBorrow;
-            uint24 marginLevel = hookManager.marginFees().liquidationMarginLevel();
-            liquidated = _position.marginAmount + _position.marginTotal < debtAmount * marginLevel / ONE_MILLION;
+            uint256 liquidationMarginLevel = hookManager.marginFees().liquidationMarginLevel();
+            uint256 liquidatedAmount = debtAmount.mulDivMillion(liquidationMarginLevel);
+            uint256 assetAmount = uint256(_position.marginAmount) + _position.marginTotal;
+            liquidated = assetAmount < liquidatedAmount;
         }
     }
 
@@ -149,7 +151,7 @@ contract MarginChecker is IMarginChecker, Owned {
     {
         IMarginHookManager hookManager = IMarginHookManager(hook);
         (uint256 reserveBorrow, uint256 reserveMargin) = getReserves(poolId, marginForOne, hook);
-        uint24 marginLevel = hookManager.marginFees().liquidationMarginLevel();
+        uint24 liquidationMarginLevel = hookManager.marginFees().liquidationMarginLevel();
         uint256 rateLast = hookManager.marginFees().getBorrowRateCumulativeLast(hook, poolId, marginForOne);
         bytes32 bytes32PoolId = PoolId.unwrap(poolId);
         liquidatedList = new bool[](inPositions.length);
@@ -159,12 +161,13 @@ contract MarginChecker is IMarginChecker, Owned {
             if (PoolId.unwrap(_position.poolId) == bytes32PoolId && _position.marginForOne == marginForOne) {
                 if (_position.borrowAmount > 0) {
                     uint256 borrowAmount = uint256(_position.borrowAmount);
-                    uint256 allMarginAmount = _position.marginAmount + _position.marginTotal;
+                    uint256 assetAmount = _position.marginAmount + _position.marginTotal;
                     if (_position.rateCumulativeLast > 0) {
                         borrowAmount = borrowAmount * rateLast / _position.rateCumulativeLast;
                     }
                     uint256 debtAmount = reserveMargin * borrowAmount / reserveBorrow;
-                    liquidatedList[i] = allMarginAmount < debtAmount * marginLevel / ONE_MILLION;
+                    uint256 liquidatedAmount = debtAmount.mulDivMillion(liquidationMarginLevel);
+                    liquidatedList[i] = assetAmount < liquidatedAmount;
                     borrowAmountList[i] = borrowAmount;
                 }
             }
