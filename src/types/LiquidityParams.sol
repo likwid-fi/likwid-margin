@@ -12,10 +12,6 @@ struct AddLiquidityParams {
     uint256 amount0;
     /// @notice The token1 amount to add
     uint256 amount1;
-    /// @notice Slide Low (ppm)
-    uint256 tickLower;
-    /// @notice Slide High (ppm)
-    uint256 tickUpper;
     /// @notice LP level 1: x*y, 2: (x+x')*y, 3: x*(y+y'), 4: (x+x')*(y+y')
     uint8 level;
     /// @notice LP token recipient

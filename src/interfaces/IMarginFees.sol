@@ -36,7 +36,7 @@ interface IMarginFees {
     /// @return The borrow rate
     function getBorrowRateByReserves(uint256 realReserve, uint256 mirrorReserve) external view returns (uint256);
 
-    function getBorrowRateCumulativeLast(HookStatus memory status, uint256 timeElapsed)
+    function getBorrowRateCumulativeLast(HookStatus memory status)
         external
         view
         returns (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast);
@@ -69,19 +69,6 @@ interface IMarginFees {
     /// @param marginForOne true: currency1 is marginToken, false: currency0 is marginToken
     /// @return The current borrow rate
     function getBorrowRate(address hook, PoolId poolId, bool marginForOne) external view returns (uint256);
-
-    /// @notice Get the interests of the pool
-    /// @param status The status of the hook
-    /// @return interest0 The interest of currency0
-    /// @return interest1 The interest of currency1
-    function getInterests(HookStatus calldata status) external pure returns (uint112 interest0, uint112 interest1);
-
-    /// @notice Get the interests of the pool
-    /// @param hook The address of hook
-    /// @param poolId The pool id
-    /// @return interest0 The interest of currency0
-    /// @return interest1 The interest of currency1
-    function getInterests(address hook, PoolId poolId) external view returns (uint112 interest0, uint112 interest1);
 
     /// @notice Get the protocol part of the totalFee
     /// @param totalFee Total fee amount

@@ -445,7 +445,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         (liquidateStatus.borrowCurrency, liquidateStatus.marginCurrency) = marginForOne
             ? (_status.key.currency0, _status.key.currency1)
             : (_status.key.currency1, _status.key.currency0);
-        liquidateStatus.statusReserves = _status.getReserves();
+        liquidateStatus.statusReserves = _status.getReservesX224();
         liquidateStatus.oracleReserves = checker.getOracleReserves(poolId, address(hook));
     }
 
@@ -593,7 +593,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
     }
 
     /// @inheritdoc IMarginPositionManager
-    function modify(uint256 positionId, int256 changeAmount) external payable {
+    function modify(uint256 positionId, int256 changeAmount) external payable nonReentrant {
         require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
         MarginPosition storage _position = _positions[positionId];
         HookStatus memory _status = hook.getStatus(_position.poolId);

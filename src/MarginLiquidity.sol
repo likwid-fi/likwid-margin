@@ -6,27 +6,35 @@ import {ERC6909Claims} from "v4-core/ERC6909Claims.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 // Local
-import {HookStatus} from "./types/HookStatus.sol";
 import {LiquidityLevel} from "./libraries/LiquidityLevel.sol";
+import {UQ112x112} from "./libraries/UQ112x112.sol";
+import {HookStatus} from "./types/HookStatus.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 
 contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
-    using LiquidityLevel for uint8;
+    using LiquidityLevel for *;
+    using UQ112x112 for *;
 
-    uint8 public protocolRatio;
     mapping(address => bool) public hooks;
+    mapping(uint256 => uint256) private liquidityBlockStore;
+    uint24 private maxSliding = 5000; // 0.5%
+    uint256 public level2InterestRatioX112 = UQ112x112.Q112;
+    uint256 public level3InterestRatioX112 = UQ112x112.Q112;
+    uint256 public level4InterestRatioX112 = UQ112x112.Q112;
 
-    constructor(address initialOwner) Owned(initialOwner) {
-        protocolRatio = 99; // 1/(protocolRatio+1)
-    }
+    constructor(address initialOwner) Owned(initialOwner) {}
 
     modifier onlyHooks() {
         require(hooks[msg.sender], "UNAUTHORIZED");
         _;
     }
 
+    function getMaxSliding() external view returns (uint24) {
+        return maxSliding;
+    }
+
     function _getPoolId(PoolId poolId) internal pure returns (uint256 uPoolId) {
-        uPoolId = uint256(PoolId.unwrap(poolId)) & LiquidityLevel.LP_FLAG;
+        uPoolId = uint256(PoolId.unwrap(poolId)).getPoolId();
     }
 
     function _getPoolSupplies(address hook, uint256 uPoolId)
@@ -49,6 +57,10 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         hooks[_hook] = true;
     }
 
+    function setMaxSliding(uint24 _maxSliding) external onlyOwner {
+        maxSliding = _maxSliding;
+    }
+
     // ********************  HOOK CALL ********************
     function mint(address receiver, uint256 id, uint256 amount) external onlyHooks {
         unchecked {
@@ -62,21 +74,103 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         }
     }
 
-    function addLiquidity(address receiver, uint256 id, uint8 level, uint256 amount) external onlyHooks {
-        uint256 levelId = level.getLevelId(id);
-        unchecked {
-            _mint(msg.sender, id, amount);
-            _mint(msg.sender, levelId, amount);
-            _mint(receiver, levelId, amount);
+    function _updateLevelRatio(address hook, uint256 id, uint256 liquidity0, uint256 liquidity1) internal {
+        uint256 level4Id = LiquidityLevel.BOTH_MARGIN.getLevelId(id);
+        uint256 total4Liquidity = balanceOf[msg.sender][level4Id];
+        uint256 level4Liquidity;
+        if (liquidity0 > 0) {
+            uint256 level2Id = LiquidityLevel.ONE_MARGIN.getLevelId(id);
+            uint256 total2Liquidity = balanceOf[msg.sender][level2Id];
+            uint256 level2Liquidity = Math.mulDiv(liquidity0, total2Liquidity, total2Liquidity + total4Liquidity);
+            level4Liquidity = level4Liquidity + liquidity0 - level2Liquidity;
+            level2InterestRatioX112 = level2InterestRatioX112.growRatioX112(level2Liquidity, total2Liquidity);
+            _mint(hook, level2Id, level2Liquidity);
+        }
+        if (liquidity1 > 0) {
+            uint256 level3Id = LiquidityLevel.ONE_MARGIN.getLevelId(id);
+            uint256 total3Liquidity = balanceOf[msg.sender][level3Id];
+            uint256 level3Liquidity = Math.mulDiv(liquidity0, total3Liquidity, total3Liquidity + total4Liquidity);
+            level4Liquidity = level4Liquidity + liquidity0 - level3Liquidity;
+            level3InterestRatioX112 = level3InterestRatioX112.growRatioX112(level3Liquidity, total3Liquidity);
+            _mint(hook, level3Id, level3Liquidity);
+        }
+        level4InterestRatioX112 = level4InterestRatioX112.growRatioX112(level4Liquidity, total4Liquidity);
+        _mint(hook, level4Id, level4Liquidity);
+    }
+
+    function addInterests(PoolId poolId, uint256 _reserve0, uint256 _reserve1, uint256 interest0, uint256 interest1)
+        external
+        onlyHooks
+        returns (uint256 liquidity)
+    {
+        uint256 rootK = Math.sqrt(uint256(_reserve0) * _reserve1);
+        uint256 rootKLast = Math.sqrt(uint256(_reserve0 + interest0) * uint256(_reserve1 + interest1));
+        if (rootK > rootKLast) {
+            uint256 id = _getPoolId(poolId);
+            uint256 uPoolId = id.getPoolId();
+            uint256 _totalSupply = balanceOf[msg.sender][uPoolId];
+            uint256 numerator = _totalSupply * (rootK - rootKLast);
+            uint256 denominator = rootK + rootKLast;
+            liquidity = numerator / denominator;
+            if (liquidity > 0) {
+                _mint(msg.sender, uPoolId, liquidity);
+                denominator = interest0 + Math.mulDiv(interest1, _reserve0, _reserve1);
+                uint256 liquidity0 = liquidity * Math.mulDiv(liquidity, interest0, denominator);
+                uint256 liquidity1 = liquidity - liquidity0;
+                _updateLevelRatio(msg.sender, id, liquidity0, liquidity1);
+            }
         }
     }
 
-    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount) external onlyHooks {
+    function addLiquidity(address receiver, uint256 id, uint8 level, uint256 amount)
+        external
+        onlyHooks
+        returns (uint256 liquidity)
+    {
+        liquidityBlockStore[id] = block.number;
         uint256 levelId = level.getLevelId(id);
+        uint256 uPoolId = id.getPoolId();
+        address hook = msg.sender;
+        liquidity = amount;
+        if (level == LiquidityLevel.ONE_MARGIN) {
+            liquidity = amount.divRatioX112(level2InterestRatioX112);
+        } else if (level == LiquidityLevel.ZERO_MARGIN) {
+            liquidity = amount.divRatioX112(level3InterestRatioX112);
+        } else if (level == LiquidityLevel.BOTH_MARGIN) {
+            liquidity = amount.divRatioX112(level4InterestRatioX112);
+        }
         unchecked {
-            _burn(msg.sender, id, amount);
-            _burn(msg.sender, levelId, amount);
-            _burn(sender, levelId, amount);
+            _mint(hook, uPoolId, amount);
+            _mint(hook, levelId, amount);
+            _mint(receiver, levelId, liquidity);
+        }
+    }
+
+    function _burnEx(address sender, uint256 id, uint256 amount) internal {
+        amount = Math.min(balanceOf[sender][id], amount);
+        _burn(sender, id, amount);
+    }
+
+    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount)
+        external
+        onlyHooks
+        returns (uint256 liquidity)
+    {
+        require(liquidityBlockStore[id] < block.number, "NOT_ALLOWED");
+        uint256 levelId = level.getLevelId(id);
+        uint256 uPoolId = id.getPoolId();
+        address hook = msg.sender;
+        if (level == LiquidityLevel.ONE_MARGIN) {
+            liquidity = amount.mulRatioX112(level2InterestRatioX112);
+        } else if (level == LiquidityLevel.ZERO_MARGIN) {
+            liquidity = amount.mulRatioX112(level3InterestRatioX112);
+        } else if (level == LiquidityLevel.BOTH_MARGIN) {
+            liquidity = amount.mulRatioX112(level4InterestRatioX112);
+        }
+        unchecked {
+            _burnEx(hook, uPoolId, liquidity);
+            _burnEx(hook, levelId, liquidity);
+            _burnEx(sender, levelId, amount);
         }
     }
 

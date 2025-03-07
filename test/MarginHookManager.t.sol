@@ -45,10 +45,8 @@ contract MarginHookManagerTest is DeployHelper {
             poolId: poolId,
             amount0: amount0,
             amount1: amount1,
-            tickLower: 50000,
-            tickUpper: 50000,
             to: address(this),
-            level: 4,
+            level: LiquidityLevel.BOTH_MARGIN,
             deadline: type(uint256).max
         });
         hookManager.addLiquidity{value: amount0}(params);
@@ -58,14 +56,22 @@ contract MarginHookManagerTest is DeployHelper {
         (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
         assertEq(_reserves0, _reserves1);
-        RemoveLiquidityParams memory removeParams =
-            RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
+        RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
+            poolId: poolId,
+            level: LiquidityLevel.BOTH_MARGIN,
+            liquidity: liquidity / 2,
+            deadline: type(uint256).max
+        });
         vm.roll(100);
         hookManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
-        removeParams =
-            RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidityHalf, deadline: type(uint256).max});
+        removeParams = RemoveLiquidityParams({
+            poolId: poolId,
+            level: LiquidityLevel.BOTH_MARGIN,
+            liquidity: liquidityHalf,
+            deadline: type(uint256).max
+        });
         vm.roll(100);
         hookManager.removeLiquidity(removeParams);
         HookStatus memory status = hookManager.getStatus(poolId);
@@ -83,8 +89,6 @@ contract MarginHookManagerTest is DeployHelper {
             poolId: key.toId(),
             amount0: amount0,
             amount1: amount1,
-            tickLower: 50000,
-            tickUpper: 50000,
             to: address(this),
             level: 4,
             deadline: type(uint256).max
@@ -112,8 +116,6 @@ contract MarginHookManagerTest is DeployHelper {
             poolId: poolId,
             amount0: amount0,
             amount1: amount1,
-            tickLower: 50000,
-            tickUpper: 50000,
             to: address(this),
             level: 4,
             deadline: type(uint256).max
@@ -148,8 +150,6 @@ contract MarginHookManagerTest is DeployHelper {
             poolId: poolId,
             amount0: amount0,
             amount1: amount1,
-            tickLower: tickLower,
-            tickUpper: tickUpper,
             to: user,
             level: level,
             deadline: type(uint256).max
@@ -207,8 +207,6 @@ contract MarginHookManagerTest is DeployHelper {
             poolId: poolId,
             amount0: amount0,
             amount1: amount1,
-            tickLower: 50000,
-            tickUpper: 50000,
             to: user,
             level: 1,
             deadline: type(uint256).max

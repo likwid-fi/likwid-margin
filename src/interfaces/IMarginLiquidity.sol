@@ -11,9 +11,19 @@ interface IMarginLiquidity is IERC6909Claims {
 
     function burn(address sender, uint256 id, uint256 amount) external;
 
-    function addLiquidity(address receiver, uint256 id, uint8 level, uint256 amount) external;
+    function addLiquidity(address receiver, uint256 id, uint8 level, uint256 amount)
+        external
+        returns (uint256 liquidity);
 
-    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount) external;
+    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount)
+        external
+        returns (uint256 liquidity);
+
+    function addInterests(PoolId poolId, uint256 _reserve0, uint256 _reserve1, uint256 interest0, uint256 interest1)
+        external
+        returns (uint256 liquidity);
+
+    function getMaxSliding() external view returns (uint24);
 
     function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId);
 

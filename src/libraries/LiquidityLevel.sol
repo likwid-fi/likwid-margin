@@ -24,6 +24,10 @@ library LiquidityLevel {
         value = level == ONE_MARGIN || level == BOTH_MARGIN;
     }
 
+    function getPoolId(uint256 id) internal pure returns (uint256 poolId) {
+        poolId = id & LP_FLAG;
+    }
+
     function getLevelId(uint8 level, uint256 id) internal pure returns (uint256 levelId) {
         if (validate(level)) {
             levelId = (id & LP_FLAG) + level;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Test, console} from "forge-std/Test.sol";
 import {HookStatus} from "../src/types/HookStatus.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
@@ -116,5 +117,31 @@ contract CommonStructTest is Test {
         assertGt(positions[positionId].rateCumulativeLast, 0);
         delete positions[positionId];
         assertEq(positions[positionId].rateCumulativeLast, 0);
+    }
+
+    function changeKey(PoolKey memory tempKey) internal pure {
+        tempKey.fee = 100;
+    }
+
+    function testChangeKey() public pure {
+        PoolKey memory tempKey = PoolKey({
+            currency0: Currency.wrap(address(0)),
+            currency1: Currency.wrap(address(0)),
+            fee: 0,
+            tickSpacing: 1,
+            hooks: IHooks(address(0))
+        });
+        assertEq(tempKey.fee, 0);
+        changeKey(tempKey);
+        assertEq(tempKey.fee, 100);
+    }
+
+    function testMulDiv() public pure {
+        uint256 a = 1111111111111111;
+        uint256 n = 9111;
+        uint256 d = 7777;
+        uint256 t1 = a * n / d;
+        uint256 t2 = Math.mulDiv(a, n, d);
+        assertEq(t1, t2);
     }
 }

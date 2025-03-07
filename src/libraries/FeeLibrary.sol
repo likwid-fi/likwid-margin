@@ -29,4 +29,9 @@ library FeeLibrary {
     function part(uint24 fee, uint256 amount) internal pure returns (uint256 feeAmount) {
         feeAmount = Math.mulDiv(amount, uint256(fee), PerLibrary.ONE_MILLION);
     }
+
+    function bound(uint24 fee, uint256 amount) internal pure returns (uint256 lower, uint256 upper) {
+        lower = deductFrom(fee, amount);
+        upper = attachFrom(fee, amount);
+    }
 }
