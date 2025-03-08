@@ -97,7 +97,7 @@ contract MarginFees is IMarginFees, Owned {
         if (mirrorReserve == 0) {
             return rate;
         }
-        uint256 useLevel = mirrorReserve * ONE_MILLION / (mirrorReserve + realReserve);
+        uint256 useLevel = Math.mulDiv(mirrorReserve, ONE_MILLION, (mirrorReserve + realReserve));
         if (useLevel >= rateStatus.useHighLevel) {
             rate += uint256(useLevel - rateStatus.useHighLevel) * rateStatus.mHigh;
             useLevel = rateStatus.useHighLevel;
@@ -121,14 +121,6 @@ contract MarginFees is IMarginFees, Owned {
         uint256 rate1 = getBorrowRateByReserves(status.realReserve1, status.mirrorReserve1);
         uint256 rate1Last = ONE_BILLION + rate1 * timeElapsed / YEAR_SECONDS;
         rate1CumulativeLast = status.rate1CumulativeLast * rate1Last / ONE_BILLION;
-    }
-
-    /// @inheritdoc IMarginFees
-    function getBorrowRateCumulativeLast(PoolStatus memory status, bool marginForOne) public view returns (uint256) {
-        uint256 timeElapsed = status.blockTimestampLast.getTimeElapsedMillisecond();
-        uint256 saveLast = marginForOne ? status.rate0CumulativeLast : status.rate1CumulativeLast;
-        uint256 rateLast = ONE_BILLION + getBorrowRate(status, marginForOne) * timeElapsed / YEAR_SECONDS;
-        return saveLast * rateLast / ONE_BILLION;
     }
 
     /// @inheritdoc IMarginFees

@@ -27,7 +27,7 @@ import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, ReentrancyGuardTransient {
     using CurrencyLibrary for Currency;
     using CurrencyUtils for Currency;
-    using UQ112x112 for uint224;
+    using UQ112x112 for *;
     using PriceMath for uint224;
     using TimeUtils for uint32;
     using PerLibrary for uint256;
@@ -110,6 +110,14 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         emit Burn(_position.poolId, msg.sender, positionId, uint8(burnType));
     }
 
+    function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
+        address from = super._update(to, tokenId, auth);
+        MarginPosition memory _position = _positions[tokenId];
+        delete _ownerPositionIds[_position.poolId][_position.marginForOne][from];
+        _ownerPositionIds[_position.poolId][_position.marginForOne][to] = tokenId;
+        return from;
+    }
+
     modifier ensure(uint256 deadline) {
         require(deadline >= block.timestamp, "EXPIRED");
         _;
@@ -137,8 +145,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             uint256 rateLast = pairPoolManager.marginFees().getBorrowRateCumulativeLast(
                 address(pairPoolManager), _position.poolId, _position.marginForOne
             );
-            _position.borrowAmount =
-                uint128(Math.mulDiv(uint256(_position.borrowAmount), rateLast, _position.rateCumulativeLast));
+            _position.borrowAmount = _position.borrowAmount.increaseInterest(_position.rateCumulativeLast, rateLast);
             _position.rateCumulativeLast = rateLast;
         }
     }
@@ -218,7 +225,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         if (!success) revert MarginTransferFailed(params.marginAmount);
         uint256 positionId = _ownerPositionIds[params.poolId][params.marginForOne][params.recipient];
         params = pairPoolManager.margin(params);
-        uint256 rateLast = pairPoolManager.marginFees().getBorrowRateCumulativeLast(_status, params.marginForOne);
+        uint256 rateLast = params.marginForOne ? _status.rate0CumulativeLast : _status.rate1CumulativeLast;
         if (params.borrowMaxAmount > 0 && params.borrowAmount > params.borrowMaxAmount) {
             revert InsufficientBorrowReceived();
         }
@@ -229,10 +236,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             MarginPosition memory _position = MarginPosition({
                 poolId: params.poolId,
                 marginForOne: params.marginForOne,
-                marginAmount: uint128(params.marginAmount),
-                marginTotal: uint128(params.marginTotal),
-                borrowAmount: uint128(params.borrowAmount),
-                rawBorrowAmount: uint128(params.borrowAmount),
+                marginAmount: params.marginAmount.toUint112(),
+                marginTotal: params.marginTotal.toUint112(),
+                borrowAmount: params.borrowAmount.toUint112(),
+                rawBorrowAmount: params.borrowAmount.toUint112(),
                 rateCumulativeLast: rateLast
             });
             (bool liquidated,) = checker.checkLiquidate(_position, address(pairPoolManager));
@@ -241,12 +248,11 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             _positions[positionId] = _position;
         } else {
             MarginPosition storage _position = _positions[positionId];
-            uint256 borrowAmount = uint256(_position.borrowAmount) * rateLast / _position.rateCumulativeLast;
-            _position.marginAmount += uint128(params.marginAmount);
-            _position.marginTotal += uint128(params.marginTotal);
-            _position.rawBorrowAmount += uint128(params.borrowAmount);
-            _position.borrowAmount = uint128(borrowAmount + params.borrowAmount);
-            _position.rateCumulativeLast = rateLast;
+            _position.update(rateLast);
+            _position.marginAmount += params.marginAmount.toUint112();
+            _position.marginTotal += params.marginTotal.toUint112();
+            _position.rawBorrowAmount += params.borrowAmount.toUint112();
+            _position.borrowAmount = _position.borrowAmount + params.borrowAmount.toUint112();
             (bool liquidated,) = checker.checkLiquidate(_position, address(pairPoolManager));
             if (liquidated) revert PositionLiquidated();
         }
@@ -602,8 +608,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         MarginPosition storage _position = _positions[positionId];
         PoolStatus memory _status = pairPoolManager.getStatus(_position.poolId);
         if (_position.rateCumulativeLast > 0) {
-            uint256 rateLast = pairPoolManager.marginFees().getBorrowRateCumulativeLast(_status, _position.marginForOne);
-            _position.borrowAmount = uint112(uint256(_position.borrowAmount) * rateLast / _position.rateCumulativeLast);
+            uint256 rateLast = _position.marginForOne ? _status.rate0CumulativeLast : _status.rate1CumulativeLast;
+            _position.borrowAmount = _position.borrowAmount.increaseInterest(_position.rateCumulativeLast, rateLast);
             _position.rateCumulativeLast = rateLast;
         }
         Currency marginToken = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;

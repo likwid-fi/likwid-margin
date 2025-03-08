@@ -3,6 +3,8 @@ pragma solidity ^0.8.26;
 
 import {PoolId} from "v4-core/types/PoolId.sol";
 
+import {UQ112x112} from "../libraries/UQ112x112.sol";
+
 /// @notice A margin position is a position that is open on a pool.
 struct MarginPosition {
     /// @notice The pool ID of the pool on which the position is open.
@@ -39,4 +41,15 @@ struct BurnParams {
     uint256[] positionIds;
     /// @notice The signatures of the operator.
     bytes signature;
+}
+
+using MarginPositionLibrary for MarginPosition global;
+
+library MarginPositionLibrary {
+    using UQ112x112 for *;
+
+    function update(MarginPosition storage position, uint256 rateCumulativeLast) internal {
+        position.borrowAmount = position.borrowAmount.increaseInterest(position.rateCumulativeLast, rateCumulativeLast);
+        position.rateCumulativeLast = rateCumulativeLast;
+    }
 }

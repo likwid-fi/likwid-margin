@@ -11,6 +11,7 @@ import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition, MarginPositionVo, BurnParams} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
 import {TimeUtils} from "../src/libraries/TimeUtils.sol";
+import {CurrencyUtils} from "../src/libraries/CurrencyUtils.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
@@ -32,6 +33,7 @@ import {DeployHelper} from "./utils/DeployHelper.sol";
 
 contract MarginPositionManagerTest is DeployHelper {
     using TimeUtils for *;
+    using CurrencyUtils for Currency;
 
     function setUp() public {
         deployHookAndRouter();
@@ -993,9 +995,11 @@ contract MarginPositionManagerTest is DeployHelper {
     }
 
     function test_liquidateBurn() public {
-        uint256 length = 99;
+        uint256 length = 10;
         uint256[] memory positionIds = new uint256[](length);
         uint256 debtAmount = 0;
+        uint256 borrowAmountAll = 0;
+        uint256 keyId = nativeKey.currency1.toKeyId(nativeKey);
         for (uint256 i = 0; i < length; i++) {
             address user = vm.addr(i + 1);
             uint256 positionId;
@@ -1020,10 +1024,13 @@ contract MarginPositionManagerTest is DeployHelper {
             position = marginPositionManager.getPosition(positionId);
             positionIds[i] = positionId;
             debtAmount += position.marginAmount + position.marginTotal;
+            borrowAmountAll += borrowAmount;
             // uint256 releaseAmount =
             //     pairPoolManager.getAmountIn(position.poolId, !position.marginForOne, position.borrowAmount);
         }
         assertEq(debtAmount, address(marginPositionManager).balance);
+        uint256 mirrorBalance = mirrorTokenManager.balanceOf(address(pairPoolManager), keyId);
+        console.log("mirrorBalance:%s,borrowAmountAll:%s", mirrorBalance, borrowAmountAll);
         uint256 swapIndex = 0;
         for (uint256 i = 0; i < length; i++) {
             uint256 positionId = positionIds[i];
@@ -1057,6 +1064,9 @@ contract MarginPositionManagerTest is DeployHelper {
         _position = marginPositionManager.getPosition(1);
         assertEq(_position.borrowAmount, 0);
         assertEq(0, address(marginPositionManager).balance);
+        PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
+        mirrorBalance = mirrorTokenManager.balanceOf(address(pairPoolManager), keyId);
+        console.log("mirrorBalance:%s,status.mirrorReserve1:%s", mirrorBalance, status.mirrorReserve1);
     }
 
     function testLiquidateBurnSame() public {

@@ -42,12 +42,6 @@ interface IMarginFees {
         returns (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast);
 
     /// @notice Get the last cumulative multiplication of rate
-    /// @param status The status of the pool
-    /// @param marginForOne true: currency1 is marginToken, false: currency0 is marginToken
-    /// @return The last cumulative multiplication of rate
-    function getBorrowRateCumulativeLast(PoolStatus memory status, bool marginForOne) external view returns (uint256);
-
-    /// @notice Get the last cumulative multiplication of rate
     /// @param pool The address of pool
     /// @param poolId The pool id
     /// @param marginForOne true: currency1 is marginToken, false: currency0 is marginToken

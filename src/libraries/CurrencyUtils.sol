@@ -2,31 +2,15 @@
 pragma solidity ^0.8.20;
 
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
-import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 
+import {IERC20} from "../external/openzeppelin-contracts/IERC20.sol";
+import {SafeERC20} from "../external/openzeppelin-contracts/SafeERC20.sol";
+
 library CurrencyUtils {
     using CurrencyLibrary for Currency;
-
-    function safeApprove(Currency currency, address spender, uint256 value) internal returns (bool) {
-        (bool success, bytes memory data) =
-            Currency.unwrap(currency).call(abi.encodeWithSelector(IERC20Minimal.approve.selector, spender, value));
-        return success && (data.length == 0 || abi.decode(data, (bool)));
-    }
-
-    function safeTransfer(Currency currency, address to, uint256 amount) internal returns (bool) {
-        (bool success, bytes memory data) =
-            Currency.unwrap(currency).call(abi.encodeWithSelector(IERC20Minimal.transfer.selector, to, amount));
-        return success && (data.length == 0 || abi.decode(data, (bool)));
-    }
-
-    function safeTransferFrom(Currency currency, address from, address to, uint256 amount) internal returns (bool) {
-        (bool success, bytes memory data) = Currency.unwrap(currency).call(
-            abi.encodeWithSelector(IERC20Minimal.transferFrom.selector, from, to, amount)
-        );
-        return success && (data.length == 0 || abi.decode(data, (bool)));
-    }
+    using SafeERC20 for IERC20;
 
     /// @notice Settle (pay) a currency to the PoolManager
     /// @param currency Currency to settle
@@ -43,13 +27,12 @@ library CurrencyUtils {
             manager.settle{value: amount}();
         } else {
             manager.sync(currency);
-            bool success;
+            IERC20 token = IERC20(Currency.unwrap(currency));
             if (payer != address(this)) {
-                success = safeTransferFrom(currency, payer, address(manager), amount);
+                token.safeTransferFrom(payer, address(manager), amount);
             } else {
-                success = safeTransfer(currency, address(manager), amount);
+                token.safeTransfer(address(manager), amount);
             }
-            require(success, "settle:transfer did not succeed");
             manager.settle();
         }
     }
@@ -66,10 +49,10 @@ library CurrencyUtils {
 
     function approve(Currency currency, address spender, uint256 amount) internal returns (bool success) {
         if (!currency.isAddressZero()) {
-            success = safeApprove(currency, spender, amount);
-        } else {
-            success = true;
+            IERC20 token = IERC20(Currency.unwrap(currency));
+            token.forceApprove(spender, amount);
         }
+        success = true;
     }
 
     function transfer(Currency currency, address payer, address recipient, uint256 amount)
@@ -79,11 +62,13 @@ library CurrencyUtils {
         if (currency.isAddressZero()) {
             (success,) = recipient.call{value: amount}("");
         } else {
+            IERC20 token = IERC20(Currency.unwrap(currency));
             if (payer != address(this)) {
-                success = safeTransferFrom(currency, payer, recipient, amount);
+                token.safeTransferFrom(payer, recipient, amount);
             } else {
-                success = safeTransfer(currency, recipient, amount);
+                token.safeTransfer(recipient, amount);
             }
+            success = true;
         }
     }
 
