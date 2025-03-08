@@ -17,8 +17,7 @@ import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 
 contract MarginChecker is IMarginChecker, Owned {
-    using UQ112x112 for uint224;
-    using UQ112x112 for uint112;
+    using UQ112x112 for *;
     using PriceMath for uint224;
     using PerLibrary for uint256;
     using FeeLibrary for uint24;
@@ -212,7 +211,8 @@ contract MarginChecker is IMarginChecker, Owned {
                     uint256 borrowAmount = uint256(_position.borrowAmount);
                     uint256 assetAmount = _position.marginAmount + _position.marginTotal;
                     if (_position.rateCumulativeLast > 0) {
-                        borrowAmount = borrowAmount * rateLast / _position.rateCumulativeLast;
+                        borrowAmount =
+                            uint128(borrowAmount).increaseInterestCeil(_position.rateCumulativeLast, rateLast);
                     }
                     uint256 debtAmount = reserveMargin * borrowAmount / reserveBorrow;
                     uint256 liquidatedAmount = debtAmount.mulDivMillion(liquidationMarginLevel);

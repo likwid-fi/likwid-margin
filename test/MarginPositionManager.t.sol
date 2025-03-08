@@ -186,6 +186,13 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256 rateLast = marginFees.getBorrowRateCumulativeLast(address(pairPoolManager), poolId, false);
         console.log("rate:%s,rateLast:%s", rate, rateLast);
         vm.warp(3600 * 10);
+        position = marginPositionManager.getPosition(positionId);
+        console.log(
+            "positionId:%s,position.borrowAmount:%s,rateCumulativeLast:%s",
+            positionId,
+            position.borrowAmount,
+            position.rateCumulativeLast
+        );
         uint256 timeElapsed = (3600 * 10 - 1) * 10 ** 3;
         uint256 rateLastX = (ONE_BILLION + rate * timeElapsed / YEAR_SECONDS) * rateLast / ONE_BILLION;
         uint256 newRateLast = marginFees.getBorrowRateCumulativeLast(address(pairPoolManager), poolId, false);
@@ -212,6 +219,12 @@ contract MarginPositionManagerTest is DeployHelper {
         console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
         position = marginPositionManager.getPosition(positionId);
         uint256 borrowAmountAll = borrowAmount + borrowAmountLast * rateLastX / rateLast;
+        console.log(
+            "position.rawBorrowAmount:%s,position.borrowAmount:%s,borrowAmountAll:%s",
+            position.rawBorrowAmount,
+            position.borrowAmount,
+            borrowAmountAll
+        );
         assertEq(position.borrowAmount / 100, borrowAmountAll / 100);
         console.log("positionId:%s,position.borrowAmount:%s,all:%s", positionId, position.borrowAmount, borrowAmountAll);
 
@@ -366,19 +379,19 @@ contract MarginPositionManagerTest is DeployHelper {
         vm.warp(3600 * 20);
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
-        assertEq(status.mirrorReserve1, position.borrowAmount);
+        assertEq(status.mirrorReserve1 / 10, position.borrowAmount / 10);
         uint256 userBalance = user.balance;
         uint256 repay = 0.01 ether;
         tokenB.approve(address(pairPoolManager), repay);
         marginPositionManager.repay(positionId, repay, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
-        assertEq((position.borrowAmount - newPosition.borrowAmount), repay);
+        assertEq((position.borrowAmount - newPosition.borrowAmount) / 10, repay / 10);
         assertEq(
             position.marginTotal + position.marginAmount - newPosition.marginTotal - newPosition.marginAmount,
             user.balance - userBalance
         );
         status = pairPoolManager.getStatus(poolId);
-        assertEq(status.mirrorReserve1, newPosition.borrowAmount);
+        assertEq(status.mirrorReserve1 / 10, newPosition.borrowAmount / 10);
 
         // (uint112 interest0, uint112 interest1) = marginFees.getInterests(address(pairPoolManager), poolId);
         // console.log("interest0:%s,interest1:%s", interest0, interest1);

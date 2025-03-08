@@ -80,20 +80,19 @@ library UQ112x112 {
         result = Math.mulDiv(input, Q112, ratioX112);
     }
 
-    function increaseInterest(
-        uint256 current,
-        uint256 rateCumulativeOld,
-        uint256 rateCumulativeLast,
-        Math.Rounding rounding
-    ) internal pure returns (uint112 result) {
-        result = toUint112(Math.mulDiv(current, rateCumulativeOld, rateCumulativeLast, rounding));
-    }
-
-    function increaseInterest(uint128 current, uint256 rateCumulativeOld, uint256 rateCumulativeLast)
+    function increaseInterest(uint112 current, uint256 rateCumulativeOld, uint256 rateCumulativeLast)
         internal
         pure
         returns (uint128 result)
     {
-        result = toUint112(Math.mulDiv(current, rateCumulativeOld, rateCumulativeLast, Math.Rounding.Ceil));
+        result = toUint112(Math.mulDiv(current, rateCumulativeLast, rateCumulativeOld));
+    }
+
+    function increaseInterestCeil(uint128 current, uint256 rateCumulativeOld, uint256 rateCumulativeLast)
+        internal
+        pure
+        returns (uint128 result)
+    {
+        result = toUint112(Math.mulDiv(current, rateCumulativeLast, rateCumulativeOld, Math.Rounding.Ceil));
     }
 }

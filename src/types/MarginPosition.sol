@@ -49,7 +49,10 @@ library MarginPositionLibrary {
     using UQ112x112 for *;
 
     function update(MarginPosition storage position, uint256 rateCumulativeLast) internal {
-        position.borrowAmount = position.borrowAmount.increaseInterest(position.rateCumulativeLast, rateCumulativeLast);
+        if (position.rateCumulativeLast > 0) {
+            position.borrowAmount =
+                position.borrowAmount.increaseInterestCeil(position.rateCumulativeLast, rateCumulativeLast);
+        }
         position.rateCumulativeLast = rateCumulativeLast;
     }
 }
