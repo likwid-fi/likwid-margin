@@ -8,7 +8,7 @@ import {MarginParams, ReleaseParams} from "../types/MarginParams.sol";
 
 interface IMarginPositionManager is IERC721 {
     /// @notice Return the address of the hook contract
-    function getHook() external view returns (address _hook);
+    function getPairPool() external view returns (address _hook);
 
     /// @notice Return the position with the given ID
     /// @param positionId The ID of the position to retrieve

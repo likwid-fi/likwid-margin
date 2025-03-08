@@ -25,49 +25,49 @@ interface IMarginChecker {
         returns (bool valid);
 
     /// @notice Get the marginTotal amount and borrow amount for the given pool, leverage, and marginAmount
-    /// @param hook The address of the hook
+    /// @param pool The address of the pool
     /// @param poolId The ID of the pool
     /// @param marginForOne If true, currency1 is marginToken, otherwise currency2 is marginToken
     /// @param leverage The leverage ratio
     /// @param marginAmount The amount of margin
     /// @return marginWithoutFee The marginTotal amount without fee
     /// @return borrowAmount The borrow amount
-    function getMarginTotal(address hook, PoolId poolId, bool marginForOne, uint24 leverage, uint256 marginAmount)
+    function getMarginTotal(address pool, PoolId poolId, bool marginForOne, uint24 leverage, uint256 marginAmount)
         external
         view
         returns (uint256 marginWithoutFee, uint256 borrowAmount);
 
     /// @notice Get the maximum marginAmount for the given pool, leverage
-    /// @param hook The address of the hook
+    /// @param pool The address of the pool
     /// @param poolId The ID of the pool
     /// @param marginForOne If true, currency1 is marginToken, otherwise currency2 is marginToken
     /// @param leverage The leverage ratio
     /// @return marginMax The maximum margin amount
     /// @return borrowAmount The borrow amount
-    function getMarginMax(address hook, PoolId poolId, bool marginForOne, uint24 leverage)
+    function getMarginMax(address pool, PoolId poolId, bool marginForOne, uint24 leverage)
         external
         view
         returns (uint256 marginMax, uint256 borrowAmount);
 
     /// @notice Get the maximum decrease amount of the position
     /// @param _position The position to check
-    /// @param hook The hook address
+    /// @param pool The pool address
     /// @return maxAmount The maximum decrease amount
-    function getMaxDecrease(MarginPosition memory _position, address hook) external view returns (uint256 maxAmount);
+    function getMaxDecrease(MarginPosition memory _position, address pool) external view returns (uint256 maxAmount);
 
     /// @notice Get the oracle reserve amount of the pool
     /// @param poolId  The pool id
-    /// @param hook The hook address
+    /// @param pool The pool address
     /// @return reserves The oracle reserve amount of the pool
-    function getOracleReserves(PoolId poolId, address hook) external view returns (uint224 reserves);
+    function getOracleReserves(PoolId poolId, address pool) external view returns (uint224 reserves);
 
     /// @notice Get the reserve amount of the pool
     /// @param poolId  The pool id
     /// @param marginForOne  If it is margin for one
-    /// @param hook The hook address
+    /// @param pool The pool address
     /// @return reserveBorrow The reserve amount of the borrow token
     /// @return reserveMargin The reserve amount of the margin token
-    function getReserves(PoolId poolId, bool marginForOne, address hook)
+    function getReserves(PoolId poolId, bool marginForOne, address pool)
         external
         view
         returns (uint256 reserveBorrow, uint256 reserveMargin);
@@ -84,10 +84,10 @@ interface IMarginChecker {
 
     /// @notice Check if the position is liquidated
     /// @param _position The position to check
-    /// @param hook The hook address
+    /// @param pool The pool address
     /// @return liquidated  If the position is liquidated
     /// @return borrowAmount  The borrow amount of the position
-    function checkLiquidate(MarginPosition memory _position, address hook)
+    function checkLiquidate(MarginPosition memory _position, address pool)
         external
         view
         returns (bool liquidated, uint256 borrowAmount);
@@ -105,11 +105,11 @@ interface IMarginChecker {
     /// @notice Check if the position is liquidated
     /// @param poolId The pool id
     /// @param marginForOne If the margin is for one
-    /// @param hook The hook address
+    /// @param pool The pool address
     /// @param inPositions The input positions
     /// @return liquidatedList  The liquidated list
     /// @return borrowAmountList  The borrow amount list
-    function checkLiquidate(PoolId poolId, bool marginForOne, address hook, MarginPosition[] memory inPositions)
+    function checkLiquidate(PoolId poolId, bool marginForOne, address pool, MarginPosition[] memory inPositions)
         external
         view
         returns (bool[] memory liquidatedList, uint256[] memory borrowAmountList);

@@ -10,8 +10,8 @@ import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {SafeCallback} from "v4-periphery/src/base/SafeCallback.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 
-import {HookStatus} from "./types/HookStatus.sol";
-import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
+import {PoolStatus} from "./types/PoolStatus.sol";
+import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 
 contract MarginRouter is SafeCallback, Owned {
     using CurrencyLibrary for Currency;
@@ -24,14 +24,13 @@ contract MarginRouter is SafeCallback, Owned {
 
     event Swap(PoolId indexed poolId, address indexed sender, uint256 amount0, uint256 amount1, uint24 fee);
 
-    IMarginHookManager public immutable hook;
+    IPairPoolManager public immutable pairPoolManager;
 
-    constructor(address initialOwner, IPoolManager _manager, IMarginHookManager _hook)
+    constructor(address initialOwner, IPoolManager _manager, IPairPoolManager _pairPoolManager)
         Owned(initialOwner)
         SafeCallback(_manager)
     {
-        hook = _hook;
-        poolManager = _manager;
+        pairPoolManager = _pairPoolManager;
     }
 
     modifier ensure(uint256 deadline) {
@@ -85,7 +84,7 @@ contract MarginRouter is SafeCallback, Owned {
     }
 
     function handelSwap(address sender, SwapParams calldata params) external selfOnly returns (uint256) {
-        HookStatus memory _status = hook.getStatus(params.poolId);
+        PoolStatus memory _status = pairPoolManager.getStatus(params.poolId);
         PoolKey memory key = _status.key;
         int256 amountSpecified;
         if (params.amountIn > 0) {

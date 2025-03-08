@@ -3,11 +3,11 @@ pragma solidity ^0.8.24;
 
 // Local
 import {MarginFees} from "../src/MarginFees.sol";
-import {MarginHookManager} from "../src/MarginHookManager.sol";
+import {PairPoolManager} from "../src/PairPoolManager.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
-import {HookStatus} from "../src/types/HookStatus.sol";
+import {PoolStatus} from "../src/types/PoolStatus.sol";
 import {RateStatus} from "../src/types/RateStatus.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
@@ -62,10 +62,10 @@ contract MarginFeesTest is DeployHelper {
     function testDynamicFee() public {
         address user = address(this);
         PoolId poolId = nativeKey.toId();
-        HookStatus memory status = hookManager.getStatus(poolId);
+        PoolStatus memory status = pairPoolManager.getStatus(poolId);
         uint24 _beforeFee = marginFees.dynamicFee(status);
         assertEq(_beforeFee, status.key.fee);
-        uint256 rate = marginFees.getBorrowRate(address(hookManager), poolId, false);
+        uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
         assertEq(rate, 50000);
         uint256 positionId;
         uint256 borrowAmount;
@@ -86,7 +86,7 @@ contract MarginFeesTest is DeployHelper {
         assertEq(address(marginPositionManager).balance, position.marginAmount + position.marginTotal);
         uint256 _positionId = marginPositionManager.getPositionId(poolId, false, user);
         assertEq(positionId, _positionId);
-        status = hookManager.getStatus(poolId);
+        status = pairPoolManager.getStatus(poolId);
         uint24 _afterFee = marginFees.dynamicFee(status);
         assertEq(_afterFee, 20 * status.key.fee);
         vm.warp(10);

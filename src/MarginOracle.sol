@@ -6,7 +6,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 
 import {TruncatedOracle} from "./libraries/TruncatedOracle.sol";
-import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
+import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 
@@ -20,14 +20,8 @@ contract MarginOracle {
         uint16 cardinalityNext;
     }
 
-    struct ObservationQuery {
-        PoolId id;
-        address hook;
-        uint32[] secondsAgos;
-    }
-
-    modifier onlyHooks(IHooks hooks) {
-        require(address(hooks) == msg.sender, "UNAUTHORIZED");
+    modifier onlyPairPoolManager(IHooks hooks) {
+        require(IPairPoolManager(msg.sender).hooks() == hooks, "UNAUTHORIZED");
         _;
     }
 
@@ -37,15 +31,18 @@ contract MarginOracle {
     mapping(address => mapping(PoolId => ObservationState)) public states;
 
     /// @notice Returns the state for the given pool key
-    function getState(address hook, PoolKey calldata key) external view returns (ObservationState memory state) {
-        state = states[hook][key.toId()];
+    function getState(PoolKey calldata key) external view returns (ObservationState memory state) {
+        state = states[address(key.hooks)][key.toId()];
     }
 
     function _blockTimestamp() internal view virtual returns (uint32) {
         return uint32(block.timestamp % 2 ** 32);
     }
 
-    function initialize(PoolKey calldata key, uint112 reserve0, uint112 reserve1) external onlyHooks(key.hooks) {
+    function initialize(PoolKey calldata key, uint112 reserve0, uint112 reserve1)
+        external
+        onlyPairPoolManager(key.hooks)
+    {
         PoolId id = key.toId();
         address hook = address(key.hooks);
         ObservationState storage _state = states[hook][id];
@@ -55,7 +52,7 @@ contract MarginOracle {
         }
     }
 
-    function write(PoolKey calldata key, uint112 reserve0, uint112 reserve1) external onlyHooks(key.hooks) {
+    function write(PoolKey calldata key, uint112 reserve0, uint112 reserve1) external onlyPairPoolManager(key.hooks) {
         PoolId id = key.toId();
         address hook = address(key.hooks);
         ObservationState storage _state = states[hook][id];
@@ -69,13 +66,13 @@ contract MarginOracle {
         }
     }
 
-    function observeNow(PoolId id, address hook)
+    function observeNow(PoolId id, address pool)
         external
         view
         returns (uint224 reserves, uint256 price1CumulativeLast)
     {
-        IMarginHookManager hookManager = IMarginHookManager(hook);
-        (uint256 reserve0, uint256 reserve1) = hookManager.getReserves(id);
+        address hook = address(IPairPoolManager(pool).hooks());
+        (uint256 reserve0, uint256 reserve1) = IPairPoolManager(pool).getReserves(id);
         return observations[hook][id].observeSingle(
             _blockTimestamp(),
             0,
@@ -95,7 +92,7 @@ contract MarginOracle {
         PoolId id = key.toId();
         address sender = address(key.hooks);
         ObservationState memory state = states[sender][id];
-        IMarginHookManager hook = IMarginHookManager(sender);
+        IPairPoolManager hook = IPairPoolManager(sender);
         (uint256 reserve0, uint256 reserve1) = hook.getReserves(id);
         return observations[sender][id].observe(
             _blockTimestamp(), secondsAgos, uint112(reserve0), uint112(reserve1), state.index, state.cardinality

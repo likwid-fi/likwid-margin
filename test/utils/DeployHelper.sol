@@ -2,7 +2,8 @@
 pragma solidity ^0.8.24;
 
 // Local
-import {MarginHookManager} from "../../src/MarginHookManager.sol";
+import {MarginHook} from "../../src/MarginHook.sol";
+import {PairPoolManager} from "../../src/PairPoolManager.sol";
 import {MirrorTokenManager} from "../../src/MirrorTokenManager.sol";
 import {MarginLiquidity} from "../../src/MarginLiquidity.sol";
 import {MarginPositionManager} from "../../src/MarginPositionManager.sol";
@@ -10,7 +11,7 @@ import {MarginRouter} from "../../src/MarginRouter.sol";
 import {MarginOracle} from "../../src/MarginOracle.sol";
 import {MarginFees} from "../../src/MarginFees.sol";
 import {MarginChecker} from "../../src/MarginChecker.sol";
-import {HookStatus} from "../../src/types/HookStatus.sol";
+import {PoolStatus} from "../../src/types/PoolStatus.sol";
 import {MarginParams} from "../../src/types/MarginParams.sol";
 import {MarginPosition} from "../../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../../src/types/LiquidityParams.sol";
@@ -45,7 +46,7 @@ contract DeployHelper is Test {
     uint256 public constant ONE_BILLION = 10 ** 9;
     uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
 
-    MarginHookManager hookManager;
+    PairPoolManager pairPoolManager;
 
     PoolKey key;
     PoolKey usdtKey;
@@ -83,24 +84,26 @@ contract DeployHelper is Test {
                 | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
         );
 
-        bytes memory constructorArgs =
-            abi.encode(address(this), manager, mirrorTokenManager, marginLiquidity, marginFees); //Add all the necessary constructor arguments from the hook
+        pairPoolManager = new PairPoolManager(address(this), manager, mirrorTokenManager, marginLiquidity, marginFees);
+
+        marginLiquidity.addPoolManager(address(pairPoolManager));
+        mirrorTokenManager.addPoolManger(address(pairPoolManager));
+
+        bytes memory constructorArgs = abi.encode(address(this), manager, address(pairPoolManager)); //Add all the necessary constructor arguments from the hook
         // Mine a salt that will produce a hook address with the correct flags
         (address hookAddress, bytes32 salt) =
-            HookMiner.find(address(this), flags, type(MarginHookManager).creationCode, constructorArgs);
+            HookMiner.find(address(this), flags, type(MarginHook).creationCode, constructorArgs);
 
-        hookManager =
-            new MarginHookManager{salt: salt}(address(this), manager, mirrorTokenManager, marginLiquidity, marginFees);
+        MarginHook hookManager = new MarginHook{salt: salt}(address(this), manager, pairPoolManager);
         assertEq(address(hookManager), hookAddress);
-        marginLiquidity.addHooks(hookAddress);
-        mirrorTokenManager.addHooks(hookAddress);
+        pairPoolManager.setHooks(hookManager);
 
         tokenA.mint(address(this), 2 ** 255);
         tokenB.mint(address(this), 2 ** 255);
 
-        tokenA.approve(address(hookManager), type(uint256).max);
-        tokenB.approve(address(hookManager), type(uint256).max);
-        tokenUSDT.approve(address(hookManager), type(uint256).max);
+        tokenA.approve(address(pairPoolManager), type(uint256).max);
+        tokenB.approve(address(pairPoolManager), type(uint256).max);
+        tokenUSDT.approve(address(pairPoolManager), type(uint256).max);
         key = PoolKey({currency0: currency0, currency1: currency1, fee: 3000, tickSpacing: 1, hooks: hookManager});
         nativeKey = PoolKey({
             currency0: CurrencyLibrary.ADDRESS_ZERO,
@@ -123,14 +126,13 @@ contract DeployHelper is Test {
         manager.initialize(usdtKey, SQRT_RATIO_1_1);
 
         marginChecker = new MarginChecker(address(this));
-        marginPositionManager = new MarginPositionManager(address(this), marginChecker);
+        marginPositionManager = new MarginPositionManager(address(this), pairPoolManager, marginChecker);
         tokenA.approve(address(marginPositionManager), type(uint256).max);
         tokenB.approve(address(marginPositionManager), type(uint256).max);
         tokenUSDT.approve(address(marginPositionManager), type(uint256).max);
-        marginPositionManager.setHook(address(hookManager));
-        hookManager.addPositionManager(address(marginPositionManager));
-        hookManager.setMarginOracle(address(marginOracle));
-        swapRouter = new MarginRouter(address(this), manager, hookManager);
+        pairPoolManager.addPositionManager(address(marginPositionManager));
+        pairPoolManager.setMarginOracle(address(marginOracle));
+        swapRouter = new MarginRouter(address(this), manager, pairPoolManager);
         tokenA.approve(address(swapRouter), type(uint256).max);
         tokenB.approve(address(swapRouter), type(uint256).max);
         tokenUSDT.approve(address(swapRouter), type(uint256).max);
@@ -154,7 +156,7 @@ contract DeployHelper is Test {
             to: address(this),
             deadline: type(uint256).max
         });
-        hookManager.addLiquidity(params);
+        pairPoolManager.addLiquidity(params);
         params = AddLiquidityParams({
             poolId: nativeKey.toId(),
             level: 4,
@@ -163,7 +165,7 @@ contract DeployHelper is Test {
             to: address(this),
             deadline: type(uint256).max
         });
-        hookManager.addLiquidity{value: 1 ether}(params);
+        pairPoolManager.addLiquidity{value: 1 ether}(params);
         params = AddLiquidityParams({
             poolId: usdtKey.toId(),
             level: 4,
@@ -172,7 +174,7 @@ contract DeployHelper is Test {
             to: address(this),
             deadline: type(uint256).max
         });
-        hookManager.addLiquidity{value: 1 ether}(params);
+        pairPoolManager.addLiquidity{value: 1 ether}(params);
     }
 
     receive() external payable {}

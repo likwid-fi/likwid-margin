@@ -2,11 +2,11 @@
 pragma solidity ^0.8.24;
 
 // Local
-import {MarginHookManager} from "../src/MarginHookManager.sol";
+import {PairPoolManager} from "../src/PairPoolManager.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
-import {HookStatus} from "../src/types/HookStatus.sol";
+import {PoolStatus} from "../src/types/PoolStatus.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";

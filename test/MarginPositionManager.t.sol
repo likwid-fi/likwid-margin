@@ -2,11 +2,11 @@
 pragma solidity ^0.8.24;
 
 // Local
-import {MarginHookManager} from "../src/MarginHookManager.sol";
+import {PairPoolManager} from "../src/PairPoolManager.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
-import {HookStatus} from "../src/types/HookStatus.sol";
+import {PoolStatus} from "../src/types/PoolStatus.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition, MarginPositionVo, BurnParams} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
@@ -40,7 +40,7 @@ contract MarginPositionManagerTest is DeployHelper {
 
     function test_hook_margin_tokens() public {
         address user = address(this);
-        uint256 rate = marginFees.getBorrowRate(address(hookManager), key.toId(), false);
+        uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), key.toId(), false);
         assertEq(rate, 50000);
         uint256 positionId;
         uint256 borrowAmount;
@@ -61,8 +61,8 @@ contract MarginPositionManagerTest is DeployHelper {
 
         (positionId, borrowAmount) = marginPositionManager.margin(params);
         console.log(
-            "hookManager.balance:%s,marginPositionManager.balance:%s",
-            address(hookManager).balance,
+            "pairPoolManager.balance:%s,marginPositionManager.balance:%s",
+            address(pairPoolManager).balance,
             address(marginPositionManager).balance
         );
         console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
@@ -90,8 +90,8 @@ contract MarginPositionManagerTest is DeployHelper {
 
         (positionId, borrowAmount) = marginPositionManager.margin(params);
         console.log(
-            "hookManager.balance:%s,marginPositionManager.balance:%s",
-            address(hookManager).balance,
+            "pairPoolManager.balance:%s,marginPositionManager.balance:%s",
+            address(pairPoolManager).balance,
             address(marginPositionManager).balance
         );
         position = marginPositionManager.getPosition(positionId);
@@ -101,9 +101,9 @@ contract MarginPositionManagerTest is DeployHelper {
             position.borrowAmount,
             position.rateCumulativeLast
         );
-        (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(key.toId());
+        (uint256 _reserves0, uint256 _reserves1) = pairPoolManager.getReserves(key.toId());
         console.log("_reserves0:%s,_reserves1:%s", _reserves0, _reserves1);
-        HookStatus memory _status = hookManager.getStatus(key.toId());
+        PoolStatus memory _status = pairPoolManager.getStatus(key.toId());
         console.log("reserve0:%s,reserve1:%s", uint256(_status.realReserve0), uint256(_status.realReserve1));
         console.log(
             "mirrorReserve0:%s,mirrorReserve1:%s", uint256(_status.mirrorReserve0), uint256(_status.mirrorReserve1)
@@ -134,7 +134,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
         console.log("before repay positionId:%s,position.borrowAmount:%s", positionId, position.borrowAmount);
         uint256 releaseAmount = 0.01 ether;
-        tokenA.approve(address(hookManager), releaseAmount);
+        tokenA.approve(address(pairPoolManager), releaseAmount);
         int256 pnlAmount = marginPositionManager.estimatePNL(positionId, 30000);
         marginPositionManager.close(positionId, 30000, pnlAmount, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
@@ -149,7 +149,7 @@ contract MarginPositionManagerTest is DeployHelper {
     function test_hook_margin_rate() public {
         address user = address(this);
         PoolId poolId = nativeKey.toId();
-        uint256 rate = marginFees.getBorrowRate(address(hookManager), poolId, false);
+        uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
         assertEq(rate, 50000);
         uint256 positionId;
         uint256 borrowAmount;
@@ -168,8 +168,8 @@ contract MarginPositionManagerTest is DeployHelper {
 
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         console.log(
-            "hookManager.balance:%s,marginPositionManager.balance:%s",
-            address(hookManager).balance,
+            "pairPoolManager.balance:%s,marginPositionManager.balance:%s",
+            address(pairPoolManager).balance,
             address(marginPositionManager).balance
         );
         console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
@@ -180,13 +180,13 @@ contract MarginPositionManagerTest is DeployHelper {
             position.borrowAmount,
             position.rateCumulativeLast
         );
-        rate = marginFees.getBorrowRate(address(hookManager), poolId, false);
-        uint256 rateLast = marginFees.getBorrowRateCumulativeLast(address(hookManager), poolId, false);
+        rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
+        uint256 rateLast = marginFees.getBorrowRateCumulativeLast(address(pairPoolManager), poolId, false);
         console.log("rate:%s,rateLast:%s", rate, rateLast);
         vm.warp(3600 * 10);
         uint256 timeElapsed = (3600 * 10 - 1) * 10 ** 3;
         uint256 rateLastX = (ONE_BILLION + rate * timeElapsed / YEAR_SECONDS) * rateLast / ONE_BILLION;
-        uint256 newRateLast = marginFees.getBorrowRateCumulativeLast(address(hookManager), poolId, false);
+        uint256 newRateLast = marginFees.getBorrowRateCumulativeLast(address(pairPoolManager), poolId, false);
         console.log("timeElapsed:%s,rateLastX:%s,newRateLast:%s", timeElapsed, rateLastX, newRateLast);
         uint256 borrowAmountLast = borrowAmount;
         payValue = 0.02e18;
@@ -204,7 +204,7 @@ contract MarginPositionManagerTest is DeployHelper {
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         console.log(
             "nativeHook.balance:%s,marginPositionManager.balance:%s",
-            address(hookManager).balance,
+            address(pairPoolManager).balance,
             address(marginPositionManager).balance
         );
         console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
@@ -214,7 +214,7 @@ contract MarginPositionManagerTest is DeployHelper {
         console.log("positionId:%s,position.borrowAmount:%s,all:%s", positionId, position.borrowAmount, borrowAmountAll);
 
         {
-            rate = marginFees.getBorrowRate(address(hookManager), poolId, false);
+            rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
             vm.warp(3600 * 20);
             payValue = 0.02e18;
             params = MarginParams({
@@ -233,7 +233,7 @@ contract MarginPositionManagerTest is DeployHelper {
             timeElapsed = (3600 * 10) * 10 ** 3;
             rateLast = rateLastX;
             rateLastX = (ONE_BILLION + rate * timeElapsed / YEAR_SECONDS) * rateLast / ONE_BILLION;
-            newRateLast = marginFees.getBorrowRateCumulativeLast(address(hookManager), poolId, false);
+            newRateLast = marginFees.getBorrowRateCumulativeLast(address(pairPoolManager), poolId, false);
             console.log("rate:%s,rateLast:%s", rate, rateLast);
             console.log("timeElapsed:%s,rateLastX:%s,newRateLast:%s", timeElapsed, rateLastX, newRateLast);
 
@@ -251,7 +251,7 @@ contract MarginPositionManagerTest is DeployHelper {
     function test_hook_margin_native() public {
         address user = address(this);
         PoolId poolId = nativeKey.toId();
-        uint256 rate = marginFees.getBorrowRate(address(hookManager), poolId, false);
+        uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
         assertEq(rate, 50000);
         uint256 positionId;
         uint256 borrowAmount;
@@ -277,7 +277,7 @@ contract MarginPositionManagerTest is DeployHelper {
     function testMarginNative() public {
         address user = address(this);
         PoolId poolId = nativeKey.toId();
-        uint256 rate = marginFees.getBorrowRate(address(hookManager), poolId, false);
+        uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
         assertEq(rate, 50000);
         uint256 positionId;
         uint256 borrowAmount;
@@ -362,12 +362,12 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256 positionId = marginPositionManager.getPositionId(poolId, false, user);
         assertGt(positionId, 0);
         vm.warp(3600 * 20);
-        HookStatus memory status = hookManager.getStatus(poolId);
+        PoolStatus memory status = pairPoolManager.getStatus(poolId);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
         assertEq(status.mirrorReserve1, position.borrowAmount);
         uint256 userBalance = user.balance;
         uint256 repay = 0.01 ether;
-        tokenB.approve(address(hookManager), repay);
+        tokenB.approve(address(pairPoolManager), repay);
         marginPositionManager.repay(positionId, repay, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
         assertEq((position.borrowAmount - newPosition.borrowAmount), repay);
@@ -375,19 +375,19 @@ contract MarginPositionManagerTest is DeployHelper {
             position.marginTotal + position.marginAmount - newPosition.marginTotal - newPosition.marginAmount,
             user.balance - userBalance
         );
-        status = hookManager.getStatus(poolId);
+        status = pairPoolManager.getStatus(poolId);
         assertEq(status.mirrorReserve1, newPosition.borrowAmount);
 
-        // (uint112 interest0, uint112 interest1) = marginFees.getInterests(address(hookManager), poolId);
+        // (uint112 interest0, uint112 interest1) = marginFees.getInterests(address(pairPoolManager), poolId);
         // console.log("interest0:%s,interest1:%s", interest0, interest1);
         // uint256 overAmount = (position.borrowAmount - newPosition.borrowAmount)
         //     - (position.rawBorrowAmount - newPosition.rawBorrowAmount);
         // overAmount -= marginFees.getProtocolFeeAmount(overAmount);
         // assertEq(overAmount / 10, interest1 / 10);
-        uint256 pFeeAmount = hookManager.protocolFeesAccrued(nativeKey.currency1);
+        uint256 pFeeAmount = pairPoolManager.protocolFeesAccrued(nativeKey.currency1);
         console.log("pFeeAmount:%s", pFeeAmount);
         uint256 collectFeeAmount =
-            marginFees.collectProtocolFees(address(hookManager), user, nativeKey.currency1, pFeeAmount);
+            marginFees.collectProtocolFees(address(pairPoolManager), user, nativeKey.currency1, pFeeAmount);
         console.log("collectFeeAmount:%s", collectFeeAmount);
         assertEq(collectFeeAmount, pFeeAmount);
     }
@@ -396,7 +396,7 @@ contract MarginPositionManagerTest is DeployHelper {
         test_hook_margin_native();
         address user = address(this);
         PoolId poolId = nativeKey.toId();
-        HookStatus memory status = hookManager.getStatus(poolId);
+        PoolStatus memory status = pairPoolManager.getStatus(poolId);
         uint256 positionId = marginPositionManager.getPositionId(poolId, false, user);
         assertGt(positionId, 0);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
@@ -404,14 +404,14 @@ contract MarginPositionManagerTest is DeployHelper {
         marginPositionManager.close(positionId, 3000, 0, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
         assertEq(position.borrowAmount - newPosition.borrowAmount, position.borrowAmount * 3000 / ONE_MILLION);
-        status = hookManager.getStatus(poolId);
+        status = pairPoolManager.getStatus(poolId);
         assertEq(status.mirrorReserve1, newPosition.rawBorrowAmount);
     }
 
     function test_hook_liquidate_burn() public {
         address user = address(this);
-        tokenB.approve(address(hookManager), 1e18);
-        uint256 rate = marginFees.getBorrowRate(address(hookManager), nativeKey.toId(), false);
+        tokenB.approve(address(pairPoolManager), 1e18);
+        uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), nativeKey.toId(), false);
         assertEq(rate, 50000);
         uint256 positionId;
         uint256 borrowAmount;
@@ -430,8 +430,8 @@ contract MarginPositionManagerTest is DeployHelper {
 
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         console.log(
-            "hookManager.balance:%s,marginPositionManager.balance:%s",
-            address(hookManager).balance,
+            "pairPoolManager.balance:%s,marginPositionManager.balance:%s",
+            address(pairPoolManager).balance,
             address(marginPositionManager).balance
         );
         console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
@@ -467,7 +467,7 @@ contract MarginPositionManagerTest is DeployHelper {
         console.log(
             "before swapIndex:%s, liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
             swapIndex,
-            address(hookManager).balance,
+            address(pairPoolManager).balance,
             address(marginPositionManager).balance
         );
         BurnParams memory liquidateParams =
@@ -477,16 +477,16 @@ contract MarginPositionManagerTest is DeployHelper {
         position = marginPositionManager.getPosition(positionId);
         console.log(
             "after liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
-            address(hookManager).balance,
+            address(pairPoolManager).balance,
             address(marginPositionManager).balance
         );
     }
 
     function test_hook_liquidate_burn_without_oracle() public {
         address user = address(this);
-        hookManager.setMarginOracle(address(0));
-        tokenB.approve(address(hookManager), 1e18);
-        uint256 rate = marginFees.getBorrowRate(address(hookManager), nativeKey.toId(), false);
+        pairPoolManager.setMarginOracle(address(0));
+        tokenB.approve(address(pairPoolManager), 1e18);
+        uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), nativeKey.toId(), false);
         assertEq(rate, 50000);
         uint256 positionId;
         uint256 borrowAmount;
@@ -505,8 +505,8 @@ contract MarginPositionManagerTest is DeployHelper {
 
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         console.log(
-            "hookManager.balance:%s,marginPositionManager.balance:%s",
-            address(hookManager).balance,
+            "pairPoolManager.balance:%s,marginPositionManager.balance:%s",
+            address(pairPoolManager).balance,
             address(marginPositionManager).balance
         );
         console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
@@ -542,7 +542,7 @@ contract MarginPositionManagerTest is DeployHelper {
         console.log(
             "before swapIndex:%s, liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
             swapIndex,
-            address(hookManager).balance,
+            address(pairPoolManager).balance,
             address(marginPositionManager).balance
         );
         BurnParams memory liquidateParams =
@@ -552,15 +552,15 @@ contract MarginPositionManagerTest is DeployHelper {
         position = marginPositionManager.getPosition(positionId);
         console.log(
             "after liquidate nativeHook.balance:%s,marginPositionManager.balance:%s",
-            address(hookManager).balance,
+            address(pairPoolManager).balance,
             address(marginPositionManager).balance
         );
     }
 
     function test_hook_margin_max() public {
         address user = address(this);
-        tokenB.approve(address(hookManager), 1e18);
-        uint256 rate = marginFees.getBorrowRate(address(hookManager), nativeKey.toId(), false);
+        tokenB.approve(address(pairPoolManager), 1e18);
+        uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), nativeKey.toId(), false);
         assertEq(rate, 50000);
         uint256 positionId;
         uint256 borrowAmount;
@@ -579,8 +579,8 @@ contract MarginPositionManagerTest is DeployHelper {
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         console.log(
-            "hookManager.balance:%s,marginPositionManager.balance:%s",
-            address(hookManager).balance,
+            "pairPoolManager.balance:%s,marginPositionManager.balance:%s",
+            address(pairPoolManager).balance,
             address(marginPositionManager).balance
         );
         console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
@@ -591,7 +591,7 @@ contract MarginPositionManagerTest is DeployHelper {
             position.borrowAmount,
             position.rateCumulativeLast
         );
-        (payValue, borrowAmount) = marginChecker.getMarginMax(address(hookManager), nativeKey.toId(), false, 3);
+        (payValue, borrowAmount) = marginChecker.getMarginMax(address(pairPoolManager), nativeKey.toId(), false, 3);
         params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
@@ -606,8 +606,8 @@ contract MarginPositionManagerTest is DeployHelper {
         vm.warp(1000);
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         console.log(
-            "hookManager.balance:%s,marginPositionManager.balance:%s",
-            address(hookManager).balance,
+            "pairPoolManager.balance:%s,marginPositionManager.balance:%s",
+            address(pairPoolManager).balance,
             address(marginPositionManager).balance
         );
         console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
@@ -623,7 +623,7 @@ contract MarginPositionManagerTest is DeployHelper {
     function test_hook_margin_usdts() public {
         address user = address(this);
         PoolId poolId = usdtKey.toId();
-        uint256 rate = marginFees.getBorrowRate(address(hookManager), poolId, false);
+        uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
         assertEq(rate, 50000);
         uint256 positionId;
         uint256 borrowAmount;
@@ -670,7 +670,7 @@ contract MarginPositionManagerTest is DeployHelper {
             position.borrowAmount,
             position.rateCumulativeLast
         );
-        HookStatus memory _status = hookManager.getStatus(poolId);
+        PoolStatus memory _status = pairPoolManager.getStatus(poolId);
         console.log("reserve0:%s,reserve1:%s", uint256(_status.realReserve0), uint256(_status.realReserve1));
         console.log(
             "mirrorReserve0:%s,mirrorReserve1:%s", uint256(_status.mirrorReserve0), uint256(_status.mirrorReserve1)
@@ -680,7 +680,7 @@ contract MarginPositionManagerTest is DeployHelper {
     function test_hook_margin_usdts_buy() public {
         address user = address(this);
         PoolId poolId = usdtKey.toId();
-        uint256 rate = marginFees.getBorrowRate(address(hookManager), poolId, false);
+        uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
         assertEq(rate, 50000);
         uint256 positionId;
         uint256 borrowAmount;
@@ -727,7 +727,7 @@ contract MarginPositionManagerTest is DeployHelper {
             position.borrowAmount,
             position.rateCumulativeLast
         );
-        HookStatus memory _status = hookManager.getStatus(poolId);
+        PoolStatus memory _status = pairPoolManager.getStatus(poolId);
         console.log("reserve0:%s,reserve1:%s", uint256(_status.realReserve0), uint256(_status.realReserve1));
         console.log(
             "mirrorReserve0:%s,mirrorReserve1:%s", uint256(_status.mirrorReserve0), uint256(_status.mirrorReserve1)
@@ -782,23 +782,23 @@ contract MarginPositionManagerTest is DeployHelper {
 
     function test_hook_dynamic_fee_usdts() public {
         PoolId poolId = usdtKey.toId();
-        (uint24 _fee, uint24 _marginFee) = hookManager.marginFees().getPoolFees(address(hookManager), poolId);
+        (uint24 _fee, uint24 _marginFee) = pairPoolManager.marginFees().getPoolFees(address(pairPoolManager), poolId);
         console.log("before margin _fee:%s", _fee);
         test_hook_margin_usdts();
-        (_fee, _marginFee) = hookManager.marginFees().getPoolFees(address(hookManager), poolId);
+        (_fee, _marginFee) = pairPoolManager.marginFees().getPoolFees(address(pairPoolManager), poolId);
         console.log("after margin _fee:%s", _fee);
         vm.warp(30);
-        (_fee, _marginFee) = hookManager.marginFees().getPoolFees(address(hookManager), poolId);
+        (_fee, _marginFee) = pairPoolManager.marginFees().getPoolFees(address(pairPoolManager), poolId);
         console.log("after margin _fee:%s", _fee);
         vm.warp(126);
-        (_fee, _marginFee) = hookManager.marginFees().getPoolFees(address(hookManager), poolId);
+        (_fee, _marginFee) = pairPoolManager.marginFees().getPoolFees(address(pairPoolManager), poolId);
         console.log("after margin _fee:%s", _fee);
     }
 
     function test_hook_liquidateCall() public {
         address user = address(this);
         PoolId poolId = nativeKey.toId();
-        uint256 rate = marginFees.getBorrowRate(address(hookManager), poolId, false);
+        uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
         assertEq(rate, 50000);
         uint256 positionId;
         uint256 borrowAmount;
@@ -832,7 +832,7 @@ contract MarginPositionManagerTest is DeployHelper {
         console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
         assertEq(borrowAmount, position.borrowAmount);
-        HookStatus memory status = hookManager.getStatus(poolId);
+        PoolStatus memory status = pairPoolManager.getStatus(poolId);
         assertEq(borrowAmount, status.mirrorReserve1);
         console.log(
             "marginAmount:%s,marginTotal:%s,rateCumulativeLast:%s",
@@ -864,7 +864,7 @@ contract MarginPositionManagerTest is DeployHelper {
                 swapIndex++;
                 vm.warp(30 * swapIndex);
                 position = marginPositionManager.getPosition(positionId);
-                status = hookManager.getStatus(poolId);
+                status = pairPoolManager.getStatus(poolId);
                 console.log(
                     "position.borrowAmount:%s,rateCumulativeLast:%s,status.mirrorReserve1:%s",
                     position.borrowAmount,
@@ -877,7 +877,7 @@ contract MarginPositionManagerTest is DeployHelper {
 
         {
             position = marginPositionManager.getPosition(positionId);
-            tokenB.approve(address(hookManager), position.borrowAmount);
+            tokenB.approve(address(pairPoolManager), position.borrowAmount);
             uint256 balanceBefore = tokenB.balanceOf(user);
             uint256 nativeBefore = user.balance;
             marginPositionManager.liquidateCall(positionId, "");
@@ -938,7 +938,7 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256 positionId;
         uint256 borrowAmount;
         (uint256 payValue, uint256 borrowAmountEstimate) =
-            marginChecker.getMarginMax(address(hookManager), poolId1, marginForOne, leverage);
+            marginChecker.getMarginMax(address(pairPoolManager), poolId1, marginForOne, leverage);
         MarginParams memory params = MarginParams({
             poolId: poolId1,
             marginForOne: marginForOne,
@@ -1021,7 +1021,7 @@ contract MarginPositionManagerTest is DeployHelper {
             positionIds[i] = positionId;
             debtAmount += position.marginAmount + position.marginTotal;
             // uint256 releaseAmount =
-            //     hookManager.getAmountIn(position.poolId, !position.marginForOne, position.borrowAmount);
+            //     pairPoolManager.getAmountIn(position.poolId, !position.marginForOne, position.borrowAmount);
         }
         assertEq(debtAmount, address(marginPositionManager).balance);
         uint256 swapIndex = 0;

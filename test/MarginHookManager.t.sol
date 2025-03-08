@@ -2,12 +2,12 @@
 pragma solidity ^0.8.24;
 
 // Local
-import {MarginHookManager} from "../src/MarginHookManager.sol";
+import {PairPoolManager} from "../src/PairPoolManager.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
 import {MarginOracle} from "../src/MarginOracle.sol";
-import {HookStatus} from "../src/types/HookStatus.sol";
+import {PoolStatus} from "../src/types/PoolStatus.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
@@ -30,7 +30,7 @@ import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol"
 import {HookMiner} from "./utils/HookMiner.sol";
 import {DeployHelper} from "./utils/DeployHelper.sol";
 
-contract MarginHookManagerTest is DeployHelper {
+contract PairPoolManagerTest is DeployHelper {
     using LiquidityLevel for uint8;
 
     function setUp() public {
@@ -49,11 +49,11 @@ contract MarginHookManagerTest is DeployHelper {
             level: LiquidityLevel.BOTH_MARGIN,
             deadline: type(uint256).max
         });
-        hookManager.addLiquidity{value: amount0}(params);
+        pairPoolManager.addLiquidity{value: amount0}(params);
         uint256 uPoolId = marginLiquidity.getPoolId(poolId);
         uint256 liquidity = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
         assertGt(liquidity, 0);
-        (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(poolId);
+        (uint256 _reserves0, uint256 _reserves1) = pairPoolManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
         assertEq(_reserves0, _reserves1);
         RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
@@ -63,7 +63,7 @@ contract MarginHookManagerTest is DeployHelper {
             deadline: type(uint256).max
         });
         vm.roll(100);
-        hookManager.removeLiquidity(removeParams);
+        pairPoolManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
         removeParams = RemoveLiquidityParams({
@@ -73,10 +73,10 @@ contract MarginHookManagerTest is DeployHelper {
             deadline: type(uint256).max
         });
         vm.roll(100);
-        hookManager.removeLiquidity(removeParams);
-        HookStatus memory status = hookManager.getStatus(poolId);
+        pairPoolManager.removeLiquidity(removeParams);
+        PoolStatus memory status = pairPoolManager.getStatus(poolId);
         assertEq(status.marginFee, 0);
-        (uint24 _fee, uint24 _marginFee) = marginFees.getPoolFees(address(hookManager), poolId);
+        (uint24 _fee, uint24 _marginFee) = marginFees.getPoolFees(address(pairPoolManager), poolId);
         assertEq(_fee, 3000);
         assertEq(_marginFee, 3000);
     }
@@ -93,17 +93,17 @@ contract MarginHookManagerTest is DeployHelper {
             level: 4,
             deadline: type(uint256).max
         });
-        hookManager.addLiquidity(params);
+        pairPoolManager.addLiquidity(params);
         uint256 uPoolId = marginLiquidity.getPoolId(poolId);
         uint256 liquidity = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
         assertGt(liquidity, 0);
-        (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(poolId);
+        (uint256 _reserves0, uint256 _reserves1) = pairPoolManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
         assertEq(_reserves0, _reserves1);
         RemoveLiquidityParams memory removeParams =
             RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
         vm.roll(100);
-        hookManager.removeLiquidity(removeParams);
+        pairPoolManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
     }
@@ -120,17 +120,17 @@ contract MarginHookManagerTest is DeployHelper {
             level: 4,
             deadline: type(uint256).max
         });
-        hookManager.addLiquidity{value: amount0}(params);
+        pairPoolManager.addLiquidity{value: amount0}(params);
         uint256 uPoolId = marginLiquidity.getPoolId(poolId);
         uint256 liquidity = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
         assertGt(liquidity, 0);
-        (uint256 _reserves0, uint256 _reserves1) = hookManager.getReserves(poolId);
+        (uint256 _reserves0, uint256 _reserves1) = pairPoolManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
         assertEq(_reserves0, _reserves1);
         RemoveLiquidityParams memory removeParams =
             RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
         vm.roll(100);
-        hookManager.removeLiquidity(removeParams);
+        pairPoolManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
     }
@@ -145,7 +145,7 @@ contract MarginHookManagerTest is DeployHelper {
         uint8 level
     ) internal returns (uint256) {
         vm.startPrank(user);
-        tokenUSDT.approve(address(hookManager), amount1);
+        tokenUSDT.approve(address(pairPoolManager), amount1);
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: poolId,
             amount0: amount0,
@@ -154,7 +154,7 @@ contract MarginHookManagerTest is DeployHelper {
             level: level,
             deadline: type(uint256).max
         });
-        uint256 liquidity = hookManager.addLiquidity{value: amount0}(params);
+        uint256 liquidity = pairPoolManager.addLiquidity{value: amount0}(params);
         vm.stopPrank();
         return liquidity;
     }
@@ -171,7 +171,7 @@ contract MarginHookManagerTest is DeployHelper {
         uint256 level4 = addLiquidity(user, poolId, 0.4 ether, 0.4 ether, 50000, 50000, 4);
         uint256[4] memory liquidities = marginLiquidity.getPoolLiquidities(poolId, user);
         (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) =
-            marginLiquidity.getPoolSupplies(address(hookManager), poolId);
+            marginLiquidity.getPoolSupplies(address(pairPoolManager), poolId);
         assertEq(level1, liquidities[0]);
         assertEq(level2, liquidities[1]);
         assertEq(level3, liquidities[2]);
@@ -185,7 +185,7 @@ contract MarginHookManagerTest is DeployHelper {
             RemoveLiquidityParams memory params =
                 RemoveLiquidityParams({poolId: poolId, liquidity: liquidity, level: 4, deadline: type(uint256).max});
             vm.roll(100);
-            hookManager.removeLiquidity(params);
+            pairPoolManager.removeLiquidity(params);
             vm.stopPrank();
         }
         liquidities = marginLiquidity.getPoolLiquidities(poolId, user);
@@ -202,7 +202,7 @@ contract MarginHookManagerTest is DeployHelper {
         vm.startPrank(user);
         uint256 amount0 = 0.1 ether;
         uint256 amount1 = 0.09 ether;
-        tokenUSDT.approve(address(hookManager), amount1);
+        tokenUSDT.approve(address(pairPoolManager), amount1);
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: poolId,
             amount0: amount0,
@@ -212,7 +212,7 @@ contract MarginHookManagerTest is DeployHelper {
             deadline: type(uint256).max
         });
         vm.expectRevert(bytes("OUT_OF_RANGE"));
-        hookManager.addLiquidity{value: amount0}(params);
+        pairPoolManager.addLiquidity{value: amount0}(params);
         vm.stopPrank();
     }
 }

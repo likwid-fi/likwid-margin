@@ -5,8 +5,8 @@ import "forge-std/Script.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {HookMiner} from "../test/utils/HookMiner.sol";
-import {IMarginHookManager} from "../src/interfaces/IMarginHookManager.sol";
-import {MarginHookManager} from "../src/MarginHookManager.sol";
+import {MarginHook} from "../src/MarginHook.sol";
+import {PairPoolManager} from "../src/PairPoolManager.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginLiquidity} from "../src/MarginLiquidity.sol";
 import {MarginChecker} from "../src/MarginChecker.sol";
@@ -24,6 +24,8 @@ contract DeployAllScript is Script {
     MarginChecker marginChecker;
     MarginOracle marginOracle;
     MarginFees marginFees;
+    PairPoolManager pairPoolManager;
+    MarginPositionManager marginPositionManager;
 
     function setUp() public {}
 
@@ -39,19 +41,20 @@ contract DeployAllScript is Script {
         console2.log("marginOracle:", address(marginOracle));
         marginFees = new MarginFees(owner);
         console2.log("marginFees:", address(marginFees));
-
-        MarginPositionManager marginPositionManager = new MarginPositionManager(owner, marginChecker);
+        pairPoolManager =
+            new PairPoolManager(owner, IPoolManager(manager), mirrorTokenManager, marginLiquidity, marginFees);
+        console2.log("pairPoolManager", address(pairPoolManager));
+        marginPositionManager = new MarginPositionManager(owner, pairPoolManager, marginChecker);
         console2.log("marginPositionManager", address(marginPositionManager));
-        bytes memory constructorArgs =
-            abi.encode(owner, manager, address(mirrorTokenManager), address(marginLiquidity), address(marginFees));
 
+        bytes memory constructorArgs = abi.encode(owner, manager, address(pairPoolManager));
         uint160 flags = uint160(
             Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG
                 | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
         );
 
         // Mine a salt that will produce a hook address with the correct flags
-        bytes memory creationCode = vm.getCode("MarginHookManager.sol:MarginHookManager");
+        bytes memory creationCode = vm.getCode("MarginHook.sol:MarginHook");
         (address hookAddress, bytes32 salt) = HookMiner.find(CREATE2_DEPLOYER, flags, creationCode, constructorArgs);
 
         // Deploy the hook using CREATE2
@@ -64,13 +67,13 @@ contract DeployAllScript is Script {
 
         // verify proper create2 usage
         require(deployedHook == hookAddress, "DeployScript: hook address mismatch");
-        marginPositionManager.setHook(hookAddress);
-        MarginHookManager(hookAddress).addPositionManager(address(marginPositionManager));
-        MarginHookManager(hookAddress).setMarginOracle(address(marginOracle));
+        pairPoolManager.addPositionManager(address(marginPositionManager));
+        pairPoolManager.setMarginOracle(address(marginOracle));
+        pairPoolManager.setHooks(MarginHook(hookAddress));
         console2.log("hookAddress:", hookAddress);
-        marginLiquidity.addHooks(hookAddress);
-        mirrorTokenManager.addHooks(hookAddress);
-        MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), IMarginHookManager(hookAddress));
+        marginLiquidity.addPoolManager(address(pairPoolManager));
+        mirrorTokenManager.addPoolManger(address(pairPoolManager));
+        MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), pairPoolManager);
         console2.log("swapRouter:", address(swapRouter));
 
         vm.stopBroadcast();

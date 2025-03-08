@@ -5,7 +5,7 @@ import {PoolId} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 interface IMarginOracleReader {
-    function observeNow(PoolId id, address hook)
+    function observeNow(PoolId id, address pool)
         external
         view
         returns (uint224 reserves, uint256 price1CumulativeLast);

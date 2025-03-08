@@ -3,16 +3,21 @@ pragma solidity ^0.8.24;
 
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IImmutableState} from "v4-periphery/src/interfaces/IImmutableState.sol";
+import {IHooks} from "v4-core/interfaces/IPoolManager.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
 
 import {AddLiquidityParams, RemoveLiquidityParams} from "../types/LiquidityParams.sol";
 import {MarginParams, ReleaseParams} from "../types/MarginParams.sol";
-import {HookStatus} from "../types/HookStatus.sol";
+import {PoolStatus} from "../types/PoolStatus.sol";
 import {IMarginFees} from "../interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "../interfaces/IMarginLiquidity.sol";
 
-interface IMarginHookManager is IImmutableState {
+interface IPairPoolManager is IImmutableState {
+    function hooks() external view returns (IHooks hook);
+
     /// @notice Get current margin oracle address
     function marginOracle() external view returns (address);
 
@@ -25,7 +30,7 @@ interface IMarginHookManager is IImmutableState {
     /// @notice Get status of a pool
     /// @param poolId The poolId of the pool to query
     /// @return status The current status of the pool
-    function getStatus(PoolId poolId) external view returns (HookStatus memory);
+    function getStatus(PoolId poolId) external view returns (PoolStatus memory);
 
     /// @notice Get the reserves of a pool
     /// @param poolId The poolId of the pool to query
@@ -46,6 +51,24 @@ interface IMarginHookManager is IImmutableState {
     /// @param amountIn a input amount
     /// @return amountOut an output amount
     function getAmountOut(PoolId poolId, bool zeroForOne, uint256 amountIn) external view returns (uint256 amountOut);
+
+    // ******************** HOOK CALL ********************
+    function setBalances(PoolKey calldata key) external;
+
+    function updateBalances(PoolKey calldata key) external;
+
+    function initialize(PoolKey calldata key) external;
+
+    function swap(PoolKey calldata key, IPoolManager.SwapParams calldata params)
+        external
+        returns (
+            Currency specified,
+            Currency unspecified,
+            uint256 specifiedAmount,
+            uint256 unspecifiedAmount,
+            uint24 swapFee
+        );
+    // ******************** HOOK CALL ********************
 
     /// @notice Add liquidity to a pool
     /// @param params The parameters for the add liquidity hook

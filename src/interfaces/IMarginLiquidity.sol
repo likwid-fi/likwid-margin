@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {IERC6909Claims} from "v4-core/interfaces/external/IERC6909Claims.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 
-import {HookStatus} from "../types/HookStatus.sol";
+import {PoolStatus} from "../types/PoolStatus.sol";
 
 interface IMarginLiquidity is IERC6909Claims {
     function mint(address receiver, uint256 id, uint256 amount) external;
@@ -32,12 +32,12 @@ interface IMarginLiquidity is IERC6909Claims {
         view
         returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1);
 
-    function getFlowReserves(PoolId poolId, HookStatus memory status)
+    function getFlowReserves(PoolId poolId, PoolStatus memory status)
         external
         view
         returns (uint256 reserve0, uint256 reserve1);
 
-    function getPoolSupplies(address hook, PoolId poolId)
+    function getPoolSupplies(address pool, PoolId poolId)
         external
         view
         returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1);

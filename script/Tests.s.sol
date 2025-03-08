@@ -8,7 +8,7 @@ import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {MarginOracle} from "../src/MarginOracle.sol";
 import {MarginLiquidity} from "../src/MarginLiquidity.sol";
-import {MarginHookManager} from "../src/MarginHookManager.sol";
+import {PairPoolManager} from "../src/PairPoolManager.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 
 interface IMarginPositionManager {
@@ -58,9 +58,9 @@ contract TestsScript is Script {
         PoolId poolId = PoolId.wrap(0x52c4648f1db7040bdf0c13c4c7bdedf9a2edf4a1e6dfd899b06ff7f877794fb3);
         address hookAddress = IMarginPositionManager(marginPositionManager).getHook();
         console2.log("hookAddress", hookAddress);
-        (uint256 _reserve0, uint256 _reserve1) = MarginHookManager(hookAddress).getReserves(poolId);
+        (uint256 _reserve0, uint256 _reserve1) = PairPoolManager(hookAddress).getReserves(poolId);
         console2.log("reserves", _reserve0, _reserve1);
-        address marginOracle = MarginHookManager(hookAddress).marginOracle();
+        address marginOracle = PairPoolManager(hookAddress).marginOracle();
         (uint224 reserves,) = MarginOracle(marginOracle).observeNow(poolId, hookAddress);
         console2.log("reserves", marginOracle, reserves.getReverse0(), reserves.getReverse1());
         vm.stopBroadcast();

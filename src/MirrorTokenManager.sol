@@ -7,22 +7,22 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 
 contract MirrorTokenManager is IMirrorTokenManager, ERC6909Claims, Owned {
-    mapping(address => bool) public hooks;
+    mapping(address => bool) public poolManagers;
 
     constructor(address initialOwner) Owned(initialOwner) {}
 
-    modifier onlyHooks() {
-        require(hooks[msg.sender], "UNAUTHORIZED");
+    modifier onlyPoolManager() {
+        require(poolManagers[msg.sender], "UNAUTHORIZED");
         _;
     }
 
-    function mint(uint256 id, uint256 amount) external onlyHooks {
+    function mint(uint256 id, uint256 amount) external onlyPoolManager {
         unchecked {
             _mint(msg.sender, id, amount);
         }
     }
 
-    function burn(uint256 id, uint256 amount) external onlyHooks {
+    function burn(uint256 id, uint256 amount) external onlyPoolManager {
         unchecked {
             amount = Math.min(balanceOf[msg.sender][id], amount);
             _burn(msg.sender, id, amount);
@@ -30,7 +30,7 @@ contract MirrorTokenManager is IMirrorTokenManager, ERC6909Claims, Owned {
     }
 
     // ******************** OWNER CALL ********************
-    function addHooks(address _hook) external onlyOwner {
-        hooks[_hook] = true;
+    function addPoolManger(address _manager) external onlyOwner {
+        poolManagers[_manager] = true;
     }
 }

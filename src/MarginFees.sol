@@ -13,8 +13,8 @@ import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {TruncatedOracle} from "./libraries/TruncatedOracle.sol";
 import {RateStatus} from "./types/RateStatus.sol";
-import {HookStatus} from "./types/HookStatus.sol";
-import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
+import {PoolStatus} from "./types/PoolStatus.sol";
+import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {TimeUtils} from "./libraries/TimeUtils.sol";
 
@@ -52,15 +52,15 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     /// @inheritdoc IMarginFees
-    function getPoolFees(address hook, PoolId poolId) external view returns (uint24 _fee, uint24 _marginFee) {
-        IMarginHookManager hookManager = IMarginHookManager(hook);
-        HookStatus memory status = hookManager.getStatus(poolId);
+    function getPoolFees(address pool, PoolId poolId) external view returns (uint24 _fee, uint24 _marginFee) {
+        IPairPoolManager poolManager = IPairPoolManager(pool);
+        PoolStatus memory status = poolManager.getStatus(poolId);
         _fee = dynamicFee(status);
         _marginFee = status.marginFee == 0 ? marginFee : status.marginFee;
     }
 
     /// @inheritdoc IMarginFees
-    function dynamicFee(HookStatus memory status) public view returns (uint24 _fee) {
+    function dynamicFee(PoolStatus memory status) public view returns (uint24 _fee) {
         uint256 timeElapsed = status.marginTimestampLast.getTimeElapsed();
         _fee = status.key.fee;
         uint256 lastPrice1X112 = status.lastPrice1X112;
@@ -86,7 +86,7 @@ contract MarginFees is IMarginFees, Owned {
         }
     }
 
-    function _getReserves(HookStatus memory status) internal pure returns (uint256 _reserve0, uint256 _reserve1) {
+    function _getReserves(PoolStatus memory status) internal pure returns (uint256 _reserve0, uint256 _reserve1) {
         _reserve0 = status.realReserve0 + status.mirrorReserve0;
         _reserve1 = status.realReserve1 + status.mirrorReserve1;
     }
@@ -109,7 +109,7 @@ contract MarginFees is IMarginFees, Owned {
         return rate + useLevel * rateStatus.mLow;
     }
 
-    function getBorrowRateCumulativeLast(HookStatus memory status)
+    function getBorrowRateCumulativeLast(PoolStatus memory status)
         external
         view
         returns (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast)
@@ -124,7 +124,7 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     /// @inheritdoc IMarginFees
-    function getBorrowRateCumulativeLast(HookStatus memory status, bool marginForOne) public view returns (uint256) {
+    function getBorrowRateCumulativeLast(PoolStatus memory status, bool marginForOne) public view returns (uint256) {
         uint256 timeElapsed = status.blockTimestampLast.getTimeElapsedMillisecond();
         uint256 saveLast = marginForOne ? status.rate0CumulativeLast : status.rate1CumulativeLast;
         uint256 rateLast = ONE_BILLION + getBorrowRate(status, marginForOne) * timeElapsed / YEAR_SECONDS;
@@ -132,25 +132,25 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     /// @inheritdoc IMarginFees
-    function getBorrowRateCumulativeLast(address hook, PoolId poolId, bool marginForOne)
+    function getBorrowRateCumulativeLast(address pool, PoolId poolId, bool marginForOne)
         external
         view
         returns (uint256)
     {
-        HookStatus memory status = IMarginHookManager(hook).getStatus(poolId);
+        PoolStatus memory status = IPairPoolManager(pool).getStatus(poolId);
         return marginForOne ? status.rate0CumulativeLast : status.rate1CumulativeLast;
     }
 
     /// @inheritdoc IMarginFees
-    function getBorrowRate(HookStatus memory status, bool marginForOne) public view returns (uint256) {
+    function getBorrowRate(PoolStatus memory status, bool marginForOne) public view returns (uint256) {
         uint256 realReserve = marginForOne ? status.realReserve0 : status.realReserve1;
         uint256 mirrorReserve = marginForOne ? status.mirrorReserve0 : status.mirrorReserve1;
         return getBorrowRateByReserves(realReserve, mirrorReserve);
     }
 
     /// @inheritdoc IMarginFees
-    function getBorrowRate(address hook, PoolId poolId, bool marginForOne) external view returns (uint256) {
-        HookStatus memory status = IMarginHookManager(hook).getStatus(poolId);
+    function getBorrowRate(address pool, PoolId poolId, bool marginForOne) external view returns (uint256) {
+        PoolStatus memory status = IPairPoolManager(pool).getStatus(poolId);
         return getBorrowRate(status, marginForOne);
     }
 
@@ -182,11 +182,11 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     /// @inheritdoc IMarginFees
-    function collectProtocolFees(address hook, address recipient, Currency currency, uint256 amount)
+    function collectProtocolFees(address pool, address recipient, Currency currency, uint256 amount)
         external
         onlyOwner
         returns (uint256)
     {
-        return IMarginHookManager(hook).collectProtocolFees(recipient, currency, amount);
+        return IPairPoolManager(pool).collectProtocolFees(recipient, currency, amount);
     }
 }

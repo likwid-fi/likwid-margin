@@ -8,10 +8,10 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {UQ112x112} from "../libraries/UQ112x112.sol";
 import {FeeLibrary} from "../libraries/FeeLibrary.sol";
 
-using HookStatusLibrary for HookStatus global;
+using PoolStatusLibrary for PoolStatus global;
 
 /// @notice Returns the status of a hook.
-struct HookStatus {
+struct PoolStatus {
     /// @notice The real reserve of the first currency in the pool.(x)
     uint112 realReserve0;
     /// @notice The real reserve of the second currency in the pool.(y)
@@ -36,38 +36,38 @@ struct HookStatus {
     PoolKey key;
 }
 
-library HookStatusLibrary {
+library PoolStatusLibrary {
     using UQ112x112 for uint224;
     using UQ112x112 for uint112;
     using FeeLibrary for uint24;
 
-    function reserve0(HookStatus memory status) internal pure returns (uint112) {
+    function reserve0(PoolStatus memory status) internal pure returns (uint112) {
         return status.realReserve0 + status.mirrorReserve0;
     }
 
-    function reserve1(HookStatus memory status) internal pure returns (uint112) {
+    function reserve1(PoolStatus memory status) internal pure returns (uint112) {
         return status.realReserve1 + status.mirrorReserve1;
     }
 
-    function getReserves(HookStatus memory status) internal pure returns (uint256 _reserve0, uint256 _reserve1) {
+    function getReserves(PoolStatus memory status) internal pure returns (uint256 _reserve0, uint256 _reserve1) {
         _reserve0 = reserve0(status);
         _reserve1 = reserve1(status);
     }
 
-    function getReservesX224(HookStatus memory status) internal pure returns (uint224 reserves) {
+    function getReservesX224(PoolStatus memory status) internal pure returns (uint224 reserves) {
         reserves = (uint224(reserve0(status)) << 112) + uint224(reserve1(status));
     }
 
-    function getPrice0X112(HookStatus memory status) internal pure returns (uint224) {
+    function getPrice0X112(PoolStatus memory status) internal pure returns (uint224) {
         return reserve1(status).encode().div(reserve0(status));
     }
 
-    function getPrice1X112(HookStatus memory status) internal pure returns (uint224) {
+    function getPrice1X112(PoolStatus memory status) internal pure returns (uint224) {
         return reserve0(status).encode().div(reserve1(status));
     }
 
     function computeLiquidity(
-        HookStatus memory status,
+        PoolStatus memory status,
         uint256 totalSupply,
         uint256 amount0,
         uint256 amount1,
@@ -94,5 +94,5 @@ library HookStatusLibrary {
         }
     }
 
-    function refresh(HookStatus memory status) internal pure {}
+    function refresh(PoolStatus memory status) internal pure {}
 }

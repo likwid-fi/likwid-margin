@@ -7,7 +7,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {Test, console} from "forge-std/Test.sol";
 
-import {HookStatus} from "../src/types/HookStatus.sol";
+import {PoolStatus} from "../src/types/PoolStatus.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {UQ112x112} from "../src/libraries/UQ112x112.sol";
 

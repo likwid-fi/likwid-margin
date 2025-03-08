@@ -2,12 +2,12 @@
 pragma solidity ^0.8.24;
 
 // Local
-import {MarginHookManager} from "../src/MarginHookManager.sol";
+import {PairPoolManager} from "../src/PairPoolManager.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
 import {MarginOracle} from "../src/MarginOracle.sol";
-import {HookStatus} from "../src/types/HookStatus.sol";
+import {PoolStatus} from "../src/types/PoolStatus.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
@@ -38,8 +38,8 @@ contract MarginRouterTest is DeployHelper {
 
     function exactInputNative(uint256 amountIn, address user) internal {
         // swap
-        uint256 balance0 = manager.balanceOf(address(hookManager), 0);
-        uint256 balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
+        uint256 balance0 = manager.balanceOf(address(pairPoolManager), 0);
+        uint256 balance1 = manager.balanceOf(address(pairPoolManager), uint160(address(tokenB)));
         uint256 balanceB = tokenB.balanceOf(user);
         MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
             poolId: nativeKey.toId(),
@@ -51,8 +51,8 @@ contract MarginRouterTest is DeployHelper {
             deadline: type(uint256).max
         });
         uint256 amountOut = swapRouter.exactInput(swapParams);
-        uint256 _balance0 = manager.balanceOf(address(hookManager), 0);
-        uint256 _balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
+        uint256 _balance0 = manager.balanceOf(address(pairPoolManager), 0);
+        uint256 _balance1 = manager.balanceOf(address(pairPoolManager), uint160(address(tokenB)));
         uint256 _balanceB = tokenB.balanceOf(user);
         assertEq(amountIn, _balance0 - balance0);
         assertEq(amountOut, _balanceB - balanceB);
@@ -74,9 +74,9 @@ contract MarginRouterTest is DeployHelper {
         uint256 amountOut = 0.0123 ether;
         bool zeroForOne = true;
         // swap
-        uint256 amountIn = hookManager.getAmountIn(nativeKey.toId(), zeroForOne, amountOut);
-        uint256 balance0 = manager.balanceOf(address(hookManager), 0);
-        uint256 balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
+        uint256 amountIn = pairPoolManager.getAmountIn(nativeKey.toId(), zeroForOne, amountOut);
+        uint256 balance0 = manager.balanceOf(address(pairPoolManager), 0);
+        uint256 balance1 = manager.balanceOf(address(pairPoolManager), uint160(address(tokenB)));
         console.log("before swap hook.balance0:%s,hook.balance1:%s", balance0, balance1);
         MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
             poolId: nativeKey.toId(),
@@ -88,16 +88,16 @@ contract MarginRouterTest is DeployHelper {
             deadline: type(uint256).max
         });
         swapRouter.exactOutput{value: amountIn}(swapParams);
-        balance0 = manager.balanceOf(address(hookManager), 0);
-        balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
+        balance0 = manager.balanceOf(address(pairPoolManager), 0);
+        balance1 = manager.balanceOf(address(pairPoolManager), uint160(address(tokenB)));
         console.log("after swap hook.balance0:%s,hook.balance1:%s", balance0, balance1);
 
         // token => native
         zeroForOne = false;
-        amountIn = hookManager.getAmountIn(nativeKey.toId(), zeroForOne, amountOut);
+        amountIn = pairPoolManager.getAmountIn(nativeKey.toId(), zeroForOne, amountOut);
         // swap
-        balance0 = manager.balanceOf(address(hookManager), 0);
-        balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
+        balance0 = manager.balanceOf(address(pairPoolManager), 0);
+        balance1 = manager.balanceOf(address(pairPoolManager), uint160(address(tokenB)));
         console.log("before swap hook.balance0:%s,hook.balance1:%s", balance0, balance1);
         swapParams = MarginRouter.SwapParams({
             poolId: nativeKey.toId(),
@@ -109,15 +109,15 @@ contract MarginRouterTest is DeployHelper {
             deadline: type(uint256).max
         });
         swapRouter.exactOutput(swapParams);
-        balance0 = manager.balanceOf(address(hookManager), 0);
-        balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
+        balance0 = manager.balanceOf(address(pairPoolManager), 0);
+        balance1 = manager.balanceOf(address(pairPoolManager), uint160(address(tokenB)));
         console.log("after swap hook.balance0:%s,hook.balance1:%s", balance0, balance1);
     }
 
     function exactInputTokens(uint256 amountIn, address user) internal {
         // swap
-        uint256 balance0 = manager.balanceOf(address(hookManager), uint160(address(tokenA)));
-        uint256 balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
+        uint256 balance0 = manager.balanceOf(address(pairPoolManager), uint160(address(tokenA)));
+        uint256 balance1 = manager.balanceOf(address(pairPoolManager), uint160(address(tokenB)));
         uint256 balanceA = tokenA.balanceOf(user);
         uint256 balanceB = tokenB.balanceOf(user);
         MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
@@ -130,8 +130,8 @@ contract MarginRouterTest is DeployHelper {
             deadline: type(uint256).max
         });
         uint256 amountOut = swapRouter.exactInput(swapParams);
-        uint256 _balance0 = manager.balanceOf(address(hookManager), uint160(address(tokenA)));
-        uint256 _balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenB)));
+        uint256 _balance0 = manager.balanceOf(address(pairPoolManager), uint160(address(tokenA)));
+        uint256 _balance1 = manager.balanceOf(address(pairPoolManager), uint160(address(tokenB)));
         uint256 _balanceA = tokenA.balanceOf(user);
         uint256 _balanceB = tokenB.balanceOf(user);
         if (address(tokenA) < address(tokenB)) {
@@ -159,8 +159,8 @@ contract MarginRouterTest is DeployHelper {
         address user = address(this);
         uint256 amountIn = 0.0123 ether;
         // swap
-        uint256 balance0 = manager.balanceOf(address(hookManager), 0);
-        uint256 balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenUSDT)));
+        uint256 balance0 = manager.balanceOf(address(pairPoolManager), 0);
+        uint256 balance1 = manager.balanceOf(address(pairPoolManager), uint160(address(tokenUSDT)));
         uint256 balanceUSDT = tokenUSDT.balanceOf(user);
         MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
             poolId: usdtKey.toId(),
@@ -172,8 +172,8 @@ contract MarginRouterTest is DeployHelper {
             deadline: type(uint256).max
         });
         uint256 amountOut = swapRouter.exactInput{value: amountIn}(swapParams);
-        uint256 _balance0 = manager.balanceOf(address(hookManager), 0);
-        uint256 _balance1 = manager.balanceOf(address(hookManager), uint160(address(tokenUSDT)));
+        uint256 _balance0 = manager.balanceOf(address(pairPoolManager), 0);
+        uint256 _balance1 = manager.balanceOf(address(pairPoolManager), uint160(address(tokenUSDT)));
         uint256 _balanceUSDT = tokenUSDT.balanceOf(user);
         assertEq(amountIn, _balance0 - balance0);
         assertEq(amountOut, _balanceUSDT - balanceUSDT);

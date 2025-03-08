@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 // V4 core
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {BaseHook} from "v4-periphery/src/base/hooks/BaseHook.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
@@ -15,6 +14,7 @@ import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
+import {BasePool} from "./base/BasePool.sol";
 import {TransientSlot} from "./external/openzeppelin-contracts/TransientSlot.sol";
 import {ReentrancyGuardTransient} from "./external/openzeppelin-contracts/ReentrancyGuardTransient.sol";
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
@@ -23,18 +23,19 @@ import {TimeUtils} from "./libraries/TimeUtils.sol";
 import {LiquidityLevel} from "./libraries/LiquidityLevel.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
-import {IMarginHookManager} from "./interfaces/IMarginHookManager.sol";
+import {MarginPosition} from "./types/MarginPosition.sol";
+import {MarginParams, ReleaseParams} from "./types/MarginParams.sol";
+import {PoolStatus} from "./types/PoolStatus.sol";
+import {BalanceStatus} from "./types/BalanceStatus.sol";
+import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams.sol";
+
+import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
-import {MarginPosition} from "./types/MarginPosition.sol";
-import {MarginParams, ReleaseParams} from "./types/MarginParams.sol";
-import {HookStatus} from "./types/HookStatus.sol";
-import {BalanceStatus} from "./types/BalanceStatus.sol";
-import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams.sol";
 
-contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGuardTransient {
+contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient {
     using TransientSlot for *;
     using UQ112x112 for *;
     using SafeCast for uint256;
@@ -44,11 +45,11 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
     using PerLibrary for uint256;
     using CurrencyUtils for Currency;
 
-    error InvalidInitialization();
     error UpdateBalanceGuardErrorCall();
     error InsufficientLiquidityMinted();
     error InsufficientLiquidityBurnt();
     error NotPositionManager();
+    error PairAlreadyExists();
     error PairNotExists();
 
     event Mint(
@@ -78,10 +79,11 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
 
     IMirrorTokenManager public immutable mirrorTokenManager;
     IMarginLiquidity public immutable marginLiquidity;
+    IHooks public hooks;
     IMarginFees public marginFees;
     address public marginOracle;
 
-    mapping(PoolId => HookStatus) private hookStatusStore;
+    mapping(PoolId => PoolStatus) private statusStore;
     mapping(address => bool) private positionManagers;
     mapping(Currency currency => uint256 amount) public protocolFeesAccrued;
 
@@ -91,7 +93,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
         IMirrorTokenManager _mirrorTokenManager,
         IMarginLiquidity _marginLiquidity,
         IMarginFees _marginFees
-    ) Owned(initialOwner) BaseHook(_manager) {
+    ) BasePool(initialOwner, _manager) {
         mirrorTokenManager = _mirrorTokenManager;
         marginLiquidity = _marginLiquidity;
         marginFees = _marginFees;
@@ -112,8 +114,13 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
         _;
     }
 
-    function getStatus(PoolId poolId) public view returns (HookStatus memory _status) {
-        _status = hookStatusStore[poolId];
+    modifier onlyHooks() {
+        require(msg.sender == address(msg.sender), "UNAUTHORIZED");
+        _;
+    }
+
+    function getStatus(PoolId poolId) public view returns (PoolStatus memory _status) {
+        _status = statusStore[poolId];
         if (_status.key.currency1 == CurrencyLibrary.ADDRESS_ZERO) revert PairNotExists();
         (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = marginFees.getBorrowRateCumulativeLast(_status);
         _status.mirrorReserve0 =
@@ -126,108 +133,18 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
     }
 
     function getReserves(PoolId poolId) external view returns (uint256 _reserve0, uint256 _reserve1) {
-        HookStatus memory status = getStatus(poolId);
+        PoolStatus memory status = getStatus(poolId);
         (_reserve0, _reserve1) = status.getReserves();
     }
 
     function getAmountIn(PoolId poolId, bool zeroForOne, uint256 amountOut) external view returns (uint256 amountIn) {
-        HookStatus memory status = getStatus(poolId);
-        (amountIn,) = _getAmountIn(status, zeroForOne, amountOut);
+        PoolStatus memory status = getStatus(poolId);
+        (amountIn,,) = _getAmountIn(status, zeroForOne, amountOut);
     }
 
     function getAmountOut(PoolId poolId, bool zeroForOne, uint256 amountIn) external view returns (uint256 amountOut) {
-        HookStatus memory status = getStatus(poolId);
-        (amountOut,) = _getAmountOut(status, zeroForOne, amountIn);
-    }
-
-    // ******************** HOOK FUNCTIONS ********************
-
-    function beforeInitialize(address, PoolKey calldata key, uint160)
-        external
-        override
-        onlyPoolManager
-        returns (bytes4)
-    {
-        if (address(key.hooks) != address(this)) revert InvalidInitialization();
-        PoolId id = key.toId();
-        HookStatus memory status;
-        status.key = key;
-        status.rate0CumulativeLast = ONE_BILLION;
-        status.rate1CumulativeLast = ONE_BILLION;
-        status.blockTimestampLast = uint32(block.timestamp % 2 ** 32);
-        hookStatusStore[id] = status;
-        return BaseHook.beforeInitialize.selector;
-    }
-
-    /// @dev Facilitate a custom curve via beforeSwap + return delta
-    /// @dev input tokens are taken from the PoolManager, creating a debt paid by the swapper
-    /// @dev output tokens are transferred from the hook to the PoolManager, creating a credit claimed by the swapper
-    function beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
-        external
-        override
-        onlyPoolManager
-        returns (bytes4, BeforeSwapDelta, uint24)
-    {
-        HookStatus memory hookStatus = getStatus(key.toId());
-        bool exactInput = params.amountSpecified < 0;
-        (Currency specified, Currency unspecified) =
-            (params.zeroForOne == exactInput) ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
-
-        uint256 specifiedAmount = exactInput ? uint256(-params.amountSpecified) : uint256(params.amountSpecified);
-        uint256 unspecifiedAmount;
-        uint256 feeAmount;
-        BeforeSwapDelta returnDelta;
-        _setBalances(key);
-        if (exactInput) {
-            // in exact-input swaps, the specified token is a debt that gets paid down by the swapper
-            // the unspecified token is credited to the PoolManager, that is claimed by the swapper
-            (unspecifiedAmount, feeAmount) = _getAmountOut(hookStatus, params.zeroForOne, specifiedAmount);
-            specified.take(poolManager, address(this), specifiedAmount, true);
-            unspecified.settle(poolManager, address(this), unspecifiedAmount, true);
-            returnDelta = toBeforeSwapDelta(specifiedAmount.toInt128(), -unspecifiedAmount.toInt128());
-        } else {
-            // exactOutput
-            // in exact-output swaps, the unspecified token is a debt that gets paid down by the swapper
-            // the specified token is credited to the PoolManager, that is claimed by the swapper
-            (unspecifiedAmount, feeAmount) = _getAmountIn(hookStatus, params.zeroForOne, specifiedAmount);
-            unspecified.take(poolManager, address(this), unspecifiedAmount, true);
-            specified.settle(poolManager, address(this), specifiedAmount, true);
-            returnDelta = toBeforeSwapDelta(-specifiedAmount.toInt128(), unspecifiedAmount.toInt128());
-        }
-        if (feeAmount > 0) {
-            _updateProtocolFees(specified, feeAmount);
-        }
-        _update(key);
-        return (BaseHook.beforeSwap.selector, returnDelta, 0);
-    }
-
-    /// @notice No liquidity will be managed by v4 PoolManager
-    function beforeAddLiquidity(address, PoolKey calldata, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
-        external
-        pure
-        override
-        returns (bytes4)
-    {
-        revert("No v4 Liquidity allowed");
-    }
-
-    function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
-        return Hooks.Permissions({
-            beforeInitialize: true,
-            afterInitialize: false,
-            beforeAddLiquidity: true, // -- disable v4 liquidity with a revert -- //
-            beforeRemoveLiquidity: false,
-            afterAddLiquidity: false,
-            afterRemoveLiquidity: false,
-            beforeSwap: true, // -- Custom Curve Handler --  //
-            afterSwap: false,
-            beforeDonate: false,
-            afterDonate: false,
-            beforeSwapReturnDelta: true, // -- Enables Custom Curves --  //
-            afterSwapReturnDelta: false,
-            afterAddLiquidityReturnDelta: false,
-            afterRemoveLiquidityReturnDelta: false
-        });
+        PoolStatus memory status = getStatus(poolId);
+        (amountOut,,) = _getAmountOut(status, zeroForOne, amountIn);
     }
 
     // ******************** INTERNAL FUNCTIONS ********************
@@ -284,7 +201,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
         MIRROR_BALANCE_1_SLOT.asUint256().tstore(balanceStatus.mirrorBalance1);
     }
 
-    function _updateInterests(HookStatus storage status, bool inUpdate) internal {
+    function _updateInterests(PoolStatus storage status, bool inUpdate) internal {
         PoolKey memory key = status.key;
         uint32 blockTS = uint32(block.timestamp % 2 ** 32);
         if (status.blockTimestampLast != blockTS) {
@@ -316,13 +233,13 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
 
     function _updateInterests(PoolKey memory key) internal {
         PoolId pooId = key.toId();
-        HookStatus storage status = hookStatusStore[pooId];
+        PoolStatus storage status = statusStore[pooId];
         _updateInterests(status, false);
     }
 
     function _update(PoolKey memory key, bool fromMargin) internal {
         PoolId pooId = key.toId();
-        HookStatus storage status = hookStatusStore[pooId];
+        PoolStatus storage status = statusStore[pooId];
         // save margin price before changed
         if (fromMargin) {
             uint32 blockTS = uint32(block.timestamp % 2 ** 32);
@@ -365,44 +282,95 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
     }
 
     // given an input amount of an asset and pair reserve, returns the maximum output amount of the other asset
-    function _getAmountOut(HookStatus memory status, bool zeroForOne, uint256 amountIn)
+    function _getAmountOut(PoolStatus memory status, bool zeroForOne, uint256 amountIn)
         internal
         view
-        returns (uint256 amountOut, uint256 feeAmount)
+        returns (uint256 amountOut, uint24 fee, uint256 feeAmount)
     {
         require(amountIn > 0, "INSUFFICIENT_INPUT_AMOUNT");
         (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
         (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
         require(reserveIn > 0 && reserveOut > 0, " INSUFFICIENT_LIQUIDITY");
-        uint24 _fee = marginFees.dynamicFee(status);
+        fee = marginFees.dynamicFee(status);
         uint256 amountInWithoutFee;
-        (amountInWithoutFee, feeAmount) = _fee.deduct(amountIn);
+        (amountInWithoutFee, feeAmount) = fee.deduct(amountIn);
         uint256 numerator = amountInWithoutFee * reserveOut;
         uint256 denominator = reserveIn + amountInWithoutFee;
         amountOut = numerator / denominator;
     }
 
     // given an output amount of an asset and pair reserve, returns a required input amount of the other asset
-    function _getAmountIn(HookStatus memory status, bool zeroForOne, uint256 amountOut)
+    function _getAmountIn(PoolStatus memory status, bool zeroForOne, uint256 amountOut)
         internal
         view
-        returns (uint256 amountIn, uint256 feeAmount)
+        returns (uint256 amountIn, uint24 fee, uint256 feeAmount)
     {
         require(amountOut > 0, "INSUFFICIENT_OUTPUT_AMOUNT");
         (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
         (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
         require(reserveIn > 0 && reserveOut > 0, "INSUFFICIENT_LIQUIDITY");
         require(amountOut < reserveOut, "OUTPUT_AMOUNT_OVERFLOW");
-        uint24 _fee = marginFees.dynamicFee(status);
+        fee = marginFees.dynamicFee(status);
         uint256 numerator = reserveIn * amountOut;
         uint256 denominator = (reserveOut - amountOut);
         uint256 amountInWithoutFee = (numerator / denominator) + 1;
-        (amountIn, feeAmount) = _fee.attach(amountInWithoutFee);
+        (amountIn, feeAmount) = fee.attach(amountInWithoutFee);
+    }
+
+    // ******************** HOOK CALL ********************
+
+    function initialize(PoolKey calldata key) external onlyHooks {
+        PoolId id = key.toId();
+        if (statusStore[id].key.currency1 > CurrencyLibrary.ADDRESS_ZERO) revert PairAlreadyExists();
+        PoolStatus memory status;
+        status.key = key;
+        status.rate0CumulativeLast = ONE_BILLION;
+        status.rate1CumulativeLast = ONE_BILLION;
+        status.blockTimestampLast = uint32(block.timestamp % 2 ** 32);
+        statusStore[id] = status;
+    }
+
+    function setBalances(PoolKey calldata key) external onlyHooks {
+        _setBalances(key);
+    }
+
+    function updateBalances(PoolKey calldata key) external onlyHooks {
+        _update(key);
+    }
+
+    function swap(PoolKey calldata key, IPoolManager.SwapParams calldata params)
+        external
+        onlyHooks
+        returns (
+            Currency specified,
+            Currency unspecified,
+            uint256 specifiedAmount,
+            uint256 unspecifiedAmount,
+            uint24 swapFee
+        )
+    {
+        PoolStatus memory _status = getStatus(key.toId());
+        bool exactInput = params.amountSpecified < 0;
+        (specified, unspecified) =
+            (params.zeroForOne == exactInput) ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
+
+        specifiedAmount = exactInput ? uint256(-params.amountSpecified) : uint256(params.amountSpecified);
+        uint256 feeAmount;
+        if (exactInput) {
+            (unspecifiedAmount, swapFee, feeAmount) = _getAmountOut(_status, params.zeroForOne, specifiedAmount);
+            poolManager.approve(address(hooks), unspecified.toId(), unspecifiedAmount);
+        } else {
+            (unspecifiedAmount, swapFee, feeAmount) = _getAmountIn(_status, params.zeroForOne, specifiedAmount);
+            poolManager.approve(address(hooks), specified.toId(), specifiedAmount);
+        }
+        if (feeAmount > 0) {
+            _updateProtocolFees(specified, feeAmount);
+        }
     }
 
     // ******************** SELF CALL ********************
 
-    /// @inheritdoc IMarginHookManager
+    /// @inheritdoc IPairPoolManager
     function addLiquidity(AddLiquidityParams calldata params)
         external
         payable
@@ -410,7 +378,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
         returns (uint256 liquidity)
     {
         require(params.amount0 > 0 && params.amount1 > 0, "AMOUNT_ERR");
-        HookStatus memory status = getStatus(params.poolId);
+        PoolStatus memory status = getStatus(params.poolId);
         _setBalances(status.key);
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
         {
@@ -457,13 +425,13 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
         key.currency1.take(poolManager, address(this), amount1, true);
     }
 
-    /// @inheritdoc IMarginHookManager
+    /// @inheritdoc IPairPoolManager
     function removeLiquidity(RemoveLiquidityParams memory params)
         external
         ensure(params.deadline)
         returns (uint256 amount0, uint256 amount1)
     {
-        HookStatus memory status = getStatus(params.poolId);
+        PoolStatus memory status = getStatus(params.poolId);
         _setBalances(status.key);
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
         {
@@ -514,6 +482,9 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
     }
 
     // ******************** OWNER CALL ********************
+    function setHooks(IHooks _hooks) external onlyOwner {
+        hooks = _hooks;
+    }
 
     function addPositionManager(address _marginPositionManager) external onlyOwner {
         positionManagers[_marginPositionManager] = true;
@@ -528,12 +499,12 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
     }
 
     function setFeeStatus(PoolId poolId, uint24 _marginFee) external onlyOwner {
-        hookStatusStore[poolId].marginFee = _marginFee;
+        statusStore[poolId].marginFee = _marginFee;
     }
 
     // ******************** MARGIN FUNCTIONS ********************
 
-    /// @inheritdoc IMarginHookManager
+    /// @inheritdoc IPairPoolManager
     function margin(MarginParams memory params) external onlyPosition returns (MarginParams memory) {
         bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (msg.sender, params)));
         (params.marginTotal, params.borrowAmount) = abi.decode(result, (uint256, uint256));
@@ -545,7 +516,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
         selfOnly
         returns (uint256 marginWithoutFee, uint256 borrowAmount)
     {
-        HookStatus memory status = getStatus(params.poolId);
+        PoolStatus memory status = getStatus(params.poolId);
         _setBalances(status.key);
         (Currency borrowCurrency, Currency marginCurrency) = params.marginForOne
             ? (status.key.currency0, status.key.currency1)
@@ -561,7 +532,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
         }
         uint256 marginTotal = params.marginAmount * params.leverage;
         require(marginReserves >= marginTotal, "TOKEN_NOT_ENOUGH");
-        (borrowAmount,) = _getAmountIn(status, zeroForOne, marginTotal);
+        (borrowAmount,,) = _getAmountIn(status, zeroForOne, marginTotal);
         (, uint24 marginFee) = marginFees.getPoolFees(address(this), params.poolId);
         // send total token
         uint256 marginFeeAmount;
@@ -576,14 +547,14 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
         _update(status.key, true);
     }
 
-    /// @inheritdoc IMarginHookManager
+    /// @inheritdoc IPairPoolManager
     function release(ReleaseParams memory params) external payable onlyPosition returns (uint256) {
         bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRelease, (params)));
         return abi.decode(result, (uint256));
     }
 
     function handleRelease(ReleaseParams calldata params) external selfOnly returns (uint256) {
-        HookStatus memory status = getStatus(params.poolId);
+        PoolStatus memory status = getStatus(params.poolId);
         _updateInterests(status.key);
         _setBalances(status.key);
         (Currency borrowCurrency, Currency marginCurrency) = params.marginForOne
@@ -615,7 +586,7 @@ contract MarginHookManager is IMarginHookManager, BaseHook, Owned, ReentrancyGua
         return params.repayAmount;
     }
 
-    /// @inheritdoc IMarginHookManager
+    /// @inheritdoc IPairPoolManager
     function collectProtocolFees(address recipient, Currency currency, uint256 amount)
         external
         onlyFees

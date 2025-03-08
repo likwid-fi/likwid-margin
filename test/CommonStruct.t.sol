@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Test, console} from "forge-std/Test.sol";
-import {HookStatus} from "../src/types/HookStatus.sol";
+import {PoolStatus} from "../src/types/PoolStatus.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
@@ -14,8 +14,8 @@ contract CommonStructTest is Test {
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolKey;
 
-    mapping(PoolId => HookStatus) public hookStatusStore;
-    mapping(uint256 => HookStatus) public hookStatusStore1;
+    mapping(PoolId => PoolStatus) public hookStatusStore;
+    mapping(uint256 => PoolStatus) public hookStatusStore1;
     mapping(uint256 => MarginPosition) public positions;
     mapping(uint256 => uint256) public testMap;
     PoolKey public key;
@@ -34,7 +34,7 @@ contract CommonStructTest is Test {
     }
 
     function test_create() public {
-        HookStatus memory status;
+        PoolStatus memory status;
         status.key = key;
         hookStatusStore[key.toId()] = status;
     }
@@ -143,5 +143,49 @@ contract CommonStructTest is Test {
         uint256 t1 = a * n / d;
         uint256 t2 = Math.mulDiv(a, n, d);
         assertEq(t1, t2);
+    }
+
+    struct SmallStruct {
+        uint256 reserve;
+    }
+
+    struct BigStruct {
+        uint256 reserve0;
+        uint256 reserve1;
+        uint256 reserve2;
+        uint256 reserve3;
+        uint256 reserve4;
+        uint256 reserve5;
+        uint256 reserve6;
+        uint256 reserve7;
+        uint256 reserve8;
+        uint256 reserve9;
+    }
+
+    mapping(uint256 => SmallStruct) smallStructMap;
+    mapping(uint256 => BigStruct) bigStructMap;
+
+    function createSmallStruct() public {
+        for (uint256 i = 0; i < 100; i++) {
+            SmallStruct memory small;
+            small.reserve = i;
+            smallStructMap[i] = small;
+        }
+    }
+
+    function createBigStruct() public {
+        for (uint256 i = 0; i < 100; i++) {
+            BigStruct memory big;
+            big.reserve0 = i;
+            bigStructMap[i] = big;
+        }
+    }
+
+    function testCreateStructsBig() public {
+        createBigStruct();
+    }
+
+    function testCreateStructsSmall() public {
+        createSmallStruct();
     }
 }
