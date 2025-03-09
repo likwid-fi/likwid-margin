@@ -2,7 +2,6 @@
 pragma solidity >=0.8.0;
 
 import {IERC6909Accrues} from "../interfaces/external/IERC6909Accrues.sol";
-import {console} from "forge-std/console.sol";
 
 /// @notice Minimalist and gas efficient standard ERC6909 implementation.
 /// @author Solmate (https://github.com/transmissions11/solmate/blob/main/src/tokens/ERC6909.sol)
@@ -13,7 +12,7 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
 
     mapping(address => mapping(address => bool)) public isOperator;
 
-    mapping(address => mapping(uint256 => uint256)) private balanceStore;
+    mapping(address => mapping(uint256 => uint256)) public balanceStore;
 
     mapping(address => mapping(address => mapping(uint256 => uint256))) public allowance;
 
