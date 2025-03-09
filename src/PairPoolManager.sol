@@ -69,7 +69,6 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
         uint256 mirrorReserve1
     );
 
-    uint256 public constant MINIMUM_LIQUIDITY = 10 ** 3;
     uint256 public constant ONE_BILLION = 10 ** 9;
     bytes32 constant UPDATE_BALANCE_GUARD_SLOT = 0x885c9ad615c28a45189565668235695fb42940589d40d91c5c875c16cdc1bd4c;
     bytes32 constant BALANCE_0_SLOT = 0x608a02038d3023ed7e79ffc2a87ce7ad8c0bc0c5b839ddbe438db934c7b5e0e2;
@@ -384,8 +383,7 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
         {
             uint256 _totalSupply = marginLiquidity.balanceOf(address(this), uPoolId);
             if (_totalSupply == 0) {
-                liquidity = Math.sqrt(params.amount0 * params.amount1) - MINIMUM_LIQUIDITY;
-                marginLiquidity.mint(address(this), uPoolId, MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
+                liquidity = Math.sqrt(params.amount0 * params.amount1);
                 if (marginOracle != address(0)) {
                     IMarginOracleWriter(marginOracle).initialize(
                         status.key, uint112(params.amount0), uint112(params.amount1)

@@ -135,15 +135,10 @@ contract PairPoolManagerTest is DeployHelper {
         assertEq(liquidityHalf, liquidity - liquidity / 2);
     }
 
-    function addLiquidity(
-        address user,
-        PoolId poolId,
-        uint256 amount0,
-        uint256 amount1,
-        uint256 tickLower,
-        uint256 tickUpper,
-        uint8 level
-    ) internal returns (uint256) {
+    function addLiquidity(address user, PoolId poolId, uint256 amount0, uint256 amount1, uint8 level)
+        internal
+        returns (uint256)
+    {
         vm.startPrank(user);
         tokenUSDT.approve(address(pairPoolManager), amount1);
         AddLiquidityParams memory params = AddLiquidityParams({
@@ -165,10 +160,10 @@ contract PairPoolManagerTest is DeployHelper {
         (bool success,) = user.call{value: 10 ether}("");
         assertTrue(success);
         PoolId poolId = usdtKey.toId();
-        uint256 level1 = addLiquidity(user, poolId, 0.1 ether, 0.1 ether, 50000, 50000, 1);
-        uint256 level2 = addLiquidity(user, poolId, 0.2 ether, 0.2 ether, 50000, 50000, 2);
-        uint256 level3 = addLiquidity(user, poolId, 0.3 ether, 0.3 ether, 50000, 50000, 3);
-        uint256 level4 = addLiquidity(user, poolId, 0.4 ether, 0.4 ether, 50000, 50000, 4);
+        uint256 level1 = addLiquidity(user, poolId, 0.1 ether, 0.1 ether, LiquidityLevel.NO_MARGIN);
+        uint256 level2 = addLiquidity(user, poolId, 0.2 ether, 0.2 ether, LiquidityLevel.ONE_MARGIN);
+        uint256 level3 = addLiquidity(user, poolId, 0.3 ether, 0.3 ether, LiquidityLevel.ZERO_MARGIN);
+        uint256 level4 = addLiquidity(user, poolId, 0.4 ether, 0.4 ether, LiquidityLevel.BOTH_MARGIN);
         uint256[4] memory liquidities = marginLiquidity.getPoolLiquidities(poolId, user);
         (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) =
             marginLiquidity.getPoolSupplies(address(pairPoolManager), poolId);
@@ -176,7 +171,7 @@ contract PairPoolManagerTest is DeployHelper {
         assertEq(level2, liquidities[1]);
         assertEq(level3, liquidities[2]);
         assertEq(level4, liquidities[3]);
-        assertEq(level1 + level2 + level3 + level4 + 1000, totalSupply);
+        assertEq(level1 + level2 + level3 + level4, totalSupply);
         assertEq(level1 + level2, retainSupply0);
         assertEq(level1 + level3, retainSupply1);
         {
@@ -198,7 +193,7 @@ contract PairPoolManagerTest is DeployHelper {
         (bool success,) = user.call{value: 10 ether}("");
         assertTrue(success);
         PoolId poolId = usdtKey.toId();
-        addLiquidity(user, poolId, 0.1 ether, 0.1 ether, 50000, 50000, 1);
+        addLiquidity(user, poolId, 0.1 ether, 0.1 ether, LiquidityLevel.ONE_MARGIN);
         vm.startPrank(user);
         uint256 amount0 = 0.1 ether;
         uint256 amount1 = 0.09 ether;

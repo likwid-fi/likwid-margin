@@ -2,20 +2,23 @@
 pragma solidity ^0.8.26;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {ERC6909Claims} from "v4-core/ERC6909Claims.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 // Local
+import {ERC6909Accrues} from "./base/ERC6909Accrues.sol";
 import {LiquidityLevel} from "./libraries/LiquidityLevel.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
+import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 
-contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
+contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
     using LiquidityLevel for *;
     using UQ112x112 for *;
+    using PerLibrary for *;
 
     mapping(address => bool) public poolManagers;
+    mapping(uint256 => uint256) public deviationOf;
     mapping(uint256 => uint256) private liquidityBlockStore;
     uint24 private maxSliding = 5000; // 0.5%
     uint256 public level2InterestRatioX112 = UQ112x112.Q112;
@@ -43,13 +46,21 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1)
     {
         uPoolId = uPoolId & LiquidityLevel.LP_FLAG;
-        totalSupply = balanceOf[pool][uPoolId];
+        totalSupply = balanceOf(pool, uPoolId);
         uint256 lPoolId = uPoolId + LiquidityLevel.NO_MARGIN;
-        retainSupply0 = retainSupply1 = balanceOf[pool][lPoolId];
+        retainSupply0 = retainSupply1 = balanceOf(pool, lPoolId);
         lPoolId = uPoolId + LiquidityLevel.ONE_MARGIN;
-        retainSupply0 += balanceOf[pool][lPoolId];
+        retainSupply0 += balanceOf(pool, lPoolId);
         lPoolId = uPoolId + LiquidityLevel.ZERO_MARGIN;
-        retainSupply1 += balanceOf[pool][lPoolId];
+        retainSupply1 += balanceOf(pool, lPoolId);
+    }
+
+    function _burn(address sender, uint256 id, uint256 amount) internal override {
+        uint256 balance = balanceOf(sender, id);
+        if (amount.isWithinTolerance(balance, deviationOf[id])) {
+            amount = balance;
+        }
+        super._burn(sender, id, amount);
     }
 
     // ******************** OWNER CALL ********************
@@ -76,11 +87,11 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
 
     function _updateLevelRatio(address pool, uint256 id, uint256 liquidity0, uint256 liquidity1) internal {
         uint256 level4Id = LiquidityLevel.BOTH_MARGIN.getLevelId(id);
-        uint256 total4Liquidity = balanceOf[msg.sender][level4Id];
+        uint256 total4Liquidity = balanceOf(msg.sender, level4Id);
         uint256 level4Liquidity;
         if (liquidity0 > 0) {
             uint256 level2Id = LiquidityLevel.ONE_MARGIN.getLevelId(id);
-            uint256 total2Liquidity = balanceOf[msg.sender][level2Id];
+            uint256 total2Liquidity = balanceOf(msg.sender, level2Id);
             uint256 level2Liquidity = Math.mulDiv(liquidity0, total2Liquidity, total2Liquidity + total4Liquidity);
             level4Liquidity = level4Liquidity + liquidity0 - level2Liquidity;
             level2InterestRatioX112 = level2InterestRatioX112.growRatioX112(level2Liquidity, total2Liquidity);
@@ -88,7 +99,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         }
         if (liquidity1 > 0) {
             uint256 level3Id = LiquidityLevel.ONE_MARGIN.getLevelId(id);
-            uint256 total3Liquidity = balanceOf[msg.sender][level3Id];
+            uint256 total3Liquidity = balanceOf(msg.sender, level3Id);
             uint256 level3Liquidity = Math.mulDiv(liquidity0, total3Liquidity, total3Liquidity + total4Liquidity);
             level4Liquidity = level4Liquidity + liquidity0 - level3Liquidity;
             level3InterestRatioX112 = level3InterestRatioX112.growRatioX112(level3Liquidity, total3Liquidity);
@@ -108,7 +119,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         if (rootK > rootKLast) {
             uint256 id = _getPoolId(poolId);
             uint256 uPoolId = id.getPoolId();
-            uint256 _totalSupply = balanceOf[msg.sender][uPoolId];
+            uint256 _totalSupply = balanceOf(msg.sender, uPoolId);
             uint256 numerator = _totalSupply * (rootK - rootKLast);
             uint256 denominator = rootK + rootKLast;
             liquidity = numerator / denominator;
@@ -128,8 +139,8 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         returns (uint256 liquidity)
     {
         liquidityBlockStore[id] = block.number;
-        uint256 levelId = level.getLevelId(id);
         uint256 uPoolId = id.getPoolId();
+        uint256 levelId = level.getLevelId(id);
         address pool = msg.sender;
         liquidity = amount;
         if (level == LiquidityLevel.ONE_MARGIN) {
@@ -139,16 +150,13 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         } else if (level == LiquidityLevel.BOTH_MARGIN) {
             liquidity = amount.divRatioX112(level4InterestRatioX112);
         }
+        deviationOf[uPoolId] += 1;
+        deviationOf[levelId] += 1;
         unchecked {
             _mint(pool, uPoolId, amount);
             _mint(pool, levelId, amount);
             _mint(receiver, levelId, liquidity);
         }
-    }
-
-    function _burnEx(address sender, uint256 id, uint256 amount) internal {
-        amount = Math.min(balanceOf[sender][id], amount);
-        _burn(sender, id, amount);
     }
 
     function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount)
@@ -157,8 +165,8 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         returns (uint256 liquidity)
     {
         require(liquidityBlockStore[id] < block.number, "NOT_ALLOWED");
-        uint256 levelId = level.getLevelId(id);
         uint256 uPoolId = id.getPoolId();
+        uint256 levelId = level.getLevelId(id);
         address pool = msg.sender;
         if (level == LiquidityLevel.ONE_MARGIN) {
             liquidity = amount.mulRatioX112(level2InterestRatioX112);
@@ -168,9 +176,9 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
             liquidity = amount.mulRatioX112(level4InterestRatioX112);
         }
         unchecked {
-            _burnEx(pool, uPoolId, liquidity);
-            _burnEx(pool, levelId, liquidity);
-            _burnEx(sender, levelId, amount);
+            _burn(pool, uPoolId, liquidity);
+            _burn(pool, levelId, liquidity);
+            _burn(sender, levelId, amount);
         }
     }
 
@@ -213,7 +221,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Claims, Owned {
         uint256 uPoolId = uint256(PoolId.unwrap(poolId));
         for (uint256 i = 0; i < 4; i++) {
             uint256 lPoolId = uint8(1 + i).getLevelId(uPoolId);
-            liquidities[i] = balanceOf[owner][lPoolId];
+            liquidities[i] = balanceOf(owner, lPoolId);
         }
     }
 }

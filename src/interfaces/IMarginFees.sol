@@ -36,6 +36,10 @@ interface IMarginFees {
     /// @return The borrow rate
     function getBorrowRateByReserves(uint256 realReserve, uint256 mirrorReserve) external view returns (uint256);
 
+    /// @notice Get the last cumulative multiplication of rate
+    /// @param status The status of the hook
+    /// @return rate0CumulativeLast The currency0 last cumulative multiplication of rate
+    /// @return rate1CumulativeLast The currency1 last cumulative multiplication of rate
     function getBorrowRateCumulativeLast(PoolStatus memory status)
         external
         view

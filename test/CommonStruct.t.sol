@@ -188,4 +188,29 @@ contract CommonStructTest is Test {
     function testCreateStructsSmall() public {
         createSmallStruct();
     }
+
+    function testMathMax() public pure {
+        uint8 x = type(uint8).max;
+        uint256 a = Math.mulDiv(x, 10, 5);
+        assertEq(a, uint256(x) * 2);
+    }
+
+    function testRatio() public pure {
+        uint256 ratioSize = 10 ** 9;
+        uint256 ratioCumulativeLast = ratioSize;
+        uint256 input = 0;
+        uint256 output = 0;
+        uint256 all = 0;
+        uint256 batchSize = 10000;
+        for (uint256 i = 0; i < 1000; i++) {
+            uint256 ratioLast = ratioSize + i * 1000;
+            uint256 ratioCumulativePre = ratioCumulativeLast;
+            ratioCumulativeLast = ratioCumulativeLast * ratioLast / ratioSize;
+            input += batchSize * ratioSize / ratioCumulativeLast;
+            all = all * ratioCumulativeLast / ratioCumulativePre + batchSize;
+        }
+        output = input * ratioCumulativeLast / ratioSize;
+        console.log("ratioCumulativeLast:%s", ratioCumulativeLast);
+        console.log("all:%s,input:%s,output:%s", all, input, output);
+    }
 }
