@@ -5,9 +5,7 @@ pragma solidity ^0.8.26;
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
-import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
-import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IHooks} from "v4-core/interfaces/IPoolManager.sol";
 import {SafeCast} from "v4-core/libraries/SafeCast.sol";
@@ -31,6 +29,7 @@ import {BalanceStatus} from "./types/BalanceStatus.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams.sol";
 
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
+import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
@@ -70,7 +69,6 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
         uint256 mirrorReserve1
     );
 
-    uint256 public constant ONE_BILLION = 10 ** 9;
     bytes32 constant UPDATE_BALANCE_GUARD_SLOT = 0x885c9ad615c28a45189565668235695fb42940589d40d91c5c875c16cdc1bd4c;
     bytes32 constant BALANCE_0_SLOT = 0x608a02038d3023ed7e79ffc2a87ce7ad8c0bc0c5b839ddbe438db934c7b5e0e2;
     bytes32 constant BALANCE_1_SLOT = 0xba598ef587ec4c4cf493fe15321596d40159e5c3c0cbf449810c8c6894b2e5e1;
@@ -79,6 +77,7 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
 
     IMirrorTokenManager public immutable mirrorTokenManager;
     IMarginLiquidity public immutable marginLiquidity;
+    ILendingPoolManager public lendingPool;
     IHooks public hooks;
     IMarginFees public marginFees;
     address public marginOracle;
@@ -324,8 +323,8 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
         if (statusStore[id].key.currency1 > CurrencyLibrary.ADDRESS_ZERO) revert PairAlreadyExists();
         PoolStatus memory status;
         status.key = key;
-        status.rate0CumulativeLast = ONE_BILLION;
-        status.rate1CumulativeLast = ONE_BILLION;
+        status.rate0CumulativeLast = PerLibrary.ONE_BILLION;
+        status.rate1CumulativeLast = PerLibrary.ONE_BILLION;
         status.blockTimestampLast = uint32(block.timestamp % 2 ** 32);
         statusStore[id] = status;
     }
@@ -534,9 +533,11 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
             (, uint24 marginFee) = marginFees.getPoolFees(address(this), params.poolId);
             // send total token
             (marginWithoutFee, marginFeeAmount) = marginFee.deduct(marginTotal);
-
-            marginCurrency.settle(poolManager, address(this), marginWithoutFee, true);
-            marginCurrency.take(poolManager, _positionManager, marginWithoutFee, false);
+            uint256 marginMirrorCount = mirrorTokenManager.balanceOf(address(this), marginCurrency.toKeyId(status.key));
+            if (marginMirrorCount > 0) {} else {
+                marginCurrency.settle(poolManager, address(this), marginWithoutFee, true);
+                marginCurrency.take(poolManager, _positionManager, marginWithoutFee, false);
+            }
         } else {
             uint24 minMarginLevel = marginFees.minMarginLevel();
             marginWithoutFee = params.marginAmount.mulMillionDiv(minMarginLevel);
@@ -549,8 +550,11 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
             } else {
                 borrowAmount = borrowMaxAmount;
             }
-            borrowCurrency.settle(poolManager, address(this), borrowAmount, true);
-            borrowCurrency.take(poolManager, params.recipient, borrowAmount, false);
+            uint256 borrowMirrorCount = mirrorTokenManager.balanceOf(address(this), borrowCurrency.toKeyId(status.key));
+            if (borrowMirrorCount > 0) {} else {
+                borrowCurrency.settle(poolManager, address(this), borrowAmount, true);
+                borrowCurrency.take(poolManager, params.recipient, borrowAmount, false);
+            }
         }
 
         if (marginFeeAmount > 0) {
