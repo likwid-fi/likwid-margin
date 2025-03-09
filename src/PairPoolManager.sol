@@ -24,7 +24,8 @@ import {LiquidityLevel} from "./libraries/LiquidityLevel.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
-import {MarginParams, ReleaseParams} from "./types/MarginParams.sol";
+import {MarginParams} from "./types/MarginParams.sol";
+import {ReleaseParams} from "./types/ReleaseParams.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {BalanceStatus} from "./types/BalanceStatus.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams.sol";
@@ -519,27 +520,43 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
         (Currency borrowCurrency, Currency marginCurrency) = params.marginForOne
             ? (status.key.currency0, status.key.currency1)
             : (status.key.currency1, status.key.currency0);
-        bool zeroForOne = params.marginForOne;
-        uint256 marginReserves;
-        {
-            uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
-            (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) = marginLiquidity.getSupplies(uPoolId);
-            uint256 marginReserve0 = (_totalSupply - retainSupply0) * status.realReserve0 / _totalSupply;
-            uint256 marginReserve1 = (_totalSupply - retainSupply1) * status.realReserve1 / _totalSupply;
-            marginReserves = params.marginForOne ? marginReserve1 : marginReserve0;
-        }
-        uint256 marginTotal = params.marginAmount * params.leverage;
-        require(marginReserves >= marginTotal, "TOKEN_NOT_ENOUGH");
-        (borrowAmount,,) = _getAmountIn(status, zeroForOne, marginTotal);
-        (, uint24 marginFee) = marginFees.getPoolFees(address(this), params.poolId);
-        // send total token
         uint256 marginFeeAmount;
-        (marginWithoutFee, marginFeeAmount) = marginFee.deduct(marginTotal);
+        if (params.leverage > 0) {
+            uint256 marginReserves;
+            {
+                (uint256 marginReserve0, uint256 marginReserve1) =
+                    marginLiquidity.getFlowReserves(params.poolId, status);
+                marginReserves = params.marginForOne ? marginReserve1 : marginReserve0;
+            }
+            uint256 marginTotal = params.marginAmount * params.leverage;
+            require(marginReserves >= marginTotal, "TOKEN_NOT_ENOUGH");
+            (borrowAmount,,) = _getAmountIn(status, params.marginForOne, marginTotal);
+            (, uint24 marginFee) = marginFees.getPoolFees(address(this), params.poolId);
+            // send total token
+            (marginWithoutFee, marginFeeAmount) = marginFee.deduct(marginTotal);
+
+            marginCurrency.settle(poolManager, address(this), marginWithoutFee, true);
+            marginCurrency.take(poolManager, _positionManager, marginWithoutFee, false);
+        } else {
+            uint24 minMarginLevel = marginFees.minMarginLevel();
+            marginWithoutFee = params.marginAmount.mulMillionDiv(minMarginLevel);
+            (uint256 reserve0, uint256 reserve1) = status.getReserves();
+            (uint256 reserveBorrow, uint256 reserveMargin) =
+                params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+            uint256 borrowMaxAmount = Math.mulDiv(marginWithoutFee, reserveBorrow, reserveMargin);
+            if (params.borrowAmount > 0) {
+                borrowAmount = Math.min(borrowMaxAmount, params.borrowAmount);
+            } else {
+                borrowAmount = borrowMaxAmount;
+            }
+            borrowCurrency.settle(poolManager, address(this), borrowAmount, true);
+            borrowCurrency.take(poolManager, params.recipient, borrowAmount, false);
+        }
+
         if (marginFeeAmount > 0) {
             _updateProtocolFees(marginCurrency, marginFeeAmount);
         }
-        marginCurrency.settle(poolManager, address(this), marginWithoutFee, true);
-        marginCurrency.take(poolManager, _positionManager, marginWithoutFee, false);
+
         // mint mirror token
         mirrorTokenManager.mint(borrowCurrency.toKeyId(status.key), borrowAmount);
         _update(status.key, true);

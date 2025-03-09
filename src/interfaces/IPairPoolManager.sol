@@ -10,7 +10,8 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
 
 import {AddLiquidityParams, RemoveLiquidityParams} from "../types/LiquidityParams.sol";
-import {MarginParams, ReleaseParams} from "../types/MarginParams.sol";
+import {MarginParams} from "../types/MarginParams.sol";
+import {ReleaseParams} from "../types/ReleaseParams.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
 import {IMarginFees} from "../interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "../interfaces/IMarginLiquidity.sol";

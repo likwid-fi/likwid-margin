@@ -5,7 +5,8 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 
-import {MarginParams, ReleaseParams} from "../types/MarginParams.sol";
+import {MarginParams} from "../types/MarginParams.sol";
+import {ReleaseParams} from "../types/ReleaseParams.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
 import {IMarginLiquidity} from "./IMarginLiquidity.sol";
 
@@ -13,6 +14,10 @@ interface IMarginFees {
     /// @notice Get the liquidation margin level
     /// @return liquidationMarginLevel The liquidation margin level
     function liquidationMarginLevel() external view returns (uint24);
+
+    /// @notice Get the min margin level
+    /// @return minMarginLevel The min margin level
+    function minMarginLevel() external view returns (uint24);
 
     /// @notice Get the address of the fee receiver
     /// @return feeTo The address of the fee receiver

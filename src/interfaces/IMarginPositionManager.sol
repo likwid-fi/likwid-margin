@@ -4,7 +4,8 @@ pragma solidity ^0.8.26;
 import {PoolId} from "v4-core/types/PoolId.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {MarginPosition} from "../types/MarginPosition.sol";
-import {MarginParams, ReleaseParams} from "../types/MarginParams.sol";
+import {MarginParams} from "../types/MarginParams.sol";
+import {ReleaseParams} from "../types/ReleaseParams.sol";
 
 interface IMarginPositionManager is IERC721 {
     /// @notice Return the address of the hook contract
