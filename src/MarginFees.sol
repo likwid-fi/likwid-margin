@@ -26,8 +26,6 @@ contract MarginFees is IMarginFees, Owned {
     using FeeLibrary for uint24;
     using PerLibrary for uint256;
 
-    uint256 public constant ONE_MILLION = 10 ** 6;
-    uint256 public constant ONE_BILLION = 10 ** 9;
     uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
 
     uint24 public constant liquidationMarginLevel = 1100000; // 110%
@@ -73,8 +71,8 @@ contract MarginFees is IMarginFees, Owned {
             uint256 timeMul = timeDiff.mulMillionDiv(uint256(dynamicFeeDurationSeconds));
             uint256 feeUp = Math.mulDiv(priceDiff * dynamicFeeUnit * _fee, timeMul, lastPrice1X112).divMillion();
             uint256 dFee = feeUp + _fee;
-            if (dFee >= ONE_MILLION) {
-                _fee = uint24(ONE_MILLION) - 1;
+            if (dFee >= PerLibrary.ONE_MILLION) {
+                _fee = uint24(PerLibrary.ONE_MILLION) - 1;
             } else {
                 _fee = uint24(dFee);
                 if (timeElapsed == 0) {
@@ -98,7 +96,7 @@ contract MarginFees is IMarginFees, Owned {
         if (mirrorReserve == 0) {
             return rate;
         }
-        uint256 useLevel = Math.mulDiv(mirrorReserve, ONE_MILLION, (mirrorReserve + realReserve));
+        uint256 useLevel = Math.mulDiv(mirrorReserve, PerLibrary.ONE_MILLION, (mirrorReserve + realReserve));
         if (useLevel >= rateStatus.useHighLevel) {
             rate += uint256(useLevel - rateStatus.useHighLevel) * rateStatus.mHigh;
             useLevel = rateStatus.useHighLevel;
@@ -115,13 +113,13 @@ contract MarginFees is IMarginFees, Owned {
         view
         returns (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast)
     {
-        uint256 timeElapsed = status.blockTimestampLast.getTimeElapsedMillisecond();
+        uint256 timeElapsed = status.blockTimestampLast.getTimeElapsedMicrosecond();
         uint256 rate0 = getBorrowRateByReserves(status.realReserve0, status.mirrorReserve0);
-        uint256 rate0Last = ONE_BILLION + rate0 * timeElapsed / YEAR_SECONDS;
-        rate0CumulativeLast = status.rate0CumulativeLast * rate0Last / ONE_BILLION;
+        uint256 rate0LastYear = PerLibrary.TRILLION_YEAR_SECONDS + rate0 * timeElapsed;
+        rate0CumulativeLast = Math.mulDiv(status.rate0CumulativeLast, rate0LastYear, PerLibrary.TRILLION_YEAR_SECONDS);
         uint256 rate1 = getBorrowRateByReserves(status.realReserve1, status.mirrorReserve1);
-        uint256 rate1Last = ONE_BILLION + rate1 * timeElapsed / YEAR_SECONDS;
-        rate1CumulativeLast = status.rate1CumulativeLast * rate1Last / ONE_BILLION;
+        uint256 rate1LastYear = PerLibrary.TRILLION_YEAR_SECONDS + rate1 * timeElapsed;
+        rate1CumulativeLast = Math.mulDiv(status.rate1CumulativeLast, rate1LastYear, PerLibrary.TRILLION_YEAR_SECONDS);
     }
 
     /// @inheritdoc IMarginFees

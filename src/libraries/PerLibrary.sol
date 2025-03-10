@@ -5,7 +5,8 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 library PerLibrary {
     uint256 public constant ONE_MILLION = 10 ** 6;
-    uint256 public constant ONE_BILLION = 10 ** 9;
+    uint256 public constant ONE_TRILLION = 10 ** 12;
+    uint256 public constant TRILLION_YEAR_SECONDS = ONE_TRILLION * 365 * 24 * 3600;
 
     function mulMillion(uint256 x) internal pure returns (uint256 y) {
         y = x * ONE_MILLION;

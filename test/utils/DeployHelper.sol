@@ -44,7 +44,7 @@ contract DeployHelper is Test {
     uint160 public constant SQRT_RATIO_1_1 = 79228162514264337593543950336;
     uint256 public constant MINIMUM_LIQUIDITY = 10 ** 3;
     uint256 public constant ONE_MILLION = 10 ** 6;
-    uint256 public constant ONE_BILLION = 10 ** 9;
+    uint256 public constant ONE_TRILLION = 10 ** 12;
     uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
 
     PairPoolManager pairPoolManager;

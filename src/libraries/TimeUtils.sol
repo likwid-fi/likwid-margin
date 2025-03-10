@@ -5,18 +5,18 @@ library TimeUtils {
     function getTimeElapsed(uint32 blockTimestampLast) internal view returns (uint256 timeElapsed) {
         uint32 blockTS = uint32(block.timestamp % 2 ** 32);
         if (blockTimestampLast <= blockTS) {
-            timeElapsed = uint256(blockTS - blockTimestampLast); // MILLION=>BILLON
+            timeElapsed = uint256(blockTS - blockTimestampLast);
         } else {
             timeElapsed = uint256(2 ** 32 - blockTimestampLast + blockTS);
         }
     }
 
-    function getTimeElapsedMillisecond(uint32 blockTimestampLast) internal view returns (uint256 timeElapsed) {
+    function getTimeElapsedMicrosecond(uint32 blockTimestampLast) internal view returns (uint256 timeElapsed) {
         uint32 blockTS = uint32(block.timestamp % 2 ** 32);
         if (blockTimestampLast <= blockTS) {
-            timeElapsed = uint256(blockTS - blockTimestampLast) * 10 ** 3; // MILLION=>BILLON
+            timeElapsed = uint256(blockTS - blockTimestampLast) * 10 ** 6;
         } else {
-            timeElapsed = uint256(2 ** 32 - blockTimestampLast + blockTS) * 10 ** 3;
+            timeElapsed = uint256(2 ** 32 - blockTimestampLast + blockTS) * 10 ** 6;
         }
     }
 }

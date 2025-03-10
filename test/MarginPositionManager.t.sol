@@ -194,8 +194,8 @@ contract MarginPositionManagerTest is DeployHelper {
             position.borrowAmount,
             position.rateCumulativeLast
         );
-        uint256 timeElapsed = (3600 * 10 - 1) * 10 ** 3;
-        uint256 rateLastX = (ONE_BILLION + rate * timeElapsed / YEAR_SECONDS) * rateLast / ONE_BILLION;
+        uint256 timeElapsed = (3600 * 10 - 1) * 10 ** 6;
+        uint256 rateLastX = (ONE_TRILLION + rate * timeElapsed / YEAR_SECONDS) * rateLast / ONE_TRILLION;
         uint256 newRateLast = marginFees.getBorrowRateCumulativeLast(address(pairPoolManager), poolId, false);
         console.log("timeElapsed:%s,rateLastX:%s,newRateLast:%s", timeElapsed, rateLastX, newRateLast);
         uint256 borrowAmountLast = borrowAmount;
@@ -246,9 +246,9 @@ contract MarginPositionManagerTest is DeployHelper {
             });
             (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
             console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
-            timeElapsed = (3600 * 10) * 10 ** 3;
+            timeElapsed = (3600 * 10) * 10 ** 6;
             rateLast = rateLastX;
-            rateLastX = (ONE_BILLION + rate * timeElapsed / YEAR_SECONDS) * rateLast / ONE_BILLION;
+            rateLastX = (ONE_TRILLION + rate * timeElapsed / YEAR_SECONDS) * rateLast / ONE_TRILLION;
             newRateLast = marginFees.getBorrowRateCumulativeLast(address(pairPoolManager), poolId, false);
             console.log("rate:%s,rateLast:%s", rate, rateLast);
             console.log("timeElapsed:%s,rateLastX:%s,newRateLast:%s", timeElapsed, rateLastX, newRateLast);

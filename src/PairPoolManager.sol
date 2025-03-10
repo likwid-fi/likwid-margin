@@ -300,8 +300,8 @@ contract PairPoolManager is IPairPoolManager, BaseBalance, ReentrancyGuardTransi
         if (statusStore[id].key.currency1 > CurrencyLibrary.ADDRESS_ZERO) revert PairAlreadyExists();
         PoolStatus memory status;
         status.key = key;
-        status.rate0CumulativeLast = PerLibrary.ONE_BILLION;
-        status.rate1CumulativeLast = PerLibrary.ONE_BILLION;
+        status.rate0CumulativeLast = PerLibrary.ONE_TRILLION;
+        status.rate1CumulativeLast = PerLibrary.ONE_TRILLION;
         status.blockTimestampLast = uint32(block.timestamp % 2 ** 32);
         statusStore[id] = status;
     }
