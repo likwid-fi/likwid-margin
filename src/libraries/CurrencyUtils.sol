@@ -58,11 +58,12 @@ library CurrencyUtils {
         success = true;
     }
 
-    function checkAmount(Currency currency, uint256 amount) internal returns (bool success) {
+    function checkAmount(Currency currency, uint256 amount) internal returns (uint256) {
         if (currency.isAddressZero()) {
             if (msg.value < amount) revert InsufficientValue();
+            return amount < msg.value ? amount : msg.value;
         }
-        return true;
+        return amount;
     }
 
     function transfer(Currency currency, address payer, address recipient, uint256 amount)

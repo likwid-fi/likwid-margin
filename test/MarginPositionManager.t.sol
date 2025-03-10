@@ -798,6 +798,12 @@ contract MarginPositionManagerTest is DeployHelper {
         marginPositionManager.modify{value: maxAmount}(positionId, -int256(maxAmount));
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
         assertEq(position.marginAmount - maxAmount, newPosition.marginAmount);
+        assertEq(address(marginPositionManager).balance, 0);
+        marginPositionManager.modify{value: maxAmount}(positionId, int256(maxAmount));
+        assertEq(address(marginPositionManager).balance, 0);
+        newPosition = marginPositionManager.getPosition(positionId);
+        assertEq(position.marginAmount, newPosition.marginAmount);
+        console.log("newPosition.marginTotal:%s", newPosition.marginTotal);
     }
 
     function test_hook_dynamic_fee_usdts() public {

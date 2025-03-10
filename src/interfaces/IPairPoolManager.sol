@@ -15,9 +15,12 @@ import {ReleaseParams} from "../types/ReleaseParams.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
 import {IMarginFees} from "../interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "../interfaces/IMarginLiquidity.sol";
+import {ILendingPoolManager} from "../interfaces/ILendingPoolManager.sol";
 
 interface IPairPoolManager is IImmutableState {
     function hooks() external view returns (IHooks hook);
+
+    function lendingPoolManager() external view returns (ILendingPoolManager);
 
     /// @notice Get current margin oracle address
     function marginOracle() external view returns (address);

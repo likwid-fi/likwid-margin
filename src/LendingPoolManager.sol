@@ -38,6 +38,11 @@ contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
         _;
     }
 
+    function transferNative(address to, uint256 amount) internal {
+        (bool success,) = to.call{value: amount}("");
+        require(success, "TRANSFER_FAILED");
+    }
+
     // ******************** ERC6909 INTERNAL ********************
 
     function _mint(address receiver, uint256 id, uint256 amount) internal override {
@@ -149,12 +154,12 @@ contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
         payable
         returns (uint256 lendingAmount)
     {
-        if (currency.checkAmount(amount)) {
-            bytes memory result = poolManager.unlock(
-                abi.encodeCall(this.handleDeposit, (msg.sender, recipient, poolId, currency, amount))
-            );
-            lendingAmount = abi.decode(result, (uint256));
-        }
+        uint256 sendAmount = currency.checkAmount(amount);
+        bytes memory result = poolManager.unlock(
+            abi.encodeCall(this.handleDeposit, (msg.sender, recipient, poolId, currency, sendAmount))
+        );
+        lendingAmount = abi.decode(result, (uint256));
+        if (msg.value > sendAmount) transferNative(msg.sender, msg.value - sendAmount);
     }
 
     function handleDeposit(address sender, address recipient, PoolId poolId, Currency currency, uint256 amount)
