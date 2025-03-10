@@ -3,25 +3,35 @@ pragma solidity ^0.8.26;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import {Currency} from "v4-core/types/Currency.sol";
 // Local
 import {BasePool} from "./base/BasePool.sol";
 import {ERC6909Accrues} from "./base/ERC6909Accrues.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
+import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IERC6909Accrues} from "./interfaces/external/IERC6909Accrues.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
+import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 
 contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
+    using PoolIdLibrary for PoolId;
+    using CurrencyUtils for Currency;
     using PerLibrary for *;
     using UQ112x112 for *;
 
+    IMirrorTokenManager public immutable mirrorTokenManager;
     IPairPoolManager public pairPoolManager;
-    mapping(address => mapping(uint256 => uint256)) public deviationOf;
     mapping(uint256 => uint256) public incrementRatioX112Of;
 
-    constructor(address initialOwner, IPoolManager _manager) BasePool(initialOwner, _manager) {}
+    constructor(address initialOwner, IPoolManager _manager, IMirrorTokenManager _mirrorTokenManager)
+        BasePool(initialOwner, _manager)
+    {
+        mirrorTokenManager = _mirrorTokenManager;
+    }
 
     modifier onlyPairManager() {
         require(address(pairPoolManager) == msg.sender, "UNAUTHORIZED");
@@ -35,7 +45,6 @@ contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
             incrementRatioX112Of[id] = UQ112x112.Q112;
         } else {
             amount = amount.divRatioX112(incrementRatioX112Of[id]);
-            deviationOf[receiver][id] += 1;
         }
         super._mint(address(this), id, amount);
         super._mint(receiver, id, amount);
@@ -43,11 +52,7 @@ contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
 
     function _burn(address sender, uint256 id, uint256 amount) internal override {
         amount = amount.divRatioX112(incrementRatioX112Of[id]);
-        uint256 balance = balanceStore[sender][id];
-        if (amount.isWithinTolerance(balance, deviationOf[sender][id])) {
-            amount = balance;
-            deviationOf[sender][id] = 0;
-        }
+
         super._burn(address(this), id, amount);
         super._burn(sender, id, amount);
     }
@@ -100,7 +105,35 @@ contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
 
     // ******************** USER CALL ********************
 
-    // Deposit and withdraw
+    function deposit(address recipient, PoolId poolId, Currency currency, uint256 amount) external payable {
+        if (currency.checkAmount(amount)) {
+            poolManager.unlock(abi.encodeCall(this.handleDeposit, (msg.sender, recipient, poolId, currency, amount)));
+        }
+    }
+
+    function handleDeposit(address sender, address recipient, PoolId poolId, Currency currency, uint256 amount)
+        external
+        selfOnly
+    {
+        uint256 id = currency.toPoolId(poolId);
+        currency.settle(poolManager, sender, amount, false);
+        currency.take(poolManager, address(this), amount, true);
+        _mint(recipient, id, amount);
+    }
+
+    function withdraw(address recipient, PoolId poolId, Currency currency, uint256 amount) external {
+        poolManager.unlock(abi.encodeCall(this.handleWithdraw, (msg.sender, recipient, poolId, currency, amount)));
+    }
+
+    function handleWithdraw(address sender, address recipient, PoolId poolId, Currency currency, uint256 amount)
+        external
+        selfOnly
+    {
+        uint256 id = currency.toPoolId(poolId);
+        currency.settle(poolManager, address(this), amount, true);
+        currency.take(poolManager, recipient, amount, false);
+        _burn(sender, id, amount);
+    }
 
     // ******************** OWNER CALL ********************
 

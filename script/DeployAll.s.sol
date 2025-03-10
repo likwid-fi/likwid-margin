@@ -8,6 +8,7 @@ import {HookMiner} from "../test/utils/HookMiner.sol";
 import {MarginHook} from "../src/MarginHook.sol";
 import {PairPoolManager} from "../src/PairPoolManager.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
+import {LendingPoolManager} from "../src/LendingPoolManager.sol";
 import {MarginLiquidity} from "../src/MarginLiquidity.sol";
 import {MarginChecker} from "../src/MarginChecker.sol";
 import {MarginOracle} from "../src/MarginOracle.sol";
@@ -20,6 +21,7 @@ contract DeployAllScript is Script {
     address manager = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
     address owner = 0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1;
     MirrorTokenManager mirrorTokenManager;
+    LendingPoolManager lendingPoolManager;
     MarginLiquidity marginLiquidity;
     MarginChecker marginChecker;
     MarginOracle marginOracle;
@@ -41,8 +43,11 @@ contract DeployAllScript is Script {
         console2.log("marginOracle:", address(marginOracle));
         marginFees = new MarginFees(owner);
         console2.log("marginFees:", address(marginFees));
-        pairPoolManager =
-            new PairPoolManager(owner, IPoolManager(manager), mirrorTokenManager, marginLiquidity, marginFees);
+        lendingPoolManager = new LendingPoolManager(owner, IPoolManager(manager), mirrorTokenManager);
+        console2.log("marginFees:", address(marginFees));
+        pairPoolManager = new PairPoolManager(
+            owner, IPoolManager(manager), mirrorTokenManager, lendingPoolManager, marginLiquidity, marginFees
+        );
         console2.log("pairPoolManager", address(pairPoolManager));
         marginPositionManager = new MarginPositionManager(owner, pairPoolManager, marginChecker);
         console2.log("marginPositionManager", address(marginPositionManager));
@@ -70,6 +75,7 @@ contract DeployAllScript is Script {
         pairPoolManager.addPositionManager(address(marginPositionManager));
         pairPoolManager.setMarginOracle(address(marginOracle));
         pairPoolManager.setHooks(MarginHook(hookAddress));
+        lendingPoolManager.setPairPoolManger(pairPoolManager);
         console2.log("hookAddress:", hookAddress);
         marginLiquidity.addPoolManager(address(pairPoolManager));
         mirrorTokenManager.addPoolManger(address(pairPoolManager));

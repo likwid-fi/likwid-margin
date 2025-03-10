@@ -314,7 +314,7 @@ contract MarginPositionManagerTest is DeployHelper {
         assertEq(address(marginPositionManager).balance, position.marginAmount + position.marginTotal);
         uint256 _positionId = marginPositionManager.getPositionId(poolId, false, user);
         assertEq(positionId, _positionId);
-        vm.expectPartialRevert(MarginPositionManager.InsufficientAmount.selector);
+        vm.expectPartialRevert(CurrencyUtils.InsufficientValue.selector);
         (positionId, borrowAmount) = marginPositionManager.margin(params);
     }
 
@@ -339,7 +339,7 @@ contract MarginPositionManagerTest is DeployHelper {
             deadline: block.timestamp + 1000
         });
         payValue = 0.001 ether;
-        vm.expectPartialRevert(MarginPositionManager.InsufficientAmount.selector);
+        vm.expectPartialRevert(CurrencyUtils.InsufficientValue.selector);
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         vm.stopPrank();
     }

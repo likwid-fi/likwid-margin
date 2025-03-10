@@ -76,8 +76,8 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
     bytes32 constant MIRROR_BALANCE_1_SLOT = 0xbdb25f21ec501c2e41736c4e3dd44c1c3781af532b6899c36b3f72d4e003b0ab;
 
     IMirrorTokenManager public immutable mirrorTokenManager;
+    ILendingPoolManager public immutable lendingPoolManager;
     IMarginLiquidity public immutable marginLiquidity;
-    ILendingPoolManager public lendingPool;
     IHooks public hooks;
     IMarginFees public marginFees;
     address public marginOracle;
@@ -90,10 +90,12 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
         address initialOwner,
         IPoolManager _manager,
         IMirrorTokenManager _mirrorTokenManager,
+        ILendingPoolManager _lendingPoolManager,
         IMarginLiquidity _marginLiquidity,
         IMarginFees _marginFees
     ) BasePool(initialOwner, _manager) {
         mirrorTokenManager = _mirrorTokenManager;
+        lendingPoolManager = _lendingPoolManager;
         marginLiquidity = _marginLiquidity;
         marginFees = _marginFees;
     }
@@ -191,9 +193,9 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
         balanceStatus.mirrorBalance1 = mirrorTokenManager.balanceOf(address(this), key.currency1.toKeyId(key));
     }
 
-    function _setBalances(PoolKey memory key) internal {
+    function _setBalances(PoolKey memory key) internal returns (BalanceStatus memory balanceStatus) {
         _callSet();
-        BalanceStatus memory balanceStatus = _getBalances(key);
+        balanceStatus = _getBalances(key);
         BALANCE_0_SLOT.asUint256().tstore(balanceStatus.balance0);
         BALANCE_1_SLOT.asUint256().tstore(balanceStatus.balance1);
         MIRROR_BALANCE_0_SLOT.asUint256().tstore(balanceStatus.mirrorBalance0);
@@ -515,7 +517,7 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
         returns (uint256 marginWithoutFee, uint256 borrowAmount)
     {
         PoolStatus memory status = getStatus(params.poolId);
-        _setBalances(status.key);
+        BalanceStatus memory currentBalance = _setBalances(status.key);
         (Currency borrowCurrency, Currency marginCurrency) = params.marginForOne
             ? (status.key.currency0, status.key.currency1)
             : (status.key.currency1, status.key.currency0);
@@ -533,25 +535,29 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
             (, uint24 marginFee) = marginFees.getPoolFees(address(this), params.poolId);
             // send total token
             (marginWithoutFee, marginFeeAmount) = marginFee.deduct(marginTotal);
-            uint256 marginMirrorCount = mirrorTokenManager.balanceOf(address(this), marginCurrency.toKeyId(status.key));
-            if (marginMirrorCount > 0) {} else {
+            uint256 marginMirrorAmount =
+                params.marginForOne ? currentBalance.mirrorBalance1 : currentBalance.mirrorBalance0;
+            if (marginMirrorAmount > 0) {} else {
                 marginCurrency.settle(poolManager, address(this), marginWithoutFee, true);
                 marginCurrency.take(poolManager, _positionManager, marginWithoutFee, false);
             }
         } else {
-            uint24 minMarginLevel = marginFees.minMarginLevel();
-            marginWithoutFee = params.marginAmount.mulMillionDiv(minMarginLevel);
-            (uint256 reserve0, uint256 reserve1) = status.getReserves();
-            (uint256 reserveBorrow, uint256 reserveMargin) =
-                params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
-            uint256 borrowMaxAmount = Math.mulDiv(marginWithoutFee, reserveBorrow, reserveMargin);
-            if (params.borrowAmount > 0) {
-                borrowAmount = Math.min(borrowMaxAmount, params.borrowAmount);
-            } else {
-                borrowAmount = borrowMaxAmount;
+            {
+                uint24 minMarginLevel = marginFees.minMarginLevel();
+                marginWithoutFee = params.marginAmount.mulMillionDiv(minMarginLevel);
+                (uint256 reserve0, uint256 reserve1) = status.getReserves();
+                (uint256 reserveBorrow, uint256 reserveMargin) =
+                    params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+                uint256 borrowMaxAmount = Math.mulDiv(marginWithoutFee, reserveBorrow, reserveMargin);
+                if (params.borrowAmount > 0) {
+                    borrowAmount = Math.min(borrowMaxAmount, params.borrowAmount);
+                } else {
+                    borrowAmount = borrowMaxAmount;
+                }
             }
-            uint256 borrowMirrorCount = mirrorTokenManager.balanceOf(address(this), borrowCurrency.toKeyId(status.key));
-            if (borrowMirrorCount > 0) {} else {
+            uint256 borrowMirrorAmount =
+                params.marginForOne ? currentBalance.mirrorBalance0 : currentBalance.mirrorBalance1;
+            if (borrowMirrorAmount > 0) {} else {
                 borrowCurrency.settle(poolManager, address(this), borrowAmount, true);
                 borrowCurrency.take(poolManager, params.recipient, borrowAmount, false);
             }
@@ -562,7 +568,7 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
         }
 
         // mint mirror token
-        mirrorTokenManager.mint(borrowCurrency.toKeyId(status.key), borrowAmount);
+        mirrorTokenManager.mint(borrowCurrency.toPoolId(params.poolId), borrowAmount);
         _update(status.key, true);
     }
 
@@ -597,7 +603,7 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
             }
         }
         // burn mirror token
-        mirrorTokenManager.burn(borrowCurrency.toKeyId(status.key), params.repayAmount);
+        mirrorTokenManager.burn(borrowCurrency.toPoolId(params.poolId), params.repayAmount);
         if (interest > 0) {
             interest = _updateProtocolFees(borrowCurrency, interest);
         }

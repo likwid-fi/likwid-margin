@@ -12,7 +12,7 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
 
     mapping(address => mapping(address => bool)) public isOperator;
 
-    mapping(address => mapping(uint256 => uint256)) public balanceStore;
+    mapping(address => mapping(uint256 => uint256)) public balanceOriginal;
 
     mapping(address => mapping(address => mapping(uint256 => uint256))) public allowance;
 
@@ -21,13 +21,13 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
     //////////////////////////////////////////////////////////////*/
 
     function balanceOf(address owner, uint256 id) public view virtual returns (uint256) {
-        return balanceStore[owner][id];
+        return balanceOriginal[owner][id];
     }
 
     function transfer(address receiver, uint256 id, uint256 amount) public virtual returns (bool) {
-        balanceStore[msg.sender][id] -= amount;
+        balanceOriginal[msg.sender][id] -= amount;
 
-        balanceStore[receiver][id] += amount;
+        balanceOriginal[receiver][id] += amount;
 
         emit Transfer(msg.sender, msg.sender, receiver, id, amount);
 
@@ -40,9 +40,9 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
             if (allowed != type(uint256).max) allowance[sender][msg.sender][id] = allowed - amount;
         }
 
-        balanceStore[sender][id] -= amount;
+        balanceOriginal[sender][id] -= amount;
 
-        balanceStore[receiver][id] += amount;
+        balanceOriginal[receiver][id] += amount;
 
         emit Transfer(msg.sender, sender, receiver, id, amount);
 
@@ -79,13 +79,13 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
     //////////////////////////////////////////////////////////////*/
 
     function _mint(address receiver, uint256 id, uint256 amount) internal virtual {
-        balanceStore[receiver][id] += amount;
+        balanceOriginal[receiver][id] += amount;
 
         emit Transfer(msg.sender, address(0), receiver, id, amount);
     }
 
     function _burn(address sender, uint256 id, uint256 amount) internal virtual {
-        balanceStore[sender][id] -= amount;
+        balanceOriginal[sender][id] -= amount;
 
         emit Transfer(msg.sender, sender, address(0), id, amount);
     }

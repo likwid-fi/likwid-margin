@@ -18,7 +18,6 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
     using PerLibrary for *;
 
     mapping(address => bool) public poolManagers;
-    mapping(uint256 => uint256) public deviationOf;
     mapping(uint256 => uint256) private liquidityBlockStore;
     uint24 private maxSliding = 5000; // 0.5%
     uint256 public level2InterestRatioX112 = UQ112x112.Q112;
@@ -53,14 +52,6 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         retainSupply0 += balanceOf(pool, lPoolId);
         lPoolId = uPoolId + LiquidityLevel.ZERO_MARGIN;
         retainSupply1 += balanceOf(pool, lPoolId);
-    }
-
-    function _burn(address sender, uint256 id, uint256 amount) internal override {
-        uint256 balance = balanceOf(sender, id);
-        if (amount.isWithinTolerance(balance, deviationOf[id])) {
-            amount = balance;
-        }
-        super._burn(sender, id, amount);
     }
 
     // ******************** OWNER CALL ********************
@@ -150,8 +141,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         } else if (level == LiquidityLevel.BOTH_MARGIN) {
             liquidity = amount.divRatioX112(level4InterestRatioX112);
         }
-        deviationOf[uPoolId] += 1;
-        deviationOf[levelId] += 1;
+
         unchecked {
             _mint(pool, uPoolId, amount);
             _mint(pool, levelId, amount);

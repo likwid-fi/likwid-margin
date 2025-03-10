@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
+import {Currency} from "v4-core/types/Currency.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 
 import {IERC20} from "../external/openzeppelin-contracts/IERC20.sol";
 import {SafeERC20} from "../external/openzeppelin-contracts/SafeERC20.sol";
 
 library CurrencyUtils {
-    using CurrencyLibrary for Currency;
+    using PoolIdLibrary for PoolId;
     using SafeERC20 for IERC20;
+
+    error InsufficientValue();
 
     /// @notice Settle (pay) a currency to the PoolManager
     /// @param currency Currency to settle
@@ -55,6 +58,13 @@ library CurrencyUtils {
         success = true;
     }
 
+    function checkAmount(Currency currency, uint256 amount) internal returns (bool success) {
+        if (currency.isAddressZero()) {
+            if (msg.value < amount) revert InsufficientValue();
+        }
+        return true;
+    }
+
     function transfer(Currency currency, address payer, address recipient, uint256 amount)
         internal
         returns (bool success)
@@ -72,7 +82,11 @@ library CurrencyUtils {
         }
     }
 
+    function toPoolId(Currency currency, PoolId poolId) internal pure returns (uint256) {
+        return uint256(keccak256(abi.encode(currency, poolId)));
+    }
+
     function toKeyId(Currency currency, PoolKey memory key) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encode(currency, key)));
+        return toPoolId(currency, key.toId());
     }
 }

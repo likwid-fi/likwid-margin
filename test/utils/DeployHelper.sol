@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 // Local
 import {MarginHook} from "../../src/MarginHook.sol";
+import {LendingPoolManager} from "../../src/LendingPoolManager.sol";
 import {PairPoolManager} from "../../src/PairPoolManager.sol";
 import {MirrorTokenManager} from "../../src/MirrorTokenManager.sol";
 import {MarginLiquidity} from "../../src/MarginLiquidity.sol";
@@ -58,6 +59,7 @@ contract DeployHelper is Test {
 
     PoolManager manager;
     MirrorTokenManager mirrorTokenManager;
+    LendingPoolManager lendingPoolManager;
     MarginLiquidity marginLiquidity;
     MarginPositionManager marginPositionManager;
     MarginRouter swapRouter;
@@ -84,7 +86,9 @@ contract DeployHelper is Test {
                 | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
         );
 
-        pairPoolManager = new PairPoolManager(address(this), manager, mirrorTokenManager, marginLiquidity, marginFees);
+        pairPoolManager = new PairPoolManager(
+            address(this), manager, mirrorTokenManager, lendingPoolManager, marginLiquidity, marginFees
+        );
 
         marginLiquidity.addPoolManager(address(pairPoolManager));
         mirrorTokenManager.addPoolManger(address(pairPoolManager));
@@ -132,6 +136,7 @@ contract DeployHelper is Test {
         tokenUSDT.approve(address(marginPositionManager), type(uint256).max);
         pairPoolManager.addPositionManager(address(marginPositionManager));
         pairPoolManager.setMarginOracle(address(marginOracle));
+        lendingPoolManager.setPairPoolManger(pairPoolManager);
         swapRouter = new MarginRouter(address(this), manager, pairPoolManager);
         tokenA.approve(address(swapRouter), type(uint256).max);
         tokenB.approve(address(swapRouter), type(uint256).max);
@@ -141,6 +146,7 @@ contract DeployHelper is Test {
     function deployHookAndRouter() internal {
         manager = new PoolManager(address(this));
         mirrorTokenManager = new MirrorTokenManager(address(this));
+        lendingPoolManager = new LendingPoolManager(address(this), manager, mirrorTokenManager);
         marginFees = new MarginFees(address(this));
         marginLiquidity = new MarginLiquidity(address(this));
         marginOracle = new MarginOracle();
