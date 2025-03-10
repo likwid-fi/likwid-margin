@@ -124,7 +124,7 @@ contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
         lendingAmount = _mintReturn(msg.sender, id, amount);
     }
 
-    function mirrorToReal(PoolId poolId, Currency currency, uint256 amount)
+    function mirrorInRealOut(PoolId poolId, Currency currency, uint256 amount)
         external
         onlyPairManager
         returns (uint256 exchangeAmount)
@@ -155,9 +155,8 @@ contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
         returns (uint256 lendingAmount)
     {
         uint256 sendAmount = currency.checkAmount(amount);
-        bytes memory result = poolManager.unlock(
-            abi.encodeCall(this.handleDeposit, (msg.sender, recipient, poolId, currency, sendAmount))
-        );
+        bytes memory result =
+            poolManager.unlock(abi.encodeCall(this.handleDeposit, (msg.sender, recipient, poolId, currency, amount)));
         lendingAmount = abi.decode(result, (uint256));
         if (msg.value > sendAmount) transferNative(msg.sender, msg.value - sendAmount);
     }

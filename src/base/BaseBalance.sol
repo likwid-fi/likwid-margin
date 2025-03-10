@@ -10,6 +10,7 @@ import {BasePool} from "./BasePool.sol";
 import {BalanceStatus} from "../types/BalanceStatus.sol";
 import {CurrencyUtils} from "../libraries/CurrencyUtils.sol";
 import {TransientSlot} from "../external/openzeppelin-contracts/TransientSlot.sol";
+import {ILendingPoolManager} from "../interfaces/ILendingPoolManager.sol";
 import {IMirrorTokenManager} from "../interfaces/IMirrorTokenManager.sol";
 
 abstract contract BaseBalance is BasePool {
@@ -19,6 +20,7 @@ abstract contract BaseBalance is BasePool {
     error UpdateBalanceGuardErrorCall();
 
     IMirrorTokenManager public immutable mirrorTokenManager;
+    ILendingPoolManager immutable lendingPoolManager;
     mapping(Currency currency => uint256 amount) public protocolFeesAccrued;
 
     bytes32 constant UPDATE_BALANCE_GUARD_SLOT = 0x885c9ad615c28a45189565668235695fb42940589d40d91c5c875c16cdc1bd4c;
@@ -31,10 +33,14 @@ abstract contract BaseBalance is BasePool {
     bytes32 constant LENDING_MIRROR_BALANCE_0_SLOT = 0x4f1feacba32475151e92cfda35651960c8fc483e4629e3379ec7cc99f6d6f5f8;
     bytes32 constant LENDING_MIRROR_BALANCE_1_SLOT = 0xd8208f88c7357fd3d32bb5f64c2ff7bb8aacb281f65c6cf8506ca21370c89aae;
 
-    constructor(address initialOwner, IPoolManager _poolManager, IMirrorTokenManager _mirrorTokenManager)
-        BasePool(initialOwner, _poolManager)
-    {
+    constructor(
+        address initialOwner,
+        IPoolManager _poolManager,
+        IMirrorTokenManager _mirrorTokenManager,
+        ILendingPoolManager _lendingPoolManager
+    ) BasePool(initialOwner, _poolManager) {
         mirrorTokenManager = _mirrorTokenManager;
+        lendingPoolManager = _lendingPoolManager;
     }
 
     function _callSet() internal {
@@ -91,6 +97,13 @@ abstract contract BaseBalance is BasePool {
         }
         balanceStatus.mirrorBalance0 = mirrorTokenManager.balanceOf(address(this), key.currency0.toKeyId(key));
         balanceStatus.mirrorBalance1 = mirrorTokenManager.balanceOf(address(this), key.currency1.toKeyId(key));
+
+        balanceStatus.lendingBalance0 = poolManager.balanceOf(address(lendingPoolManager), key.currency0.toId());
+        balanceStatus.lendingBalance1 = poolManager.balanceOf(address(lendingPoolManager), key.currency1.toId());
+        balanceStatus.lendingMirrorBalance0 =
+            mirrorTokenManager.balanceOf(address(lendingPoolManager), key.currency0.toKeyId(key));
+        balanceStatus.lendingMirrorBalance1 =
+            mirrorTokenManager.balanceOf(address(lendingPoolManager), key.currency1.toKeyId(key));
     }
 
     function _setBalances(PoolKey memory key) internal returns (BalanceStatus memory balanceStatus) {

@@ -6,5 +6,5 @@ import {IERC6909Accrues} from "../interfaces/external/IERC6909Accrues.sol";
 interface IMirrorTokenManager is IERC6909Accrues {
     function mint(uint256 id, uint256 amount) external;
 
-    function burn(uint256 id, uint256 amount) external;
+    function burn(address lendingPool, uint256 id, uint256 amount) external;
 }

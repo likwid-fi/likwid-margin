@@ -11,7 +11,9 @@ interface ILendingPoolManager is IERC6909Accrues {
 
     function mirrorIn(PoolId poolId, Currency currency, uint256 amount) external returns (uint256 lendingAmount);
 
-    function mirrorToReal(PoolId poolId, Currency currency, uint256 amount) external returns (uint256 exchangeAmount);
+    function mirrorInRealOut(PoolId poolId, Currency currency, uint256 amount)
+        external
+        returns (uint256 exchangeAmount);
 
     function realIn(address recipient, PoolId poolId, Currency currency, uint256 amount)
         external

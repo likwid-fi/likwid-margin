@@ -267,6 +267,7 @@ contract MarginPositionManagerTest is DeployHelper {
     function test_hook_margin_native() public {
         address user = address(this);
         PoolId poolId = nativeKey.toId();
+        uint256 cId = CurrencyLibrary.ADDRESS_ZERO.toPoolId(poolId);
         uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
         assertEq(rate, 50000);
         uint256 positionId;
@@ -285,7 +286,10 @@ contract MarginPositionManagerTest is DeployHelper {
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
-        assertEq(address(marginPositionManager).balance, position.marginAmount + position.marginTotal);
+        assertEq(
+            lendingPoolManager.balanceOf(address(marginPositionManager), cId),
+            position.marginAmount + position.marginTotal
+        );
         uint256 _positionId = marginPositionManager.getPositionId(poolId, false, user);
         assertEq(positionId, _positionId);
     }
@@ -384,6 +388,7 @@ contract MarginPositionManagerTest is DeployHelper {
         vm.warp(3600 * 20);
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        console.log("status.mirrorReserve1:%s", status.mirrorReserve1);
         assertEq(status.mirrorReserve1 / 10, position.borrowAmount / 10);
         uint256 userBalance = user.balance;
         uint256 repay = 0.01 ether;
@@ -398,12 +403,6 @@ contract MarginPositionManagerTest is DeployHelper {
         status = pairPoolManager.getStatus(poolId);
         assertEq(status.mirrorReserve1 / 10, newPosition.borrowAmount / 10);
 
-        // (uint112 interest0, uint112 interest1) = marginFees.getInterests(address(pairPoolManager), poolId);
-        // console.log("interest0:%s,interest1:%s", interest0, interest1);
-        // uint256 overAmount = (position.borrowAmount - newPosition.borrowAmount)
-        //     - (position.rawBorrowAmount - newPosition.rawBorrowAmount);
-        // overAmount -= marginFees.getProtocolFeeAmount(overAmount);
-        // assertEq(overAmount / 10, interest1 / 10);
         uint256 pFeeAmount = pairPoolManager.protocolFeesAccrued(nativeKey.currency1);
         console.log("pFeeAmount:%s", pFeeAmount);
         uint256 collectFeeAmount =

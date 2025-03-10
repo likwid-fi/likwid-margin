@@ -20,7 +20,7 @@ import {ILendingPoolManager} from "../interfaces/ILendingPoolManager.sol";
 interface IPairPoolManager is IImmutableState {
     function hooks() external view returns (IHooks hook);
 
-    function lendingPoolManager() external view returns (ILendingPoolManager);
+    function getLendingPoolManager() external view returns (ILendingPoolManager);
 
     /// @notice Get current margin oracle address
     function marginOracle() external view returns (address);

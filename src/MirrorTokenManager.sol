@@ -22,11 +22,28 @@ contract MirrorTokenManager is IMirrorTokenManager, ERC6909Accrues, Owned {
         }
     }
 
-    function burn(uint256 id, uint256 amount) external onlyPoolManager {
+    function burn(address lendingPoolManager, uint256 id, uint256 amount) external onlyPoolManager {
         uint256 balance = balanceOf(msg.sender, id);
-        amount = amount > balance ? balance : amount;
-        unchecked {
-            _burn(msg.sender, id, amount);
+        if (balance >= amount) {
+            unchecked {
+                _burn(msg.sender, id, amount);
+            }
+        } else {
+            if (balance > 0) {
+                unchecked {
+                    _burn(msg.sender, id, balance);
+                }
+                amount -= balance;
+            }
+            if (amount > 0) {
+                balance = balanceOf(lendingPoolManager, id);
+                if (balance > 0) {
+                    amount = amount < balance ? amount : balance;
+                    unchecked {
+                        _burn(lendingPoolManager, id, amount);
+                    }
+                }
+            }
         }
     }
 
