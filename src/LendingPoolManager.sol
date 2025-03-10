@@ -98,27 +98,74 @@ contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
 
     // ******************** POOL CALL ********************
 
+    function _mintReturn(address receiver, uint256 id, uint256 amount) internal returns (uint256) {
+        _mint(receiver, id, amount);
+        uint256 incrementRatioX112 = incrementRatioX112Of[id];
+        return amount.divRatioX112(incrementRatioX112).mulRatioX112(incrementRatioX112);
+    }
+
     function updateInterests(uint256 id, uint256 interest) external onlyPairManager {
         uint256 totalSupply = balanceOf(address(this), id);
         incrementRatioX112Of[id] = incrementRatioX112Of[id].growRatioX112(interest, totalSupply);
     }
 
+    function mirrorIn(PoolId poolId, Currency currency, uint256 amount)
+        external
+        onlyPairManager
+        returns (uint256 lendingAmount)
+    {
+        uint256 id = currency.toPoolId(poolId);
+        mirrorTokenManager.transferFrom(msg.sender, address(this), id, amount);
+        lendingAmount = _mintReturn(msg.sender, id, amount);
+    }
+
+    function mirrorToReal(PoolId poolId, Currency currency, uint256 amount)
+        external
+        onlyPairManager
+        returns (uint256 exchangeAmount)
+    {
+        uint256 id = currency.toId();
+        uint256 balance = poolManager.balanceOf(address(this), id);
+        exchangeAmount = Math.min(balance, amount);
+        if (exchangeAmount > 0) {
+            poolManager.transfer(msg.sender, id, exchangeAmount);
+            mirrorTokenManager.transferFrom(msg.sender, address(this), currency.toPoolId(poolId), exchangeAmount);
+        }
+    }
+
+    function realIn(address recipient, PoolId poolId, Currency currency, uint256 amount)
+        external
+        onlyPairManager
+        returns (uint256 lendingAmount)
+    {
+        poolManager.transferFrom(msg.sender, address(this), currency.toId(), amount);
+        lendingAmount = _mintReturn(recipient, currency.toPoolId(poolId), amount);
+    }
+
     // ******************** USER CALL ********************
 
-    function deposit(address recipient, PoolId poolId, Currency currency, uint256 amount) external payable {
+    function deposit(address recipient, PoolId poolId, Currency currency, uint256 amount)
+        external
+        payable
+        returns (uint256 lendingAmount)
+    {
         if (currency.checkAmount(amount)) {
-            poolManager.unlock(abi.encodeCall(this.handleDeposit, (msg.sender, recipient, poolId, currency, amount)));
+            bytes memory result = poolManager.unlock(
+                abi.encodeCall(this.handleDeposit, (msg.sender, recipient, poolId, currency, amount))
+            );
+            lendingAmount = abi.decode(result, (uint256));
         }
     }
 
     function handleDeposit(address sender, address recipient, PoolId poolId, Currency currency, uint256 amount)
         external
         selfOnly
+        returns (uint256 lendingAmount)
     {
         uint256 id = currency.toPoolId(poolId);
         currency.settle(poolManager, sender, amount, false);
         currency.take(poolManager, address(this), amount, true);
-        _mint(recipient, id, amount);
+        lendingAmount = _mintReturn(recipient, id, amount);
     }
 
     function withdraw(address recipient, PoolId poolId, Currency currency, uint256 amount) external {

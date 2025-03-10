@@ -205,12 +205,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
     function margin(MarginParams memory params) external payable ensure(params.deadline) returns (uint256, uint256) {
         PoolStatus memory _status = pairPoolManager.getStatus(params.poolId);
         Currency marginCurrency = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
-        if (marginCurrency.checkAmount(params.marginAmount)) {
-            bool success = marginCurrency.transfer(msg.sender, address(this), params.marginAmount);
-            if (!success) revert MarginTransferFailed(params.marginAmount);
-        }
+        marginCurrency.checkAmount(params.marginAmount);
         uint256 positionId = _ownerPositionIds[params.poolId][params.marginForOne][params.recipient];
-        params = pairPoolManager.margin(params);
+        params = pairPoolManager.margin{value: msg.value}(msg.sender, params);
         uint256 rateLast = params.marginForOne ? _status.rate0CumulativeLast : _status.rate1CumulativeLast;
         if (params.borrowMaxAmount > 0 && params.borrowAmount > params.borrowMaxAmount) {
             revert InsufficientBorrowReceived();

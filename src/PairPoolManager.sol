@@ -12,7 +12,8 @@ import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
-import {BasePool} from "./base/BasePool.sol";
+import {BaseBalance} from "./base/BaseBalance.sol";
+import {PoolStatus} from "./types/PoolStatus.sol";
 import {TransientSlot} from "./external/openzeppelin-contracts/TransientSlot.sol";
 import {ReentrancyGuardTransient} from "./external/openzeppelin-contracts/ReentrancyGuardTransient.sol";
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
@@ -24,7 +25,6 @@ import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
 import {MarginParams} from "./types/MarginParams.sol";
 import {ReleaseParams} from "./types/ReleaseParams.sol";
-import {PoolStatus} from "./types/PoolStatus.sol";
 import {BalanceStatus} from "./types/BalanceStatus.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams.sol";
 
@@ -35,7 +35,7 @@ import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 
-contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient {
+contract PairPoolManager is IPairPoolManager, BaseBalance, ReentrancyGuardTransient {
     using TransientSlot for *;
     using UQ112x112 for *;
     using SafeCast for uint256;
@@ -45,7 +45,6 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
     using PerLibrary for uint256;
     using CurrencyUtils for Currency;
 
-    error UpdateBalanceGuardErrorCall();
     error InsufficientLiquidityMinted();
     error InsufficientLiquidityBurnt();
     error NotPositionManager();
@@ -69,13 +68,6 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
         uint256 mirrorReserve1
     );
 
-    bytes32 constant UPDATE_BALANCE_GUARD_SLOT = 0x885c9ad615c28a45189565668235695fb42940589d40d91c5c875c16cdc1bd4c;
-    bytes32 constant BALANCE_0_SLOT = 0x608a02038d3023ed7e79ffc2a87ce7ad8c0bc0c5b839ddbe438db934c7b5e0e2;
-    bytes32 constant BALANCE_1_SLOT = 0xba598ef587ec4c4cf493fe15321596d40159e5c3c0cbf449810c8c6894b2e5e1;
-    bytes32 constant MIRROR_BALANCE_0_SLOT = 0x63450183817719ccac1ebea450ccc19412314611d078d8a8cb3ac9a1ef4de386;
-    bytes32 constant MIRROR_BALANCE_1_SLOT = 0xbdb25f21ec501c2e41736c4e3dd44c1c3781af532b6899c36b3f72d4e003b0ab;
-
-    IMirrorTokenManager public immutable mirrorTokenManager;
     ILendingPoolManager public immutable lendingPoolManager;
     IMarginLiquidity public immutable marginLiquidity;
     IHooks public hooks;
@@ -84,7 +76,6 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
 
     mapping(PoolId => PoolStatus) private statusStore;
     mapping(address => bool) private positionManagers;
-    mapping(Currency currency => uint256 amount) public protocolFeesAccrued;
 
     constructor(
         address initialOwner,
@@ -93,11 +84,12 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
         ILendingPoolManager _lendingPoolManager,
         IMarginLiquidity _marginLiquidity,
         IMarginFees _marginFees
-    ) BasePool(initialOwner, _manager) {
+    ) BaseBalance(initialOwner, _manager, _mirrorTokenManager) {
         mirrorTokenManager = _mirrorTokenManager;
         lendingPoolManager = _lendingPoolManager;
         marginLiquidity = _marginLiquidity;
         marginFees = _marginFees;
+        mirrorTokenManager.setOperator(address(lendingPoolManager), true);
     }
 
     modifier ensure(uint256 deadline) {
@@ -149,58 +141,6 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
     }
 
     // ******************** INTERNAL FUNCTIONS ********************
-
-    function _callSet() internal {
-        if (_notCallUpdate()) {
-            revert UpdateBalanceGuardErrorCall();
-        }
-
-        UPDATE_BALANCE_GUARD_SLOT.asBoolean().tstore(true);
-    }
-
-    function _callUpdate() internal {
-        UPDATE_BALANCE_GUARD_SLOT.asBoolean().tstore(false);
-    }
-
-    function _notCallUpdate() internal view returns (bool) {
-        return UPDATE_BALANCE_GUARD_SLOT.asBoolean().tload();
-    }
-
-    function _getBalances() internal view returns (BalanceStatus memory) {
-        uint256 balance0 = BALANCE_0_SLOT.asUint256().tload();
-        uint256 balance1 = BALANCE_1_SLOT.asUint256().tload();
-        uint256 mirrorBalance0 = MIRROR_BALANCE_0_SLOT.asUint256().tload();
-        uint256 mirrorBalance1 = MIRROR_BALANCE_1_SLOT.asUint256().tload();
-        return BalanceStatus(balance0, balance1, mirrorBalance0, mirrorBalance1);
-    }
-
-    function _getBalances(PoolKey memory key) internal view returns (BalanceStatus memory balanceStatus) {
-        uint256 protocolFees0 = protocolFeesAccrued[key.currency0];
-        uint256 protocolFees1 = protocolFeesAccrued[key.currency1];
-        balanceStatus.balance0 = poolManager.balanceOf(address(this), key.currency0.toId());
-        if (balanceStatus.balance0 > protocolFees0) {
-            balanceStatus.balance0 -= protocolFees0;
-        } else {
-            balanceStatus.balance0 = 0;
-        }
-        balanceStatus.balance1 = poolManager.balanceOf(address(this), key.currency1.toId());
-        if (balanceStatus.balance1 > protocolFees1) {
-            balanceStatus.balance1 -= protocolFees1;
-        } else {
-            balanceStatus.balance1 = 0;
-        }
-        balanceStatus.mirrorBalance0 = mirrorTokenManager.balanceOf(address(this), key.currency0.toKeyId(key));
-        balanceStatus.mirrorBalance1 = mirrorTokenManager.balanceOf(address(this), key.currency1.toKeyId(key));
-    }
-
-    function _setBalances(PoolKey memory key) internal returns (BalanceStatus memory balanceStatus) {
-        _callSet();
-        balanceStatus = _getBalances(key);
-        BALANCE_0_SLOT.asUint256().tstore(balanceStatus.balance0);
-        BALANCE_1_SLOT.asUint256().tstore(balanceStatus.balance1);
-        MIRROR_BALANCE_0_SLOT.asUint256().tstore(balanceStatus.mirrorBalance0);
-        MIRROR_BALANCE_1_SLOT.asUint256().tstore(balanceStatus.mirrorBalance1);
-    }
 
     function _updateInterests(PoolStatus storage status, bool inUpdate) internal {
         PoolKey memory key = status.key;
@@ -259,6 +199,14 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
         status.realReserve1 = status.realReserve1.add(afterStatus.balance1).sub(beforeStatus.balance1);
         status.mirrorReserve0 = status.mirrorReserve0.add(afterStatus.mirrorBalance0).sub(beforeStatus.mirrorBalance0);
         status.mirrorReserve1 = status.mirrorReserve1.add(afterStatus.mirrorBalance1).sub(beforeStatus.mirrorBalance1);
+        status.lendingRealReserve0 =
+            status.lendingRealReserve0.add(afterStatus.lendingBalance0).sub(beforeStatus.lendingBalance0);
+        status.lendingRealReserve1 =
+            status.lendingRealReserve1.add(afterStatus.lendingBalance1).sub(beforeStatus.lendingBalance1);
+        status.lendingMirrorReserve0 =
+            status.lendingMirrorReserve0.add(afterStatus.lendingMirrorBalance0).sub(beforeStatus.lendingMirrorBalance0);
+        status.lendingMirrorReserve1 =
+            status.lendingMirrorReserve1.add(afterStatus.lendingMirrorBalance1).sub(beforeStatus.lendingMirrorBalance1);
 
         uint112 _reserve0 = status.reserve0();
         uint112 _reserve1 = status.reserve1();
@@ -505,23 +453,33 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
     // ******************** MARGIN FUNCTIONS ********************
 
     /// @inheritdoc IPairPoolManager
-    function margin(MarginParams memory params) external onlyPosition returns (MarginParams memory) {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (msg.sender, params)));
-        (params.marginTotal, params.borrowAmount) = abi.decode(result, (uint256, uint256));
+    function margin(address sender, MarginParams memory params)
+        external
+        payable
+        onlyPosition
+        returns (MarginParams memory)
+    {
+        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (msg.sender, sender, params)));
+        (params.marginAmount, params.marginTotal, params.borrowAmount) = abi.decode(result, (uint256, uint256, uint256));
         return params;
     }
 
-    function handleMargin(address _positionManager, MarginParams calldata params)
+    function handleMargin(address _positionManager, address sender, MarginParams calldata params)
         external
         selfOnly
-        returns (uint256 marginWithoutFee, uint256 borrowAmount)
+        returns (uint256 marginAmount, uint256 marginWithoutFee, uint256 borrowAmount)
     {
         PoolStatus memory status = getStatus(params.poolId);
-        BalanceStatus memory currentBalance = _setBalances(status.key);
+        _setBalances(status.key);
         (Currency borrowCurrency, Currency marginCurrency) = params.marginForOne
             ? (status.key.currency0, status.key.currency1)
             : (status.key.currency1, status.key.currency0);
         uint256 marginFeeAmount;
+        // transfer marginAmount to lendingPoolManager
+        marginCurrency.settle(poolManager, sender, params.marginAmount, false);
+        marginCurrency.take(poolManager, address(this), params.marginAmount, true);
+        poolManager.approve(address(lendingPoolManager), marginCurrency.toId(), params.marginAmount);
+        marginAmount = lendingPoolManager.realIn(_positionManager, params.poolId, marginCurrency, params.marginAmount);
         if (params.leverage > 0) {
             uint256 marginReserves;
             {
@@ -533,18 +491,15 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
             require(marginReserves >= marginTotal, "TOKEN_NOT_ENOUGH");
             (borrowAmount,,) = _getAmountIn(status, params.marginForOne, marginTotal);
             (, uint24 marginFee) = marginFees.getPoolFees(address(this), params.poolId);
-            // send total token
             (marginWithoutFee, marginFeeAmount) = marginFee.deduct(marginTotal);
-            uint256 marginMirrorAmount =
-                params.marginForOne ? currentBalance.mirrorBalance1 : currentBalance.mirrorBalance0;
-            if (marginMirrorAmount > 0) {} else {
-                marginCurrency.settle(poolManager, address(this), marginWithoutFee, true);
-                marginCurrency.take(poolManager, _positionManager, marginWithoutFee, false);
-            }
+            // transfer marginTotal to lendingPoolManager
+            poolManager.approve(address(lendingPoolManager), marginCurrency.toId(), marginWithoutFee);
+            marginWithoutFee =
+                lendingPoolManager.realIn(_positionManager, params.poolId, marginCurrency, marginWithoutFee);
         } else {
             {
                 uint24 minMarginLevel = marginFees.minMarginLevel();
-                marginWithoutFee = params.marginAmount.mulMillionDiv(minMarginLevel);
+                marginWithoutFee = marginAmount.mulMillionDiv(minMarginLevel);
                 (uint256 reserve0, uint256 reserve1) = status.getReserves();
                 (uint256 reserveBorrow, uint256 reserveMargin) =
                     params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
@@ -555,12 +510,8 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
                     borrowAmount = borrowMaxAmount;
                 }
             }
-            uint256 borrowMirrorAmount =
-                params.marginForOne ? currentBalance.mirrorBalance0 : currentBalance.mirrorBalance1;
-            if (borrowMirrorAmount > 0) {} else {
-                borrowCurrency.settle(poolManager, address(this), borrowAmount, true);
-                borrowCurrency.take(poolManager, params.recipient, borrowAmount, false);
-            }
+            // transfer borrowAmount to lendingPoolManager
+            borrowAmount = lendingPoolManager.realIn(_positionManager, params.poolId, borrowCurrency, borrowAmount);
         }
 
         if (marginFeeAmount > 0) {
@@ -569,6 +520,15 @@ contract PairPoolManager is IPairPoolManager, BasePool, ReentrancyGuardTransient
 
         // mint mirror token
         mirrorTokenManager.mint(borrowCurrency.toPoolId(params.poolId), borrowAmount);
+        {
+            BalanceStatus memory balanceStatus = _getBalances(status.key);
+            if (balanceStatus.mirrorBalance0 > 0) {
+                lendingPoolManager.mirrorToReal(params.poolId, status.key.currency0, balanceStatus.mirrorBalance0);
+            }
+            if (balanceStatus.mirrorBalance1 > 0) {
+                lendingPoolManager.mirrorToReal(params.poolId, status.key.currency1, balanceStatus.mirrorBalance1);
+            }
+        }
         _update(status.key, true);
     }
 

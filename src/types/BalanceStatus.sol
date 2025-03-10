@@ -11,4 +11,12 @@ struct BalanceStatus {
     uint256 mirrorBalance0;
     /// @notice The mirror balance of token1 in the pool.
     uint256 mirrorBalance1;
+    /// @notice The balance of token0 in the lending pool.
+    uint256 lendingBalance0;
+    /// @notice The balance of token1 in the lending pool.
+    uint256 lendingBalance1;
+    /// @notice The mirror balance of token0 in the lending pool.
+    uint256 lendingMirrorBalance0;
+    /// @notice The mirror balance of token1 in the lending pool.
+    uint256 lendingMirrorBalance1;
 }

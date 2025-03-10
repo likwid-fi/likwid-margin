@@ -205,7 +205,7 @@ contract BorrowPositionManager is IBorrowPositionManager, ERC721, Owned {
             recipient: bParams.recipient,
             deadline: bParams.deadline
         });
-        params = hook.margin(params);
+        params = hook.margin{value: msg.value}(msg.sender, params);
         uint256 rateLast = params.marginForOne ? _status.rate0CumulativeLast : _status.rate1CumulativeLast;
         if (params.borrowMaxAmount > 0 && params.borrowAmount > params.borrowMaxAmount) {
             revert InsufficientBorrowReceived();

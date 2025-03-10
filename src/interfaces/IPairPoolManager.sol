@@ -85,9 +85,10 @@ interface IPairPoolManager is IImmutableState {
         returns (uint256 amount0, uint256 amount1);
 
     /// @notice Margin
+    /// @param sender The address of sender
     /// @param params The parameters for the margin hook
     /// @return The updated parameters for the margin hook
-    function margin(MarginParams memory params) external returns (MarginParams memory);
+    function margin(address sender, MarginParams memory params) external payable returns (MarginParams memory);
 
     /// @notice Release
     /// @param params The parameters for the release hook

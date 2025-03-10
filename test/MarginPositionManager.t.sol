@@ -293,6 +293,7 @@ contract MarginPositionManagerTest is DeployHelper {
     function testMarginNative() public {
         address user = address(this);
         PoolId poolId = nativeKey.toId();
+        uint256 currencyPoolId = CurrencyLibrary.ADDRESS_ZERO.toPoolId(poolId);
         uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
         assertEq(rate, 50000);
         uint256 positionId;
@@ -311,7 +312,10 @@ contract MarginPositionManagerTest is DeployHelper {
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
-        assertEq(address(marginPositionManager).balance, position.marginAmount + position.marginTotal);
+        assertEq(
+            lendingPoolManager.balanceOf(address(marginPositionManager), currencyPoolId),
+            position.marginAmount + position.marginTotal
+        );
         uint256 _positionId = marginPositionManager.getPositionId(poolId, false, user);
         assertEq(positionId, _positionId);
         vm.expectPartialRevert(CurrencyUtils.InsufficientValue.selector);
