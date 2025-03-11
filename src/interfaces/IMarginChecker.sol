@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 import {PoolId} from "v4-core/types/PoolId.sol";
 import {MarginPosition, MarginPositionVo} from "../types/MarginPosition.sol";
 import {BurnParams} from "../types/BurnParams.sol";
-import {BorrowPosition, BorrowPositionVo} from "../types/BorrowPosition.sol";
 
 interface IMarginChecker {
     /// @notice Get the liquidation margin level
@@ -103,16 +102,6 @@ interface IMarginChecker {
         returns (bool liquidated, uint256 borrowAmount);
 
     /// @notice Check if the position is liquidated
-    /// @param _position The borrow position to check
-    /// @param pool The pool address
-    /// @return liquidated  If the position is liquidated
-    /// @return borrowAmount  The borrow amount of the position
-    function checkLiquidate(BorrowPosition memory _position, address pool)
-        external
-        view
-        returns (bool liquidated, uint256 borrowAmount);
-
-    /// @notice Check if the position is liquidated
     /// @param manager The position manager address
     /// @param positionIds The position ids
     /// @return liquidatedList The liquidated list
@@ -122,16 +111,6 @@ interface IMarginChecker {
         view
         returns (bool[] memory liquidatedList, uint256[] memory borrowAmountList);
 
-    /// @notice Check if the borrow position is liquidated
-    /// @param manager The borrow position manager address
-    /// @param positionId The position id
-    /// @return liquidated  If the position is liquidated
-    /// @return borrowAmount  The borrow amount of the position
-    function checkBorrowLiquidate(address manager, uint256 positionId)
-        external
-        view
-        returns (bool liquidated, uint256 borrowAmount);
-
     /// @notice Check if the position is liquidated
     /// @param poolId The pool id
     /// @param marginForOne If the margin is for one
@@ -140,18 +119,6 @@ interface IMarginChecker {
     /// @return liquidatedList  The liquidated list
     /// @return borrowAmountList  The borrow amount list
     function checkLiquidate(PoolId poolId, bool marginForOne, address pool, MarginPosition[] memory inPositions)
-        external
-        view
-        returns (bool[] memory liquidatedList, uint256[] memory borrowAmountList);
-
-    /// @notice Check if the position is liquidated
-    /// @param poolId The pool id
-    /// @param marginForOne If the margin is for one
-    /// @param pool The pool address
-    /// @param inPositions The input positions
-    /// @return liquidatedList  The liquidated list
-    /// @return borrowAmountList  The borrow amount list
-    function checkLiquidate(PoolId poolId, bool marginForOne, address pool, BorrowPosition[] memory inPositions)
         external
         view
         returns (bool[] memory liquidatedList, uint256[] memory borrowAmountList);

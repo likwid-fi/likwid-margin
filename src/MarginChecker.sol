@@ -11,13 +11,11 @@ import {PriceMath} from "./libraries/PriceMath.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {MarginPosition, MarginPositionVo} from "./types/MarginPosition.sol";
-import {BorrowPosition, BorrowPositionVo} from "./types/BorrowPosition.sol";
 import {BurnParams} from "./types/BurnParams.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginChecker} from "./interfaces/IMarginChecker.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
-import {IBorrowPositionManager} from "./interfaces/IBorrowPositionManager.sol";
 
 contract MarginChecker is IMarginChecker, Owned {
     using UQ112x112 for *;
@@ -189,27 +187,6 @@ contract MarginChecker is IMarginChecker, Owned {
         }
     }
 
-    function checkLiquidate(BorrowPosition memory _position, address pool)
-        public
-        view
-        returns (bool liquidated, uint256 borrowAmount)
-    {
-        if (_position.borrowAmount > 0) {
-            IPairPoolManager poolManager = IPairPoolManager(pool);
-            borrowAmount = uint256(_position.borrowAmount);
-            if (_position.rateCumulativeLast > 0) {
-                uint256 rateLast =
-                    poolManager.marginFees().getBorrowRateCumulativeLast(pool, _position.poolId, _position.marginForOne);
-                borrowAmount = borrowAmount * rateLast / _position.rateCumulativeLast;
-            }
-            (uint256 reserveBorrow, uint256 reserveMargin) = getReserves(_position.poolId, _position.marginForOne, pool);
-            uint256 numerator = borrowAmount * reserveMargin;
-            uint256 denominator = reserveBorrow + borrowAmount;
-            uint256 debtAmount = (numerator / denominator) + 1;
-            liquidated = _position.marginAmount < debtAmount * liquidationMarginLevel / ONE_MILLION;
-        }
-    }
-
     /// @inheritdoc IMarginChecker
     function checkLiquidate(address manager, uint256[] calldata positionIds)
         external
@@ -222,17 +199,6 @@ contract MarginChecker is IMarginChecker, Owned {
             uint256 positionId = positionIds[i];
             (liquidatedList[i], borrowAmountList[i]) = checkLiquidate(manager, positionId);
         }
-    }
-
-    /// @inheritdoc IMarginChecker
-    function checkBorrowLiquidate(address manager, uint256 positionId)
-        public
-        view
-        returns (bool liquidated, uint256 borrowAmount)
-    {
-        IBorrowPositionManager positionManager = IBorrowPositionManager(manager);
-        BorrowPosition memory _position = positionManager.getPosition(positionId);
-        return checkLiquidate(_position, positionManager.getPairPool());
     }
 
     /// @inheritdoc IMarginChecker
@@ -260,35 +226,6 @@ contract MarginChecker is IMarginChecker, Owned {
                     uint256 debtAmount = reserveMargin * borrowAmount / reserveBorrow;
                     uint256 liquidatedAmount = debtAmount.mulDivMillion(liquidationMarginLevel);
                     liquidatedList[i] = assetAmount < liquidatedAmount;
-                    borrowAmountList[i] = borrowAmount;
-                }
-            }
-        }
-    }
-
-    function checkLiquidate(PoolId poolId, bool marginForOne, address pool, BorrowPosition[] memory inPositions)
-        external
-        view
-        returns (bool[] memory liquidatedList, uint256[] memory borrowAmountList)
-    {
-        IPairPoolManager poolManager = IPairPoolManager(pool);
-        (uint256 reserveBorrow, uint256 reserveMargin) = getReserves(poolId, marginForOne, pool);
-        uint256 rateLast = poolManager.marginFees().getBorrowRateCumulativeLast(pool, poolId, marginForOne);
-        bytes32 bytes32PoolId = PoolId.unwrap(poolId);
-        liquidatedList = new bool[](inPositions.length);
-        borrowAmountList = new uint256[](inPositions.length);
-        for (uint256 i = 0; i < inPositions.length; i++) {
-            BorrowPosition memory _position = inPositions[i];
-            if (PoolId.unwrap(_position.poolId) == bytes32PoolId && _position.marginForOne == marginForOne) {
-                if (_position.borrowAmount > 0) {
-                    uint256 borrowAmount = uint256(_position.borrowAmount);
-                    if (_position.rateCumulativeLast > 0) {
-                        borrowAmount = borrowAmount * rateLast / _position.rateCumulativeLast;
-                    }
-                    uint256 numerator = borrowAmount * reserveMargin;
-                    uint256 denominator = reserveBorrow + borrowAmount;
-                    uint256 debtAmount = (numerator / denominator) + 1;
-                    liquidatedList[i] = _position.marginAmount < debtAmount.mulDivMillion(liquidationMarginLevel);
                     borrowAmountList[i] = borrowAmount;
                 }
             }

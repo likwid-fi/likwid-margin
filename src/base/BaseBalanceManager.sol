@@ -6,14 +6,14 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {ImmutableState} from "v4-periphery/src/base/ImmutableState.sol";
 
-import {BasePool} from "./BasePool.sol";
+import {BasePoolManager} from "./BasePoolManager.sol";
 import {BalanceStatus} from "../types/BalanceStatus.sol";
 import {CurrencyUtils} from "../libraries/CurrencyUtils.sol";
 import {TransientSlot} from "../external/openzeppelin-contracts/TransientSlot.sol";
 import {ILendingPoolManager} from "../interfaces/ILendingPoolManager.sol";
 import {IMirrorTokenManager} from "../interfaces/IMirrorTokenManager.sol";
 
-abstract contract BaseBalance is BasePool {
+abstract contract BaseBalanceManager is BasePoolManager {
     using TransientSlot for *;
     using CurrencyUtils for *;
 
@@ -38,7 +38,7 @@ abstract contract BaseBalance is BasePool {
         IPoolManager _poolManager,
         IMirrorTokenManager _mirrorTokenManager,
         ILendingPoolManager _lendingPoolManager
-    ) BasePool(initialOwner, _poolManager) {
+    ) BasePoolManager(initialOwner, _poolManager) {
         mirrorTokenManager = _mirrorTokenManager;
         lendingPoolManager = _lendingPoolManager;
     }

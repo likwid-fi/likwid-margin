@@ -12,7 +12,7 @@ import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
-import {BaseBalance} from "./base/BaseBalance.sol";
+import {BaseBalanceManager} from "./base/BaseBalanceManager.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {TransientSlot} from "./external/openzeppelin-contracts/TransientSlot.sol";
 import {ReentrancyGuardTransient} from "./external/openzeppelin-contracts/ReentrancyGuardTransient.sol";
@@ -35,7 +35,7 @@ import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 
-contract PairPoolManager is IPairPoolManager, BaseBalance, ReentrancyGuardTransient {
+contract PairPoolManager is IPairPoolManager, BaseBalanceManager, ReentrancyGuardTransient {
     using TransientSlot for *;
     using UQ112x112 for *;
     using SafeCast for uint256;
@@ -83,7 +83,7 @@ contract PairPoolManager is IPairPoolManager, BaseBalance, ReentrancyGuardTransi
         ILendingPoolManager _lendingPoolManager,
         IMarginLiquidity _marginLiquidity,
         IMarginFees _marginFees
-    ) BaseBalance(initialOwner, _manager, _mirrorTokenManager, _lendingPoolManager) {
+    ) BaseBalanceManager(initialOwner, _manager, _mirrorTokenManager, _lendingPoolManager) {
         mirrorTokenManager = _mirrorTokenManager;
         marginLiquidity = _marginLiquidity;
         marginFees = _marginFees;

@@ -7,7 +7,7 @@ import {SafeCallback} from "v4-periphery/src/base/SafeCallback.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 
-abstract contract BasePool is SafeCallback, Owned {
+abstract contract BasePoolManager is SafeCallback, Owned {
     error NotSelf();
     error LockFailure();
 

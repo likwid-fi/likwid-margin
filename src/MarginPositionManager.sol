@@ -9,6 +9,7 @@ import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 // Local
+import {BasePositionManager} from "./base/BasePositionManager.sol";
 import {ReentrancyGuardTransient} from "./external/openzeppelin-contracts/ReentrancyGuardTransient.sol";
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
@@ -27,7 +28,7 @@ import {TimeUtils} from "./libraries/TimeUtils.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 
-contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, ReentrancyGuardTransient {
+contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
     using CurrencyLibrary for Currency;
     using CurrencyUtils for Currency;
     using UQ112x112 for *;
@@ -88,17 +89,12 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         LIQUIDATE
     }
 
-    uint256 private _nextId = 1;
-    IPairPoolManager public immutable pairPoolManager;
-    ILendingPoolManager public immutable lendingPoolManager;
-    IMarginChecker public checker;
-
     mapping(uint256 => MarginPosition) private _positions;
-    mapping(PoolId => mapping(bool => mapping(address => uint256))) private _ownerPositionIds;
+    mapping(PoolId => mapping(bool => mapping(address => uint256))) private _marginPositionIds;
+    mapping(PoolId => mapping(bool => mapping(address => uint256))) private _borrowPositionIds;
 
     constructor(address initialOwner, IPairPoolManager _pairPoolManager, IMarginChecker _checker)
-        ERC721("LIKWIDMarginPositionManager", "LMPM")
-        Owned(initialOwner)
+        BasePositionManager("LIKWIDMarginPositionManager", "LMPM", initialOwner, _pairPoolManager, _checker)
     {
         pairPoolManager = _pairPoolManager;
         lendingPoolManager = _pairPoolManager.getLendingPoolManager();
@@ -109,7 +105,11 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         // _burn(positionId);
         MarginPosition memory _position = _positions[positionId];
         require(_position.rateCumulativeLast > 0, "ALREADY_BURNT");
-        delete _ownerPositionIds[_position.poolId][_position.marginForOne][ownerOf(positionId)];
+        if (_position.marginTotal == 0) {
+            delete _borrowPositionIds[_position.poolId][_position.marginForOne][ownerOf(positionId)];
+        } else {
+            delete _marginPositionIds[_position.poolId][_position.marginForOne][ownerOf(positionId)];
+        }
         delete _positions[positionId];
         emit Burn(_position.poolId, msg.sender, positionId, uint8(burnType));
     }
@@ -117,14 +117,15 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
     function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
         address from = super._update(to, tokenId, auth);
         MarginPosition memory _position = _positions[tokenId];
-        delete _ownerPositionIds[_position.poolId][_position.marginForOne][from];
-        _ownerPositionIds[_position.poolId][_position.marginForOne][to] = tokenId;
-        return from;
-    }
+        if (_position.marginTotal == 0) {
+            delete _borrowPositionIds[_position.poolId][_position.marginForOne][from];
+            _borrowPositionIds[_position.poolId][_position.marginForOne][to] = tokenId;
+        } else {
+            delete _marginPositionIds[_position.poolId][_position.marginForOne][from];
+            _marginPositionIds[_position.poolId][_position.marginForOne][to] = tokenId;
+        }
 
-    modifier ensure(uint256 deadline) {
-        require(deadline >= block.timestamp, "EXPIRED");
-        _;
+        return from;
     }
 
     /// @inheritdoc IMarginPositionManager
@@ -152,20 +153,20 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         }
     }
 
-    function getPositionId(PoolId poolId, bool marginForOne, address owner)
+    function getMarginPositionId(PoolId poolId, bool marginForOne, address owner)
         external
         view
         returns (uint256 _positionId)
     {
-        _positionId = _ownerPositionIds[poolId][marginForOne][owner];
+        _positionId = _marginPositionIds[poolId][marginForOne][owner];
     }
 
-    function _updatePosition(MarginPosition storage _position, PoolStatus memory _status)
-        internal
-        returns (uint256 rateCumulativeLast)
+    function getBorrowPositionId(PoolId poolId, bool marginForOne, address owner)
+        external
+        view
+        returns (uint256 _positionId)
     {
-        rateCumulativeLast = _position.marginForOne ? _status.rate0CumulativeLast : _status.rate1CumulativeLast;
-        _position.update(rateCumulativeLast);
+        _positionId = _marginPositionIds[poolId][marginForOne][owner];
     }
 
     /// @inheritdoc IMarginPositionManager
@@ -173,7 +174,13 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         PoolStatus memory _status = pairPoolManager.getStatus(params.poolId);
         Currency marginCurrency = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
         uint256 sendValue = marginCurrency.checkAmount(params.marginAmount);
-        uint256 positionId = _ownerPositionIds[params.poolId][params.marginForOne][params.recipient];
+        uint256 positionId;
+        bool isMargin = params.leverage > 0;
+        if (isMargin) {
+            positionId = _marginPositionIds[params.poolId][params.marginForOne][params.recipient];
+        } else {
+            positionId = _borrowPositionIds[params.poolId][params.marginForOne][params.recipient];
+        }
         // call margin
         params.minMarginLevel = checker.minMarginLevel();
         params = pairPoolManager.margin{value: sendValue}(msg.sender, params);
@@ -182,7 +189,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         }
         if (!_checkMinMarginLevel(params, _status)) revert InsufficientAmount(params.marginAmount);
         if (positionId == 0) {
-            _mint(params.recipient, (positionId = _nextId++));
+            _mint(params.recipient, (positionId = nextId++));
             emit Mint(params.poolId, msg.sender, params.recipient, positionId);
             uint256 rateCumulativeLast = params.marginForOne ? _status.rate0CumulativeLast : _status.rate1CumulativeLast;
             MarginPosition memory _position = MarginPosition({
@@ -196,7 +203,11 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             });
             (bool liquidated,) = checker.checkLiquidate(_position, address(pairPoolManager));
             if (liquidated) revert PositionLiquidated();
-            _ownerPositionIds[params.poolId][params.marginForOne][params.recipient] = positionId;
+            if (isMargin) {
+                _marginPositionIds[params.poolId][params.marginForOne][params.recipient] = positionId;
+            } else {
+                _borrowPositionIds[params.poolId][params.marginForOne][params.recipient] = positionId;
+            }
             _positions[positionId] = _position;
         } else {
             require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
@@ -549,16 +560,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         );
     }
 
-    // ******************** OWNER CALL ********************
-    function setMarginChecker(address _checker) external onlyOwner {
-        checker = IMarginChecker(_checker);
-    }
-
     // ******************** INTERNAL CALL ********************
-    function transferNative(address to, uint256 amount) internal {
-        (bool success,) = to.call{value: amount}("");
-        require(success, "TRANSFER_FAILED");
-    }
 
     function _getPosition(uint256 positionId) internal view returns (MarginPosition memory _position) {
         _position = _positions[positionId];
@@ -569,6 +571,14 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             _position.borrowAmount = _position.borrowAmount.increaseInterestCeil(_position.rateCumulativeLast, rateLast);
             _position.rateCumulativeLast = rateLast;
         }
+    }
+
+    function _updatePosition(MarginPosition storage _position, PoolStatus memory _status)
+        internal
+        returns (uint256 rateCumulativeLast)
+    {
+        rateCumulativeLast = _position.marginForOne ? _status.rate0CumulativeLast : _status.rate1CumulativeLast;
+        _position.update(rateCumulativeLast);
     }
 
     function _estimatePNL(PoolStatus memory _status, MarginPosition memory _position, uint256 closeMillionth)
@@ -585,18 +595,5 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         uint256 releaseTotal = uint256(_position.marginTotal).mulDivMillion(closeMillionth);
         uint256 releaseTotalReal = lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, releaseTotal);
         pnlAmount = int256(releaseTotalReal) - int256(releaseAmount);
-    }
-
-    function _checkMinMarginLevel(MarginParams memory params, PoolStatus memory _status)
-        internal
-        view
-        returns (bool valid)
-    {
-        (uint256 reserve0, uint256 reserve1) =
-            (_status.realReserve0 + _status.mirrorReserve0, _status.realReserve1 + _status.mirrorReserve1);
-        (uint256 reserveBorrow, uint256 reserveMargin) =
-            params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
-        uint256 debtAmount = reserveMargin * params.borrowAmount / reserveBorrow;
-        valid = params.marginAmount + params.marginTotal >= debtAmount.mulDivMillion(checker.minMarginLevel());
     }
 }

@@ -6,7 +6,7 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 // Local
-import {BasePool} from "./base/BasePool.sol";
+import {BasePoolManager} from "./base/BasePoolManager.sol";
 import {ERC6909Accrues} from "./base/ERC6909Accrues.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
@@ -17,7 +17,7 @@ import {IERC6909Accrues} from "./interfaces/external/IERC6909Accrues.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 
-contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
+contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolManager {
     using PoolIdLibrary for PoolId;
     using CurrencyUtils for Currency;
     using PerLibrary for *;
@@ -28,7 +28,7 @@ contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
     mapping(uint256 => uint256) public incrementRatioX112Of;
 
     constructor(address initialOwner, IPoolManager _manager, IMirrorTokenManager _mirrorTokenManager)
-        BasePool(initialOwner, _manager)
+        BasePoolManager(initialOwner, _manager)
     {
         mirrorTokenManager = _mirrorTokenManager;
     }
