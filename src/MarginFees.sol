@@ -26,8 +26,6 @@ contract MarginFees is IMarginFees, Owned {
     using FeeLibrary for uint24;
     using PerLibrary for uint256;
 
-    uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
-
     uint24 public constant liquidationMarginLevel = 1100000; // 110%
     uint24 public minMarginLevel = 1170000; // 117%
     uint24 public marginFee = 3000; // 0.3%
@@ -114,10 +112,10 @@ contract MarginFees is IMarginFees, Owned {
         returns (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast)
     {
         uint256 timeElapsed = status.blockTimestampLast.getTimeElapsedMicrosecond();
-        uint256 rate0 = getBorrowRateByReserves(status.realReserve0, status.mirrorReserve0);
+        uint256 rate0 = getBorrowRateByReserves(status.totalRealReserve0(), status.totalMirrorReserve0());
         uint256 rate0LastYear = PerLibrary.TRILLION_YEAR_SECONDS + rate0 * timeElapsed;
         rate0CumulativeLast = Math.mulDiv(status.rate0CumulativeLast, rate0LastYear, PerLibrary.TRILLION_YEAR_SECONDS);
-        uint256 rate1 = getBorrowRateByReserves(status.realReserve1, status.mirrorReserve1);
+        uint256 rate1 = getBorrowRateByReserves(status.totalRealReserve1(), status.totalMirrorReserve1());
         uint256 rate1LastYear = PerLibrary.TRILLION_YEAR_SECONDS + rate1 * timeElapsed;
         rate1CumulativeLast = Math.mulDiv(status.rate1CumulativeLast, rate1LastYear, PerLibrary.TRILLION_YEAR_SECONDS);
     }
@@ -134,8 +132,8 @@ contract MarginFees is IMarginFees, Owned {
 
     /// @inheritdoc IMarginFees
     function getBorrowRate(PoolStatus memory status, bool marginForOne) public view returns (uint256) {
-        uint256 realReserve = marginForOne ? status.realReserve0 : status.realReserve1;
-        uint256 mirrorReserve = marginForOne ? status.mirrorReserve0 : status.mirrorReserve1;
+        uint256 realReserve = marginForOne ? status.totalRealReserve0() : status.totalRealReserve1();
+        uint256 mirrorReserve = marginForOne ? status.totalMirrorReserve0() : status.totalMirrorReserve1();
         return getBorrowRateByReserves(realReserve, mirrorReserve);
     }
 

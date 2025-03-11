@@ -7,6 +7,11 @@ import {PoolId} from "v4-core/types/PoolId.sol";
 import {IERC6909Accrues} from "../interfaces/external/IERC6909Accrues.sol";
 
 interface ILendingPoolManager is IERC6909Accrues {
+    function computeRealAmount(PoolId poolId, Currency currency, uint256 originalAmount)
+        external
+        view
+        returns (uint256 amount);
+
     function updateInterests(uint256 id, uint256 interest) external;
 
     function mirrorIn(PoolId poolId, Currency currency, uint256 amount) external returns (uint256 lendingAmount);
@@ -19,10 +24,14 @@ interface ILendingPoolManager is IERC6909Accrues {
         external
         returns (uint256 lendingAmount);
 
+    function realOut(address sender, PoolId poolId, Currency currency, uint256 amount) external;
+
     function deposit(address recipient, PoolId poolId, Currency currency, uint256 amount)
         external
         payable
         returns (uint256 lendingAmount);
 
     function withdraw(address recipient, PoolId poolId, Currency currency, uint256 amount) external;
+
+    function withdrawOriginal(address recipient, PoolId poolId, Currency currency, uint256 originalAmount) external;
 }

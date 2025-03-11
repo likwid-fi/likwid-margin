@@ -57,6 +57,22 @@ library PoolStatusLibrary {
         return status.realReserve1 + status.mirrorReserve1;
     }
 
+    function totalRealReserve0(PoolStatus memory status) internal pure returns (uint112) {
+        return status.realReserve0 + status.lendingRealReserve0;
+    }
+
+    function totalRealReserve1(PoolStatus memory status) internal pure returns (uint112) {
+        return status.realReserve1 + status.lendingRealReserve1;
+    }
+
+    function totalMirrorReserve0(PoolStatus memory status) internal pure returns (uint112) {
+        return status.mirrorReserve0 + status.lendingMirrorReserve0;
+    }
+
+    function totalMirrorReserve1(PoolStatus memory status) internal pure returns (uint112) {
+        return status.mirrorReserve1 + status.lendingMirrorReserve1;
+    }
+
     function getReserves(PoolStatus memory status) internal pure returns (uint256 _reserve0, uint256 _reserve1) {
         _reserve0 = reserve0(status);
         _reserve1 = reserve1(status);

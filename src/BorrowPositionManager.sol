@@ -65,7 +65,6 @@ contract BorrowPositionManager is IBorrowPositionManager, ERC721, Owned {
     }
 
     uint256 public constant ONE_MILLION = 10 ** 6;
-    uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
     uint256 private _nextId = 1;
     uint24 public minMarginLevel = 1170000; // 117%
     IPairPoolManager private hook;

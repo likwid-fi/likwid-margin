@@ -100,14 +100,26 @@ contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
         amount = amount.divRatioX112(incrementRatioX112Of[id]);
         return super.approve(spender, id, amount);
     }
-
-    // ******************** POOL CALL ********************
+    // ******************** INTERNAL CALL ********************
 
     function _mintReturn(address receiver, uint256 id, uint256 amount) internal returns (uint256) {
         _mint(receiver, id, amount);
         uint256 incrementRatioX112 = incrementRatioX112Of[id];
         return amount.divRatioX112(incrementRatioX112).mulRatioX112(incrementRatioX112);
     }
+
+    // ******************** EXTERNAL CALL ********************
+
+    function computeRealAmount(PoolId poolId, Currency currency, uint256 originalAmount)
+        external
+        view
+        returns (uint256 amount)
+    {
+        uint256 id = currency.toPoolId(poolId);
+        amount = originalAmount.mulRatioX112(incrementRatioX112Of[id]);
+    }
+
+    // ******************** POOL CALL ********************
 
     function updateInterests(uint256 id, uint256 interest) external onlyPairManager {
         uint256 totalSupply = balanceOf(address(this), id);
@@ -147,6 +159,11 @@ contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
         lendingAmount = _mintReturn(recipient, currency.toPoolId(poolId), amount);
     }
 
+    function realOut(address sender, PoolId poolId, Currency currency, uint256 amount) external onlyPairManager {
+        poolManager.transfer(msg.sender, currency.toId(), amount);
+        _burn(sender, currency.toPoolId(poolId), amount);
+    }
+
     // ******************** USER CALL ********************
 
     function deposit(address recipient, PoolId poolId, Currency currency, uint256 amount)
@@ -170,6 +187,12 @@ contract LendingPoolManager is BasePool, ERC6909Accrues, ILendingPoolManager {
         currency.settle(poolManager, sender, amount, false);
         currency.take(poolManager, address(this), amount, true);
         lendingAmount = _mintReturn(recipient, id, amount);
+    }
+
+    function withdrawOriginal(address recipient, PoolId poolId, Currency currency, uint256 originalAmount) external {
+        uint256 id = currency.toPoolId(poolId);
+        uint256 amount = originalAmount.mulRatioX112(incrementRatioX112Of[id]);
+        poolManager.unlock(abi.encodeCall(this.handleWithdraw, (msg.sender, recipient, poolId, currency, amount)));
     }
 
     function withdraw(address recipient, PoolId poolId, Currency currency, uint256 amount) external {

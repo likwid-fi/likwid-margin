@@ -575,8 +575,7 @@ contract PairPoolManager is IPairPoolManager, BaseBalance, ReentrancyGuardTransi
         uint256 interest;
         if (params.releaseAmount > 0) {
             // release margin
-            marginCurrency.settle(poolManager, params.payer, params.releaseAmount, false);
-            marginCurrency.take(poolManager, address(this), params.releaseAmount, true);
+            lendingPoolManager.realOut(params.payer, params.poolId, marginCurrency, params.releaseAmount);
             if (params.repayAmount > params.rawBorrowAmount) {
                 uint256 overRepay = params.repayAmount - params.rawBorrowAmount;
                 interest = Math.mulDiv(overRepay, params.releaseAmount, params.repayAmount);
