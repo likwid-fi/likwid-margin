@@ -8,7 +8,7 @@ import {BorrowParams} from "../types/BorrowParams.sol";
 
 interface IBorrowPositionManager is IERC721 {
     /// @notice Return the address of the hook contract
-    function getHook() external view returns (address _hook);
+    function getPairPool() external view returns (address _pairPool);
 
     /// @notice Return the position with the given ID
     /// @param positionId The ID of the position to retrieve

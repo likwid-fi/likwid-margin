@@ -26,8 +26,6 @@ contract MarginFees is IMarginFees, Owned {
     using FeeLibrary for uint24;
     using PerLibrary for uint256;
 
-    uint24 public constant liquidationMarginLevel = 1100000; // 110%
-    uint24 public minMarginLevel = 1170000; // 117%
     uint24 public marginFee = 3000; // 0.3%
     uint24 public protocolFee = 50000; // 5%
     uint24 public dynamicFeeDurationSeconds = 120;
@@ -152,10 +150,6 @@ contract MarginFees is IMarginFees, Owned {
 
     function setFeeTo(address _feeTo) external onlyOwner {
         feeTo = _feeTo;
-    }
-
-    function setMinMarginLevel(uint24 _minMarginLevel) external onlyOwner {
-        minMarginLevel = _minMarginLevel;
     }
 
     function setProtocolFee(uint24 _protocolFee) external onlyOwner {

@@ -525,8 +525,7 @@ contract PairPoolManager is IPairPoolManager, BaseBalance, ReentrancyGuardTransi
                 lendingPoolManager.realIn(_positionManager, params.poolId, marginCurrency, marginWithoutFee);
         } else {
             {
-                uint24 minMarginLevel = marginFees.minMarginLevel();
-                marginWithoutFee = marginAmount.mulMillionDiv(minMarginLevel);
+                marginWithoutFee = marginAmount.mulMillionDiv(params.minMarginLevel);
                 (uint256 reserve0, uint256 reserve1) = status.getReserves();
                 (uint256 reserveBorrow, uint256 reserveMargin) =
                     params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);

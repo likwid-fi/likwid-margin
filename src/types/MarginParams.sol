@@ -11,6 +11,8 @@ struct MarginParams {
     bool marginForOne;
     /// @notice Leverage factor of the margin position.
     uint24 leverage;
+    /// @notice Min margin level.
+    uint24 minMarginLevel;
     /// @notice The amount of margin
     uint256 marginAmount;
     /// @notice The total amount of margin,equals to marginAmount * leverage * (1-marginFee).

@@ -7,6 +7,14 @@ import {BurnParams} from "../types/BurnParams.sol";
 import {BorrowPosition, BorrowPositionVo} from "../types/BorrowPosition.sol";
 
 interface IMarginChecker {
+    /// @notice Get the liquidation margin level
+    /// @return liquidationMarginLevel The liquidation margin level
+    function liquidationMarginLevel() external view returns (uint24);
+
+    /// @notice Get the min margin level
+    /// @return minMarginLevel The min margin level
+    function minMarginLevel() external view returns (uint24);
+
     /// @notice Get the profit millionth of the caller and the protocol
     /// @return callerProfitMillion The profit of the caller in millions
     /// @return protocolProfitMillion The profit of the protocol in millions

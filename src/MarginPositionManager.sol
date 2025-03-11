@@ -89,7 +89,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
     }
 
     uint256 private _nextId = 1;
-    uint24 public minMarginLevel = 1170000; // 117%
     IPairPoolManager public immutable pairPoolManager;
     ILendingPoolManager public immutable lendingPoolManager;
     IMarginChecker public checker;
@@ -125,11 +124,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
 
     modifier ensure(uint256 deadline) {
         require(deadline >= block.timestamp, "EXPIRED");
-        _;
-    }
-
-    modifier onlyMargin() {
-        require(msg.sender == address(pairPoolManager.poolManager()) || msg.sender == address(this), "ONLY_MARGIN");
         _;
     }
 
@@ -180,6 +174,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         Currency marginCurrency = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
         uint256 sendValue = marginCurrency.checkAmount(params.marginAmount);
         uint256 positionId = _ownerPositionIds[params.poolId][params.marginForOne][params.recipient];
+        // call margin
+        params.minMarginLevel = checker.minMarginLevel();
         params = pairPoolManager.margin{value: sendValue}(msg.sender, params);
         if (params.borrowMaxAmount > 0 && params.borrowAmount > params.borrowMaxAmount) {
             revert InsufficientBorrowReceived();
@@ -554,10 +550,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
     }
 
     // ******************** OWNER CALL ********************
-    function setMinMarginLevel(uint24 _minMarginLevel) external onlyOwner {
-        minMarginLevel = _minMarginLevel;
-    }
-
     function setMarginChecker(address _checker) external onlyOwner {
         checker = IMarginChecker(_checker);
     }
@@ -605,6 +597,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         (uint256 reserveBorrow, uint256 reserveMargin) =
             params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
         uint256 debtAmount = reserveMargin * params.borrowAmount / reserveBorrow;
-        valid = params.marginAmount + params.marginTotal >= debtAmount.mulDivMillion(minMarginLevel);
+        valid = params.marginAmount + params.marginTotal >= debtAmount.mulDivMillion(checker.minMarginLevel());
     }
 }

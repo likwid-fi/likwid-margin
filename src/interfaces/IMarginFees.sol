@@ -11,14 +11,6 @@ import {PoolStatus} from "../types/PoolStatus.sol";
 import {IMarginLiquidity} from "./IMarginLiquidity.sol";
 
 interface IMarginFees {
-    /// @notice Get the liquidation margin level
-    /// @return liquidationMarginLevel The liquidation margin level
-    function liquidationMarginLevel() external view returns (uint24);
-
-    /// @notice Get the min margin level
-    /// @return minMarginLevel The min margin level
-    function minMarginLevel() external view returns (uint24);
-
     /// @notice Get the address of the fee receiver
     /// @return feeTo The address of the fee receiver
     function feeTo() external view returns (address);

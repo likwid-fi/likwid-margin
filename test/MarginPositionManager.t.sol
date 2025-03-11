@@ -53,6 +53,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: key.toId(),
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -82,6 +83,7 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: key.toId(),
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -160,6 +162,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 1,
             marginAmount: payValue,
             marginTotal: 0,
@@ -203,6 +206,7 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: poolId,
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 1,
             marginAmount: payValue,
             marginTotal: 0,
@@ -236,6 +240,7 @@ contract MarginPositionManagerTest is DeployHelper {
             params = MarginParams({
                 poolId: poolId,
                 marginForOne: false,
+                minMarginLevel: 0,
                 leverage: 3,
                 marginAmount: payValue,
                 marginTotal: 0,
@@ -276,6 +281,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -306,6 +312,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -338,6 +345,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -364,6 +372,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -438,6 +447,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -513,6 +523,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -588,6 +599,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -614,6 +626,7 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -650,6 +663,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -671,6 +685,7 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: poolId,
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -707,6 +722,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: true,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -728,6 +744,7 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: poolId,
             marginForOne: true,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -831,6 +848,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -845,6 +863,7 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: poolId,
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -925,6 +944,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId1,
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -938,6 +958,7 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: poolId2,
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
             marginTotal: 0,
@@ -967,6 +988,7 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId1,
             marginForOne: marginForOne,
+            minMarginLevel: 0,
             leverage: leverage,
             marginAmount: payValue,
             marginTotal: 0,
@@ -1031,6 +1053,7 @@ contract MarginPositionManagerTest is DeployHelper {
             MarginParams memory params = MarginParams({
                 poolId: nativeKey.toId(),
                 marginForOne: false,
+                minMarginLevel: 0,
                 leverage: 3,
                 marginAmount: payValue,
                 marginTotal: 0,
@@ -1104,6 +1127,7 @@ contract MarginPositionManagerTest is DeployHelper {
             MarginParams memory params = MarginParams({
                 poolId: nativeKey.toId(),
                 marginForOne: false,
+                minMarginLevel: 0,
                 leverage: 3,
                 marginAmount: payValue,
                 marginTotal: 0,

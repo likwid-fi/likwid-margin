@@ -73,6 +73,7 @@ contract MarginFeesTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
+            minMarginLevel: 0,
             leverage: 1,
             marginAmount: payValue,
             marginTotal: 0,
