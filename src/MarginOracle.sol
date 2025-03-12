@@ -66,13 +66,13 @@ contract MarginOracle {
         }
     }
 
-    function observeNow(PoolId id, address pool)
+    function observeNow(IPairPoolManager poolManager, PoolId id)
         external
         view
         returns (uint224 reserves, uint256 price1CumulativeLast)
     {
-        address hook = address(IPairPoolManager(pool).hooks());
-        (uint256 reserve0, uint256 reserve1) = IPairPoolManager(pool).getReserves(id);
+        address hook = address(poolManager.hooks());
+        (uint256 reserve0, uint256 reserve1) = poolManager.getReserves(id);
         return observations[hook][id].observeSingle(
             _blockTimestamp(),
             0,

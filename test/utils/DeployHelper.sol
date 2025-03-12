@@ -45,7 +45,7 @@ contract DeployHelper is Test {
     uint256 public constant MINIMUM_LIQUIDITY = 10 ** 3;
     uint256 public constant ONE_MILLION = 10 ** 6;
     uint256 public constant ONE_TRILLION = 10 ** 12;
-    uint256 public constant YEAR_SECONDS = 365 * 24 * 3600;
+    uint256 public constant TRILLION_YEAR_SECONDS = ONE_TRILLION * 365 * 24 * 3600;
 
     PairPoolManager pairPoolManager;
 

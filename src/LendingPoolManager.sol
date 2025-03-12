@@ -111,7 +111,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     // ******************** EXTERNAL CALL ********************
 
     function computeRealAmount(PoolId poolId, Currency currency, uint256 originalAmount)
-        external
+        public
         view
         returns (uint256 amount)
     {
@@ -190,8 +190,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     }
 
     function withdrawOriginal(address recipient, PoolId poolId, Currency currency, uint256 originalAmount) external {
-        uint256 id = currency.toPoolId(poolId);
-        uint256 amount = originalAmount.mulRatioX112(incrementRatioX112Of[id]);
+        uint256 amount = computeRealAmount(poolId, currency, originalAmount);
         poolManager.unlock(abi.encodeCall(this.handleWithdraw, (msg.sender, recipient, poolId, currency, amount)));
     }
 

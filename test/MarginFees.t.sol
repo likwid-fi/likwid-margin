@@ -12,6 +12,7 @@ import {RateStatus} from "../src/types/RateStatus.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
+import {CurrencyUtils} from "../src/libraries/CurrencyUtils.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
@@ -32,6 +33,8 @@ import {HookMiner} from "./utils/HookMiner.sol";
 import {DeployHelper} from "./utils/DeployHelper.sol";
 
 contract MarginFeesTest is DeployHelper {
+    using CurrencyUtils for *;
+
     function setUp() public {
         deployHookAndRouter();
         initPoolLiquidity();
@@ -62,6 +65,7 @@ contract MarginFeesTest is DeployHelper {
     function testDynamicFee() public {
         address user = address(this);
         PoolId poolId = nativeKey.toId();
+        uint256 keyId = CurrencyLibrary.ADDRESS_ZERO.toPoolId(poolId);
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         uint24 _beforeFee = marginFees.dynamicFee(status);
         assertEq(_beforeFee, status.key.fee);
@@ -84,7 +88,10 @@ contract MarginFeesTest is DeployHelper {
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
-        assertEq(address(marginPositionManager).balance, position.marginAmount + position.marginTotal);
+        assertEq(
+            lendingPoolManager.balanceOf(address(marginPositionManager), keyId),
+            position.marginAmount + position.marginTotal
+        );
         uint256 _positionId = marginPositionManager.getMarginPositionId(poolId, false, user);
         assertEq(positionId, _positionId);
         status = pairPoolManager.getStatus(poolId);

@@ -41,11 +41,6 @@ interface IMarginPositionManager is IERC721 {
     /// @param deadline Deadline for the transaction
     function close(uint256 positionId, uint256 closeMillionth, int256 pnlMinAmount, uint256 deadline) external;
 
-    /// @notice Get the maximum decrease amount for the given position
-    /// @param positionId The ID of the position
-    /// @return maxAmount The maximum decrease amount
-    function getMaxDecrease(uint256 positionId) external view returns (uint256 maxAmount);
-
     /// @notice Modify the margin position
     /// @param positionId The id of position
     /// @param changeAmount The amount to modify
