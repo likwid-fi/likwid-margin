@@ -354,8 +354,11 @@ contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTr
                     borrowAmount = borrowMaxAmount;
                 }
             }
-            // transfer borrowAmount to lendingPoolManager
-            borrowAmount = lendingPoolManager.realIn(_positionManager, params.poolId, borrowCurrency, borrowAmount);
+            if (borrowAmount > 0) {
+                // transfer borrowAmount to user
+                borrowCurrency.settle(poolManager, address(this), borrowAmount, true);
+                borrowCurrency.take(poolManager, params.recipient, borrowAmount, false);
+            }
         }
 
         if (marginFeeAmount > 0) {
@@ -364,16 +367,17 @@ contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTr
 
         // mint mirror token
         mirrorTokenManager.mint(borrowCurrency.toPoolId(params.poolId), borrowAmount);
+        statusManager.update(status.key, true);
         {
-            BalanceStatus memory balanceStatus = statusManager.getBalances(status.key);
+            BalanceStatus memory balanceStatus = statusManager.setBalances(status.key);
             if (balanceStatus.mirrorBalance0 > 0) {
                 lendingPoolManager.mirrorInRealOut(params.poolId, status.key.currency0, balanceStatus.mirrorBalance0);
             }
             if (balanceStatus.mirrorBalance1 > 0) {
                 lendingPoolManager.mirrorInRealOut(params.poolId, status.key.currency1, balanceStatus.mirrorBalance1);
             }
+            statusManager.update(status.key, false);
         }
-        statusManager.update(status.key, true);
     }
 
     /// @inheritdoc IPairPoolManager
@@ -406,7 +410,13 @@ contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTr
             }
         }
         // burn mirror token
-        mirrorTokenManager.burn(address(lendingPoolManager), borrowCurrency.toPoolId(params.poolId), params.repayAmount);
+        (uint256 pairAmount, uint256 lendingAmount) = mirrorTokenManager.burn(
+            address(lendingPoolManager), borrowCurrency.toPoolId(params.poolId), params.repayAmount
+        );
+        if (params.repayAmount > pairAmount) {
+            lendingAmount = Math.min(lendingAmount, params.repayAmount - pairAmount);
+            poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), lendingAmount);
+        }
         if (interest > 0) {
             interest = statusManager.updateProtocolFees(borrowCurrency, interest);
         }

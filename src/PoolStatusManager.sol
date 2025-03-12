@@ -158,54 +158,77 @@ contract PoolStatusManager is IPoolStatusManager, Owned {
         );
     }
 
+    function _updateInterest0(
+        PoolStatus storage status,
+        uint256 flowReserve0,
+        uint256 rate0CumulativeLast,
+        bool inUpdate
+    ) internal returns (uint256 interest0) {
+        if (status.mirrorReserve0 > 0 && rate0CumulativeLast > status.rate0CumulativeLast) {
+            uint256 mirrorReserve0 = status.mirrorReserve0 + status.lendingMirrorReserve0;
+            uint256 allInterest0 =
+                Math.mulDiv(mirrorReserve0, rate0CumulativeLast, status.rate0CumulativeLast) - mirrorReserve0;
+            interest0 = Math.mulDiv(allInterest0, flowReserve0, flowReserve0 + status.lendingReserve0());
+            if (!inUpdate) {
+                status.mirrorReserve0 += uint112(interest0);
+            }
+            uint256 cPoolId = status.key.currency0.toKeyId(status.key);
+            if (allInterest0 > interest0) {
+                uint256 lendingInterest0 = allInterest0 - interest0;
+                uint256 lendingRealInterest0 =
+                    Math.mulDiv(lendingInterest0, status.lendingRealReserve0, status.lendingReserve0());
+                uint256 lendingMirrorInterest0 = lendingInterest0 - lendingRealInterest0;
+                if (!inUpdate) {
+                    status.lendingRealReserve0 += lendingRealInterest0.toUint112();
+                    status.lendingMirrorReserve0 += lendingMirrorInterest0.toUint112();
+                }
+                lendingPoolManager.updateInterests(cPoolId, lendingInterest0);
+                mirrorTokenManager.mintInStatus(address(lendingPoolManager), cPoolId, lendingMirrorInterest0);
+            }
+            mirrorTokenManager.mintInStatus(pairPoolManager, cPoolId, interest0);
+        }
+    }
+
+    function _updateInterest1(
+        PoolStatus storage status,
+        uint256 flowReserve1,
+        uint256 rate1CumulativeLast,
+        bool inUpdate
+    ) internal returns (uint256 interest1) {
+        if (status.mirrorReserve1 > 0 && rate1CumulativeLast > status.rate1CumulativeLast) {
+            uint256 mirrorReserve1 = status.mirrorReserve1 + status.lendingMirrorReserve1;
+            uint256 allInterest1 =
+                Math.mulDiv(mirrorReserve1, rate1CumulativeLast, status.rate1CumulativeLast) - mirrorReserve1;
+            interest1 = Math.mulDiv(allInterest1, flowReserve1, flowReserve1 + status.lendingReserve1());
+            if (!inUpdate) {
+                status.mirrorReserve1 += interest1.toUint112();
+            }
+            uint256 cPoolId = status.key.currency1.toKeyId(status.key);
+            if (allInterest1 > interest1) {
+                uint256 lendingInterest1 = allInterest1 - interest1;
+                uint256 lendingRealInterest1 =
+                    Math.mulDiv(lendingInterest1, status.lendingRealReserve1, status.lendingReserve1());
+                uint256 lendingMirrorInterest1 = lendingInterest1 - lendingRealInterest1;
+                if (!inUpdate) {
+                    status.lendingRealReserve1 += lendingRealInterest1.toUint112();
+                    status.lendingMirrorReserve1 += lendingMirrorInterest1.toUint112();
+                }
+                lendingPoolManager.updateInterests(cPoolId, lendingInterest1);
+                mirrorTokenManager.mintInStatus(address(lendingPoolManager), cPoolId, lendingMirrorInterest1);
+            }
+            mirrorTokenManager.mintInStatus(pairPoolManager, cPoolId, interest1);
+        }
+    }
+
     function _updateInterests(PoolStatus storage status, bool inUpdate) internal {
         PoolKey memory key = status.key;
         uint32 blockTS = uint32(block.timestamp % 2 ** 32);
         if (status.blockTimestampLast != blockTS) {
             (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = marginFees.getBorrowRateCumulativeLast(status);
-            uint256 interest0;
-            uint256 interest1;
-            (uint256 reserve0, uint256 reserve1) = marginLiquidity.getFlowReserves(pairPoolManager, key.toId(), status);
-            if (status.mirrorReserve0 > 0 && rate0CumulativeLast > status.rate0CumulativeLast) {
-                uint256 mirrorReserve0 = status.mirrorReserve0 + status.lendingMirrorReserve0;
-                uint256 allInterest0 =
-                    Math.mulDiv(mirrorReserve0, rate0CumulativeLast, status.rate0CumulativeLast) - mirrorReserve0;
-                interest0 = Math.mulDiv(
-                    allInterest0, reserve0, reserve0 + status.lendingRealReserve0 + status.lendingMirrorReserve0
-                );
-                if (!inUpdate) {
-                    status.mirrorReserve0 += uint112(interest0);
-                }
-                uint256 cPoolId = key.currency0.toKeyId(key);
-                if (allInterest0 > interest0) {
-                    uint256 lendingInterest0 = allInterest0 - interest0;
-                    if (!inUpdate) {
-                        status.lendingRealReserve0 += lendingInterest0.toUint112();
-                    }
-                    lendingPoolManager.updateInterests(cPoolId, lendingInterest0);
-                }
-                mirrorTokenManager.mintInStatus(cPoolId, interest0);
-            }
-            if (status.mirrorReserve1 > 0 && rate1CumulativeLast > status.rate1CumulativeLast) {
-                uint256 mirrorReserve1 = status.mirrorReserve1 + status.lendingMirrorReserve1;
-                uint256 allInterest1 =
-                    Math.mulDiv(mirrorReserve1, rate1CumulativeLast, status.rate1CumulativeLast) - mirrorReserve1;
-                interest1 = Math.mulDiv(
-                    allInterest1, reserve1, reserve1 + status.lendingRealReserve1 + status.lendingMirrorReserve1
-                );
-                if (!inUpdate) {
-                    status.mirrorReserve1 += interest1.toUint112();
-                }
-                uint256 cPoolId = key.currency1.toKeyId(key);
-                if (allInterest1 > interest1) {
-                    uint256 lendingInterest1 = allInterest1 - interest1;
-                    if (!inUpdate) {
-                        status.lendingRealReserve1 += lendingInterest1.toUint112();
-                    }
-                    lendingPoolManager.updateInterests(cPoolId, lendingInterest1);
-                }
-                mirrorTokenManager.mintInStatus(cPoolId, interest1);
-            }
+            (uint256 flowReserve0, uint256 flowReserve1) =
+                marginLiquidity.getFlowReserves(pairPoolManager, key.toId(), status);
+            uint256 interest0 = _updateInterest0(status, flowReserve0, rate0CumulativeLast, inUpdate);
+            uint256 interest1 = _updateInterest1(status, flowReserve1, rate1CumulativeLast, inUpdate);
             status.blockTimestampLast = blockTS;
             status.rate0CumulativeLast = rate0CumulativeLast;
             status.rate1CumulativeLast = rate1CumulativeLast;
@@ -260,15 +283,15 @@ contract PoolStatusManager is IPoolStatusManager, Owned {
         } else {
             balanceStatus.balance1 = 0;
         }
-        balanceStatus.mirrorBalance0 = mirrorTokenManager.balanceOf(pairPoolManager, key.currency0.toKeyId(key));
-        balanceStatus.mirrorBalance1 = mirrorTokenManager.balanceOf(pairPoolManager, key.currency1.toKeyId(key));
+        uint256 id0 = key.currency0.toKeyId(key);
+        uint256 id1 = key.currency1.toKeyId(key);
+        balanceStatus.mirrorBalance0 = mirrorTokenManager.balanceOf(pairPoolManager, id0);
+        balanceStatus.mirrorBalance1 = mirrorTokenManager.balanceOf(pairPoolManager, id1);
 
-        balanceStatus.lendingBalance0 = poolManager.balanceOf(address(lendingPoolManager), key.currency0.toId());
-        balanceStatus.lendingBalance1 = poolManager.balanceOf(address(lendingPoolManager), key.currency1.toId());
-        balanceStatus.lendingMirrorBalance0 =
-            mirrorTokenManager.balanceOf(address(lendingPoolManager), key.currency0.toKeyId(key));
-        balanceStatus.lendingMirrorBalance1 =
-            mirrorTokenManager.balanceOf(address(lendingPoolManager), key.currency1.toKeyId(key));
+        balanceStatus.lendingBalance0 = lendingPoolManager.balanceOf(address(lendingPoolManager), id0);
+        balanceStatus.lendingBalance1 = lendingPoolManager.balanceOf(address(lendingPoolManager), id1);
+        balanceStatus.lendingMirrorBalance0 = mirrorTokenManager.balanceOf(address(lendingPoolManager), id0);
+        balanceStatus.lendingMirrorBalance1 = mirrorTokenManager.balanceOf(address(lendingPoolManager), id1);
     }
 
     function setBalances(PoolKey memory key)
@@ -310,7 +333,6 @@ contract PoolStatusManager is IPoolStatusManager, Owned {
         BalanceStatus memory beforeStatus = _getBalances();
         _updateInterests(status, true);
         BalanceStatus memory afterStatus = getBalances(key);
-
         status.realReserve0 = status.realReserve0.add(afterStatus.balance0).sub(beforeStatus.balance0);
         status.realReserve1 = status.realReserve1.add(afterStatus.balance1).sub(beforeStatus.balance1);
         status.mirrorReserve0 = status.mirrorReserve0.add(afterStatus.mirrorBalance0).sub(beforeStatus.mirrorBalance0);

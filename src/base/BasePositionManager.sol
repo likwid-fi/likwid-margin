@@ -48,19 +48,6 @@ abstract contract BasePositionManager is ERC721, Owned, ReentrancyGuardTransient
         require(success, "TRANSFER_FAILED");
     }
 
-    function _checkMinMarginLevel(MarginParams memory params, PoolStatus memory _status)
-        internal
-        view
-        returns (bool valid)
-    {
-        (uint256 reserve0, uint256 reserve1) =
-            (_status.realReserve0 + _status.mirrorReserve0, _status.realReserve1 + _status.mirrorReserve1);
-        (uint256 reserveBorrow, uint256 reserveMargin) =
-            params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
-        uint256 debtAmount = reserveMargin * params.borrowAmount / reserveBorrow;
-        valid = params.marginAmount + params.marginTotal >= debtAmount.mulDivMillion(checker.minMarginLevel());
-    }
-
     // ******************** OWNER CALL ********************
     function setMarginChecker(address _checker) external onlyOwner {
         checker = IMarginChecker(_checker);

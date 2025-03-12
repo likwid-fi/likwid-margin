@@ -23,6 +23,26 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     using PerLibrary for *;
     using UQ112x112 for *;
 
+    event Deposit(
+        address indexed sender,
+        PoolId indexed poolId,
+        Currency indexed currency,
+        address recipient,
+        uint256 amount,
+        uint256 originalAmount,
+        uint256 incrementRatioX112
+    );
+
+    event Withdraw(
+        address indexed sender,
+        PoolId indexed poolId,
+        Currency indexed currency,
+        address recipient,
+        uint256 amount,
+        uint256 originalAmount,
+        uint256 incrementRatioX112
+    );
+
     IMirrorTokenManager public immutable mirrorTokenManager;
     IPairPoolManager public pairPoolManager;
     mapping(uint256 => uint256) public incrementRatioX112Of;
@@ -31,6 +51,11 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         BasePoolManager(initialOwner, _manager)
     {
         mirrorTokenManager = _mirrorTokenManager;
+    }
+
+    modifier onlyStatusManager() {
+        require(address(pairPoolManager.statusManager()) == msg.sender, "UNAUTHORIZED");
+        _;
     }
 
     modifier onlyPairManager() {
@@ -102,10 +127,17 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     }
     // ******************** INTERNAL CALL ********************
 
-    function _mintReturn(address receiver, uint256 id, uint256 amount) internal returns (uint256) {
+    function _mintReturn(address receiver, uint256 id, uint256 amount) internal returns (uint256 originalAmount) {
         _mint(receiver, id, amount);
         uint256 incrementRatioX112 = incrementRatioX112Of[id];
-        return amount.divRatioX112(incrementRatioX112).mulRatioX112(incrementRatioX112);
+        originalAmount = amount.divRatioX112(incrementRatioX112);
+    }
+
+    function _burnReturn(address sender, uint256 id, uint256 amount) internal returns (uint256 originalAmount) {
+        originalAmount = amount.divRatioX112(incrementRatioX112Of[id]);
+
+        super._burn(address(this), id, amount);
+        super._burn(sender, id, amount);
     }
 
     // ******************** EXTERNAL CALL ********************
@@ -121,19 +153,15 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
 
     // ******************** POOL CALL ********************
 
-    function updateInterests(uint256 id, uint256 interest) external onlyPairManager {
+    function updateInterests(uint256 id, uint256 interest) external onlyStatusManager {
         uint256 totalSupply = balanceOf(address(this), id);
-        incrementRatioX112Of[id] = incrementRatioX112Of[id].growRatioX112(interest, totalSupply);
+        uint256 incrementRatioX112Old = incrementRatioX112Of[id];
+        incrementRatioX112Of[id] = incrementRatioX112Old.growRatioX112(interest, totalSupply);
     }
 
-    function mirrorIn(PoolId poolId, Currency currency, uint256 amount)
-        external
-        onlyPairManager
-        returns (uint256 lendingAmount)
-    {
+    function mirrorIn(PoolId poolId, Currency currency, uint256 amount) external onlyPairManager {
         uint256 id = currency.toPoolId(poolId);
         mirrorTokenManager.transferFrom(msg.sender, address(this), id, amount);
-        lendingAmount = _mintReturn(msg.sender, id, amount);
     }
 
     function mirrorInRealOut(PoolId poolId, Currency currency, uint256 amount)
@@ -153,10 +181,10 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     function realIn(address recipient, PoolId poolId, Currency currency, uint256 amount)
         external
         onlyPairManager
-        returns (uint256 lendingAmount)
+        returns (uint256 originalAmount)
     {
         poolManager.transferFrom(msg.sender, address(this), currency.toId(), amount);
-        lendingAmount = _mintReturn(recipient, currency.toPoolId(poolId), amount);
+        originalAmount = _mintReturn(recipient, currency.toPoolId(poolId), amount);
     }
 
     function realOut(address sender, PoolId poolId, Currency currency, uint256 amount) external onlyPairManager {
@@ -169,24 +197,25 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     function deposit(address recipient, PoolId poolId, Currency currency, uint256 amount)
         external
         payable
-        returns (uint256 lendingAmount)
+        returns (uint256 originalAmount)
     {
         uint256 sendAmount = currency.checkAmount(amount);
         bytes memory result =
             poolManager.unlock(abi.encodeCall(this.handleDeposit, (msg.sender, recipient, poolId, currency, amount)));
-        lendingAmount = abi.decode(result, (uint256));
+        originalAmount = abi.decode(result, (uint256));
         if (msg.value > sendAmount) transferNative(msg.sender, msg.value - sendAmount);
     }
 
     function handleDeposit(address sender, address recipient, PoolId poolId, Currency currency, uint256 amount)
         external
         selfOnly
-        returns (uint256 lendingAmount)
+        returns (uint256 originalAmount)
     {
         uint256 id = currency.toPoolId(poolId);
         currency.settle(poolManager, sender, amount, false);
         currency.take(poolManager, address(this), amount, true);
-        lendingAmount = _mintReturn(recipient, id, amount);
+        originalAmount = _mintReturn(recipient, id, amount);
+        emit Deposit(msg.sender, poolId, currency, recipient, amount, originalAmount, incrementRatioX112Of[id]);
     }
 
     function withdrawOriginal(address recipient, PoolId poolId, Currency currency, uint256 originalAmount) external {
@@ -205,7 +234,8 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         uint256 id = currency.toPoolId(poolId);
         currency.settle(poolManager, address(this), amount, true);
         currency.take(poolManager, recipient, amount, false);
-        _burn(sender, id, amount);
+        uint256 originalAmount = _burnReturn(sender, id, amount);
+        emit Withdraw(msg.sender, poolId, currency, recipient, amount, originalAmount, incrementRatioX112Of[id]);
     }
 
     // ******************** OWNER CALL ********************

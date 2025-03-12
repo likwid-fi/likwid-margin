@@ -92,7 +92,7 @@ contract MarginFeesTest is DeployHelper {
             lendingPoolManager.balanceOf(address(marginPositionManager), keyId),
             position.marginAmount + position.marginTotal
         );
-        uint256 _positionId = marginPositionManager.getMarginPositionId(poolId, false, user);
+        uint256 _positionId = marginPositionManager.getPositionId(poolId, false, user, true);
         assertEq(positionId, _positionId);
         status = pairPoolManager.getStatus(poolId);
         uint24 _afterFee = marginFees.dynamicFee(status);

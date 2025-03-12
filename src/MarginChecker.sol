@@ -7,6 +7,7 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 // Local
 import {PoolStatus} from "./types/PoolStatus.sol";
+import {MarginParams} from "./types/MarginParams.sol";
 import {LiquidateStatus} from "./types/LiquidateStatus.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PriceMath} from "./libraries/PriceMath.sol";
@@ -92,6 +93,24 @@ contract MarginChecker is IMarginChecker, Owned {
         uint256 releaseTotalReal =
             pairPoolManager.lendingPoolManager().computeRealAmount(_position.poolId, marginCurrency, releaseTotal);
         pnlAmount = int256(releaseTotalReal) - int256(releaseAmount);
+    }
+
+    function checkMinMarginLevel(IPairPoolManager poolManager, MarginParams memory params, PoolStatus memory _status)
+        external
+        view
+        returns (bool valid)
+    {
+        (uint256 reserve0, uint256 reserve1) =
+            (_status.realReserve0 + _status.mirrorReserve0, _status.realReserve1 + _status.mirrorReserve1);
+        (uint256 reserveBorrow, uint256 reserveMargin) =
+            params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+        uint256 debtAmount;
+        if (params.leverage > 0) {
+            debtAmount = reserveMargin * params.borrowAmount / reserveBorrow;
+        } else {
+            debtAmount = poolManager.getAmountOut(params.poolId, params.marginForOne, params.borrowAmount);
+        }
+        valid = params.marginAmount + params.marginTotal >= debtAmount.mulDivMillion(minMarginLevel);
     }
 
     /// @inheritdoc IMarginChecker

@@ -9,6 +9,7 @@ import {MarginRouter} from "../src/MarginRouter.sol";
 import {PoolStatus} from "../src/types/PoolStatus.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
+import {PerLibrary} from "../src/libraries/PerLibrary.sol";
 import {CurrencyUtils} from "../src/libraries/CurrencyUtils.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
 // Solmate
@@ -60,5 +61,55 @@ contract LendingPoolManagerTest is DeployHelper {
         lb = lendingPoolManager.balanceOf(user, id);
         console.log("lending.balance:%s,ethAmount:%s", lb, ethAmount);
         vm.stopPrank();
+    }
+
+    function testUpdateInterests() public {
+        address user = vm.addr(1);
+        (bool success,) = user.call{value: 1 ether}("");
+        require(success, "TRANSFER_FAILED");
+        console.log("balance:%s", user.balance);
+        Currency eth = CurrencyLibrary.ADDRESS_ZERO;
+        PoolId nativeId = nativeKey.toId();
+        uint256 id = eth.toPoolId(nativeId);
+        vm.startPrank(user);
+        uint256 lb = lendingPoolManager.balanceOf(user, id);
+        assertEq(lb, 0);
+        lendingPoolManager.deposit{value: 0.1 ether}(user, nativeId, eth, 0.1 ether);
+        uint256 ethAmount = manager.balanceOf(address(lendingPoolManager), eth.toId());
+        lb = lendingPoolManager.balanceOf(user, id);
+        console.log("lending.balance:%s,ethAmount:%s", lb, ethAmount);
+        vm.stopPrank();
+        tokenB.approve(address(lendingPoolManager), 0.1 ether);
+        lendingPoolManager.deposit(user, nativeId, nativeKey.currency1, 0.099 ether);
+        uint256 tokenBId = nativeKey.currency1.toPoolId(nativeId);
+        lb = lendingPoolManager.balanceOf(user, tokenBId);
+        assertGt(lb, 0);
+        uint256 tokenBAmount = manager.balanceOf(address(lendingPoolManager), nativeKey.currency1.toId());
+        console.log("lending.balance:%s,tokenBAmount:%s", lb, tokenBAmount);
+        uint256 positionId;
+        uint256 borrowAmount;
+        uint256 payValue = 0.001 ether;
+        address user0 = address(this);
+        MarginParams memory params = MarginParams({
+            poolId: nativeKey.toId(),
+            marginForOne: false,
+            minMarginLevel: 0,
+            leverage: 3,
+            marginAmount: payValue,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMaxAmount: 0,
+            recipient: user0,
+            deadline: block.timestamp + 1000
+        });
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        vm.warp(3600 * 10);
+        borrowAmount = marginPositionManager.getPosition(positionId).borrowAmount;
+        console.log("borrowAmount:%s", borrowAmount);
+        marginPositionManager.close(positionId, PerLibrary.ONE_MILLION, 0, block.timestamp + 1000);
+        lb = lendingPoolManager.balanceOf(user, tokenBId);
+        uint256 mirrorBalance = mirrorTokenManager.balanceOf(address(lendingPoolManager), tokenBId);
+        tokenBAmount = manager.balanceOf(address(lendingPoolManager), nativeKey.currency1.toId());
+        console.log("lending.balance:%s,tokenBAmount:%s,mirrorBalance:%s", lb, tokenBAmount, mirrorBalance);
     }
 }

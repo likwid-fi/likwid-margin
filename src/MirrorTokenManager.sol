@@ -23,22 +23,28 @@ contract MirrorTokenManager is IMirrorTokenManager, ERC6909Accrues, Owned {
         }
     }
 
-    function mintInStatus(uint256 id, uint256 amount) external {
+    function mintInStatus(address receiver, uint256 id, uint256 amount) external {
         address poolManager = IStatusBase(msg.sender).pairPoolManager();
         require(poolManagers[poolManager], "UNAUTHORIZED");
         unchecked {
-            _mint(poolManager, id, amount);
+            _mint(receiver, id, amount);
         }
     }
 
-    function burn(address lendingPoolManager, uint256 id, uint256 amount) external onlyPoolManager {
+    function burn(address lendingPoolManager, uint256 id, uint256 amount)
+        external
+        onlyPoolManager
+        returns (uint256 pairAmount, uint256 lendingAmount)
+    {
         uint256 balance = balanceOf(msg.sender, id);
         if (balance >= amount) {
+            pairAmount = amount;
             unchecked {
                 _burn(msg.sender, id, amount);
             }
         } else {
             if (balance > 0) {
+                pairAmount = balance;
                 unchecked {
                     _burn(msg.sender, id, balance);
                 }
@@ -48,6 +54,7 @@ contract MirrorTokenManager is IMirrorTokenManager, ERC6909Accrues, Owned {
                 balance = balanceOf(lendingPoolManager, id);
                 if (balance > 0) {
                     amount = amount < balance ? amount : balance;
+                    lendingAmount = amount;
                     unchecked {
                         _burn(lendingPoolManager, id, amount);
                     }
