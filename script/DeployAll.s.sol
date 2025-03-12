@@ -15,6 +15,7 @@ import {MarginOracle} from "../src/MarginOracle.sol";
 import {MarginFees} from "../src/MarginFees.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
+import {PoolStatusManager} from "../src/PoolStatusManager.sol";
 
 contract DeployAllScript is Script {
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
@@ -28,6 +29,7 @@ contract DeployAllScript is Script {
     MarginFees marginFees;
     PairPoolManager pairPoolManager;
     MarginPositionManager marginPositionManager;
+    PoolStatusManager poolStatusManager;
 
     function setUp() public {}
 
@@ -51,6 +53,16 @@ contract DeployAllScript is Script {
         console2.log("pairPoolManager", address(pairPoolManager));
         marginPositionManager = new MarginPositionManager(owner, pairPoolManager, marginChecker);
         console2.log("marginPositionManager", address(marginPositionManager));
+        poolStatusManager = new PoolStatusManager(
+            owner,
+            IPoolManager(manager),
+            mirrorTokenManager,
+            lendingPoolManager,
+            marginLiquidity,
+            pairPoolManager,
+            marginFees
+        );
+        console2.log("poolStatusManager", address(poolStatusManager));
 
         bytes memory constructorArgs = abi.encode(owner, manager, address(pairPoolManager));
         uint160 flags = uint160(
@@ -73,8 +85,9 @@ contract DeployAllScript is Script {
         // verify proper create2 usage
         require(deployedHook == hookAddress, "DeployScript: hook address mismatch");
         pairPoolManager.addPositionManager(address(marginPositionManager));
-        pairPoolManager.setMarginOracle(address(marginOracle));
         pairPoolManager.setHooks(MarginHook(hookAddress));
+        pairPoolManager.setStatusManager(poolStatusManager);
+        poolStatusManager.setMarginOracle(address(marginOracle));
         lendingPoolManager.setPairPoolManger(pairPoolManager);
         console2.log("hookAddress:", hookAddress);
         marginLiquidity.addPoolManager(address(pairPoolManager));

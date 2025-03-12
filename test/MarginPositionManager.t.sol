@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 // Local
+import {PoolStatusManager} from "../src/PoolStatusManager.sol";
 import {PairPoolManager} from "../src/PairPoolManager.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
@@ -467,7 +468,7 @@ contract MarginPositionManagerTest is DeployHelper {
         status = pairPoolManager.getStatus(poolId);
         assertEq(status.mirrorReserve1 / 10, newPosition.borrowAmount / 10);
 
-        uint256 pFeeAmount = pairPoolManager.protocolFeesAccrued(nativeKey.currency1);
+        uint256 pFeeAmount = poolStatusManager.protocolFeesAccrued(nativeKey.currency1);
         console.log("pFeeAmount:%s", pFeeAmount);
         uint256 collectFeeAmount =
             marginFees.collectProtocolFees(address(pairPoolManager), user, nativeKey.currency1, pFeeAmount);
@@ -568,7 +569,7 @@ contract MarginPositionManagerTest is DeployHelper {
 
     function test_hook_liquidate_burn_without_oracle() public {
         address user = address(this);
-        pairPoolManager.setMarginOracle(address(0));
+        poolStatusManager.setMarginOracle(address(0));
         tokenB.approve(address(pairPoolManager), 1e18);
         uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), nativeKey.toId(), false);
         assertEq(rate, 50000);
@@ -1091,7 +1092,7 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256[] memory positionIds = new uint256[](2);
         positionIds[0] = 1;
         positionIds[1] = 2;
-        vm.expectRevert(PairPoolManager.PairNotExists.selector);
+        vm.expectRevert(PoolStatusManager.PairNotExists.selector);
         marginPositionManager.getPositions(positionIds);
     }
 

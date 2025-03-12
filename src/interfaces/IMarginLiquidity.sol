@@ -32,7 +32,7 @@ interface IMarginLiquidity is IERC6909Accrues {
         view
         returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1);
 
-    function getFlowReserves(PoolId poolId, PoolStatus memory status)
+    function getFlowReserves(address pairPoolManager, PoolId poolId, PoolStatus memory status)
         external
         view
         returns (uint256 reserve0, uint256 reserve1);

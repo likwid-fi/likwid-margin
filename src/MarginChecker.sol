@@ -90,7 +90,7 @@ contract MarginChecker is IMarginChecker, Owned {
         }
         uint256 releaseTotal = uint256(_position.marginTotal).mulDivMillion(closeMillionth);
         uint256 releaseTotalReal =
-            pairPoolManager.getLendingPoolManager().computeRealAmount(_position.poolId, marginCurrency, releaseTotal);
+            pairPoolManager.lendingPoolManager().computeRealAmount(_position.poolId, marginCurrency, releaseTotal);
         pnlAmount = int256(releaseTotalReal) - int256(releaseAmount);
     }
 
@@ -156,7 +156,7 @@ contract MarginChecker is IMarginChecker, Owned {
         }
         uint256 liquidatedAmount = debtAmount.mulDivMillion(liquidationMarginLevel);
         Currency marginCurrency = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;
-        uint256 assetAmount = poolManager.getLendingPoolManager().computeRealAmount(
+        uint256 assetAmount = poolManager.lendingPoolManager().computeRealAmount(
             _position.poolId, marginCurrency, _position.marginAmount + _position.marginTotal
         );
         if (liquidatedAmount < assetAmount) {
@@ -175,7 +175,7 @@ contract MarginChecker is IMarginChecker, Owned {
 
     /// @inheritdoc IMarginChecker
     function getOracleReserves(IPairPoolManager poolManager, PoolId poolId) public view returns (uint224 reserves) {
-        address marginOracle = poolManager.marginOracle();
+        address marginOracle = poolManager.statusManager().marginOracle();
         if (marginOracle == address(0)) {
             reserves = 0;
         } else {
@@ -236,7 +236,7 @@ contract MarginChecker is IMarginChecker, Owned {
             }
             uint256 liquidatedAmount = debtAmount.mulDivMillion(liquidationMarginLevel);
             Currency marginCurrency = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;
-            uint256 assetAmount = poolManager.getLendingPoolManager().computeRealAmount(
+            uint256 assetAmount = poolManager.lendingPoolManager().computeRealAmount(
                 _position.poolId, marginCurrency, _position.marginAmount + _position.marginTotal
             );
             liquidated = assetAmount < liquidatedAmount;
@@ -276,7 +276,7 @@ contract MarginChecker is IMarginChecker, Owned {
             if (PoolId.unwrap(_position.poolId) == bytes32PoolId && _position.marginForOne == _liqStatus.marginForOne) {
                 if (_position.borrowAmount > 0) {
                     uint256 borrowAmount = _position.borrowAmount;
-                    uint256 assetAmount = poolManager.getLendingPoolManager().computeRealAmount(
+                    uint256 assetAmount = poolManager.lendingPoolManager().computeRealAmount(
                         _position.poolId, _liqStatus.marginCurrency, _position.marginAmount + _position.marginTotal
                     );
                     if (_position.rateCumulativeLast > 0) {

@@ -39,7 +39,7 @@ abstract contract BasePositionManager is ERC721, Owned, ReentrancyGuardTransient
         IMarginChecker _checker
     ) ERC721(name, symbol) Owned(initialOwner) {
         pairPoolManager = _pairPoolManager;
-        lendingPoolManager = _pairPoolManager.getLendingPoolManager();
+        lendingPoolManager = _pairPoolManager.lendingPoolManager();
         checker = _checker;
     }
 

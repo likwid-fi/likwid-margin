@@ -60,7 +60,7 @@ contract TestsScript is Script {
         console2.log("hookAddress", hookAddress);
         (uint256 _reserve0, uint256 _reserve1) = PairPoolManager(hookAddress).getReserves(poolId);
         console2.log("reserves", _reserve0, _reserve1);
-        address marginOracle = PairPoolManager(hookAddress).marginOracle();
+        address marginOracle = PairPoolManager(hookAddress).statusManager().marginOracle();
         (uint224 reserves,) = MarginOracle(marginOracle).observeNow(PairPoolManager(hookAddress), poolId);
         console2.log("reserves", marginOracle, reserves.getReverse0(), reserves.getReverse1());
         vm.stopBroadcast();

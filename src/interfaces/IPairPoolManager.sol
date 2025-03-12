@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IImmutableState} from "v4-periphery/src/interfaces/IImmutableState.sol";
-import {IHooks} from "v4-core/interfaces/IPoolManager.sol";
+import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
@@ -16,14 +16,14 @@ import {PoolStatus} from "../types/PoolStatus.sol";
 import {IMarginFees} from "../interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "../interfaces/IMarginLiquidity.sol";
 import {ILendingPoolManager} from "../interfaces/ILendingPoolManager.sol";
+import {IPoolStatusManager} from "../interfaces/IPoolStatusManager.sol";
 
 interface IPairPoolManager is IImmutableState {
     function hooks() external view returns (IHooks hook);
 
-    function getLendingPoolManager() external view returns (ILendingPoolManager);
+    function lendingPoolManager() external view returns (ILendingPoolManager);
 
-    /// @notice Get current margin oracle address
-    function marginOracle() external view returns (address);
+    function statusManager() external view returns (IPoolStatusManager);
 
     /// @notice Get current IMarginFees
     function marginFees() external view returns (IMarginFees);

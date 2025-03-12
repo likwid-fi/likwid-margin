@@ -17,6 +17,11 @@ abstract contract BasePoolManager is SafeCallback, Owned {
         _;
     }
 
+    modifier ensure(uint256 deadline) {
+        require(deadline >= block.timestamp, "EXPIRED");
+        _;
+    }
+
     constructor(address initialOwner, IPoolManager _poolManager) Owned(initialOwner) SafeCallback(_poolManager) {}
 
     function _unlockCallback(bytes calldata data) internal virtual override returns (bytes memory) {

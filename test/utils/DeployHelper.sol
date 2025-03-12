@@ -5,6 +5,7 @@ pragma solidity ^0.8.24;
 import {MarginHook} from "../../src/MarginHook.sol";
 import {LendingPoolManager} from "../../src/LendingPoolManager.sol";
 import {PairPoolManager} from "../../src/PairPoolManager.sol";
+import {PoolStatusManager} from "../../src/PoolStatusManager.sol";
 import {MirrorTokenManager} from "../../src/MirrorTokenManager.sol";
 import {MarginLiquidity} from "../../src/MarginLiquidity.sol";
 import {MarginPositionManager} from "../../src/MarginPositionManager.sol";
@@ -66,6 +67,7 @@ contract DeployHelper is Test {
     MarginOracle marginOracle;
     MarginFees marginFees;
     MarginChecker marginChecker;
+    PoolStatusManager poolStatusManager;
 
     function deployMintAndApprove2Currencies() internal {
         tokenA = new MockERC20("TESTA", "TESTA", 18);
@@ -89,6 +91,12 @@ contract DeployHelper is Test {
         pairPoolManager = new PairPoolManager(
             address(this), manager, mirrorTokenManager, lendingPoolManager, marginLiquidity, marginFees
         );
+
+        poolStatusManager = new PoolStatusManager(
+            address(this), manager, mirrorTokenManager, lendingPoolManager, marginLiquidity, pairPoolManager, marginFees
+        );
+        poolStatusManager.setMarginOracle(address(marginOracle));
+        pairPoolManager.setStatusManager(poolStatusManager);
 
         marginLiquidity.addPoolManager(address(pairPoolManager));
         mirrorTokenManager.addPoolManger(address(pairPoolManager));
@@ -135,7 +143,6 @@ contract DeployHelper is Test {
         tokenB.approve(address(marginPositionManager), type(uint256).max);
         tokenUSDT.approve(address(marginPositionManager), type(uint256).max);
         pairPoolManager.addPositionManager(address(marginPositionManager));
-        pairPoolManager.setMarginOracle(address(marginOracle));
         lendingPoolManager.setPairPoolManger(pairPoolManager);
         swapRouter = new MarginRouter(address(this), manager, pairPoolManager);
         tokenA.approve(address(swapRouter), type(uint256).max);

@@ -97,7 +97,7 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
         BasePositionManager("LIKWIDMarginPositionManager", "LMPM", initialOwner, _pairPoolManager, _checker)
     {
         pairPoolManager = _pairPoolManager;
-        lendingPoolManager = _pairPoolManager.getLendingPoolManager();
+        lendingPoolManager = _pairPoolManager.lendingPoolManager();
         checker = _checker;
     }
 

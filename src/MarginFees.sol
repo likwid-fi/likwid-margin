@@ -81,6 +81,42 @@ contract MarginFees is IMarginFees, Owned {
         }
     }
 
+    // given an input amount of an asset and pair reserve, returns the maximum output amount of the other asset
+    function getAmountOut(PoolStatus memory status, bool zeroForOne, uint256 amountIn)
+        external
+        view
+        returns (uint256 amountOut, uint24 fee, uint256 feeAmount)
+    {
+        require(amountIn > 0, "INSUFFICIENT_INPUT_AMOUNT");
+        (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
+        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
+        require(reserveIn > 0 && reserveOut > 0, " INSUFFICIENT_LIQUIDITY");
+        fee = dynamicFee(status);
+        uint256 amountInWithoutFee;
+        (amountInWithoutFee, feeAmount) = fee.deduct(amountIn);
+        uint256 numerator = amountInWithoutFee * reserveOut;
+        uint256 denominator = reserveIn + amountInWithoutFee;
+        amountOut = numerator / denominator;
+    }
+
+    // given an output amount of an asset and pair reserve, returns a required input amount of the other asset
+    function getAmountIn(PoolStatus memory status, bool zeroForOne, uint256 amountOut)
+        external
+        view
+        returns (uint256 amountIn, uint24 fee, uint256 feeAmount)
+    {
+        require(amountOut > 0, "INSUFFICIENT_OUTPUT_AMOUNT");
+        (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
+        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
+        require(reserveIn > 0 && reserveOut > 0, "INSUFFICIENT_LIQUIDITY");
+        require(amountOut < reserveOut, "OUTPUT_AMOUNT_OVERFLOW");
+        fee = dynamicFee(status);
+        uint256 numerator = reserveIn * amountOut;
+        uint256 denominator = (reserveOut - amountOut);
+        uint256 amountInWithoutFee = (numerator / denominator) + 1;
+        (amountIn, feeAmount) = fee.attach(amountInWithoutFee);
+    }
+
     function _getReserves(PoolStatus memory status) internal pure returns (uint256 _reserve0, uint256 _reserve1) {
         _reserve0 = status.realReserve0 + status.mirrorReserve0;
         _reserve1 = status.realReserve1 + status.mirrorReserve1;

@@ -5,6 +5,7 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 
 import {ERC6909Accrues} from "./base/ERC6909Accrues.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
+import {IStatusBase} from "./interfaces/IStatusBase.sol";
 
 contract MirrorTokenManager is IMirrorTokenManager, ERC6909Accrues, Owned {
     mapping(address => bool) public poolManagers;
@@ -19,6 +20,14 @@ contract MirrorTokenManager is IMirrorTokenManager, ERC6909Accrues, Owned {
     function mint(uint256 id, uint256 amount) external onlyPoolManager {
         unchecked {
             _mint(msg.sender, id, amount);
+        }
+    }
+
+    function mintInStatus(uint256 id, uint256 amount) external {
+        address poolManager = IStatusBase(msg.sender).pairPoolManager();
+        require(poolManagers[poolManager], "UNAUTHORIZED");
+        unchecked {
+            _mint(poolManager, id, amount);
         }
     }
 
