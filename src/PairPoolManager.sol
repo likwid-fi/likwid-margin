@@ -12,6 +12,7 @@ import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
+import {BaseFees} from "./base/BaseFees.sol";
 import {BasePoolManager} from "./base/BasePoolManager.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {TransientSlot} from "./external/openzeppelin-contracts/TransientSlot.sol";
@@ -36,7 +37,7 @@ import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 
-contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTransient {
+contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager, ReentrancyGuardTransient {
     using TransientSlot for *;
     using UQ112x112 for *;
     using SafeCast for uint256;
@@ -59,13 +60,6 @@ contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTr
         uint256 amount1
     );
     event Burn(PoolId indexed poolId, address indexed sender, uint256 liquidity, uint256 amount0, uint256 amount1);
-    event Sync(
-        PoolId indexed poolId,
-        uint256 realReserve0,
-        uint256 realReserve1,
-        uint256 mirrorReserve0,
-        uint256 mirrorReserve1
-    );
 
     IMirrorTokenManager public immutable mirrorTokenManager;
     ILendingPoolManager public immutable lendingPoolManager;
@@ -144,7 +138,7 @@ contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTr
         statusManager.update(key);
     }
 
-    function swap(PoolKey calldata key, IPoolManager.SwapParams calldata params)
+    function swap(address sender, PoolKey calldata key, IPoolManager.SwapParams calldata params)
         external
         onlyHooks
         returns (
@@ -172,7 +166,8 @@ contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTr
             poolManager.approve(address(hooks), specified.toId(), specifiedAmount);
         }
         if (feeAmount > 0) {
-            statusManager.updateProtocolFees(specified, feeAmount);
+            feeAmount = statusManager.updateProtocolFees(specified, feeAmount);
+            emit Fees(key.toId(), specified, sender, uint8(FeeType.SWAP), feeAmount);
         }
     }
 
@@ -367,11 +362,12 @@ contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTr
         }
 
         if (marginFeeAmount > 0) {
-            statusManager.updateProtocolFees(marginCurrency, marginFeeAmount);
+            uint256 feeAmount = statusManager.updateProtocolFees(marginCurrency, marginFeeAmount);
+            emit Fees(params.poolId, marginCurrency, sender, uint8(FeeType.MARGIN), feeAmount);
         }
 
         // mint mirror token
-        mirrorTokenManager.mint(borrowCurrency.toPoolId(params.poolId), borrowAmount);
+        mirrorTokenManager.mint(borrowCurrency.toTokenId(params.poolId), borrowAmount);
         statusManager.update(status.key, true);
         {
             BalanceStatus memory balanceStatus = statusManager.setBalances(status.key);
@@ -416,7 +412,7 @@ contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTr
         }
         // burn mirror token
         (uint256 pairAmount, uint256 lendingAmount) = mirrorTokenManager.burn(
-            address(lendingPoolManager), borrowCurrency.toPoolId(params.poolId), params.repayAmount
+            address(lendingPoolManager), borrowCurrency.toTokenId(params.poolId), params.repayAmount
         );
         if (params.repayAmount > pairAmount) {
             lendingAmount = Math.min(lendingAmount, params.repayAmount - pairAmount);
@@ -444,7 +440,7 @@ contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTr
             if (marginReserves >= amount) {
                 statusManager.setBalances(status.key);
                 poolManager.transfer(msg.sender, id, amount);
-                mirrorTokenManager.transferFrom(msg.sender, address(this), currency.toPoolId(poolId), amount);
+                mirrorTokenManager.transferFrom(msg.sender, address(this), currency.toTokenId(poolId), amount);
                 statusManager.update(status.key);
                 success = true;
             }
@@ -457,7 +453,8 @@ contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTr
         returns (uint256 amountOut)
     {
         PoolStatus memory status = statusManager.getStatus(poolId);
-        (amountOut,,) = marginFees.getAmountOut(status, zeroForOne, amountIn);
+        uint256 feeAmount;
+        (amountOut,, feeAmount) = marginFees.getAmountOut(status, zeroForOne, amountIn);
         uint256 mirrorOut = zeroForOne ? status.mirrorReserve1 : status.mirrorReserve0;
         require(amountOut <= mirrorOut, "NOT_ENOUGH_RESERVE");
         (Currency inputCurrency, Currency outputCurrency) =
@@ -473,6 +470,10 @@ contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTr
         poolManager.unlock(abi.encodeCall(this.handleSwapMirror, (sender, inputCurrency, amountIn)));
         lendingPoolManager.mirrorIn(recipient, poolId, outputCurrency, amountOut);
         statusManager.update(status.key);
+        if (feeAmount > 0) {
+            feeAmount = statusManager.updateProtocolFees(inputCurrency, feeAmount);
+            emit Fees(poolId, inputCurrency, sender, uint8(FeeType.SWAP), feeAmount);
+        }
     }
 
     function handleSwapMirror(address sender, Currency currency, uint256 amount) external selfOnly {

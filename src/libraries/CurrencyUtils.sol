@@ -82,11 +82,11 @@ library CurrencyUtils {
         }
     }
 
-    function toPoolId(Currency currency, PoolId poolId) internal pure returns (uint256) {
+    function toTokenId(Currency currency, PoolId poolId) internal pure returns (uint256) {
         return uint256(keccak256(abi.encode(currency, poolId)));
     }
 
-    function toKeyId(Currency currency, PoolKey memory key) internal pure returns (uint256) {
-        return toPoolId(currency, key.toId());
+    function toTokenId(Currency currency, PoolKey memory key) internal pure returns (uint256) {
+        return toTokenId(currency, key.toId());
     }
 }

@@ -10,6 +10,7 @@ import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
+import {BaseFees} from "./base/BaseFees.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {BalanceStatus} from "./types/BalanceStatus.sol";
@@ -24,7 +25,7 @@ import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 import {IPoolStatusManager} from "./interfaces/IPoolStatusManager.sol";
 
-contract PoolStatusManager is IPoolStatusManager, Owned {
+contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     using UQ112x112 for *;
     using TransientSlot for *;
     using CurrencyUtils for *;
@@ -181,7 +182,7 @@ contract PoolStatusManager is IPoolStatusManager, Owned {
             if (!inUpdate) {
                 status.mirrorReserve0 += uint112(interest0);
             }
-            uint256 cPoolId = status.key.currency0.toKeyId(status.key);
+            uint256 cPoolId = status.key.currency0.toTokenId(status.key);
             if (allInterest0 > interest0) {
                 uint256 lendingInterest0 = allInterest0 - interest0;
                 uint256 lendingRealInterest0 =
@@ -212,7 +213,7 @@ contract PoolStatusManager is IPoolStatusManager, Owned {
             if (!inUpdate) {
                 status.mirrorReserve1 += interest1.toUint112();
             }
-            uint256 cPoolId = status.key.currency1.toKeyId(status.key);
+            uint256 cPoolId = status.key.currency1.toTokenId(status.key);
             if (allInterest1 > interest1) {
                 uint256 lendingInterest1 = allInterest1 - interest1;
                 uint256 lendingRealInterest1 =
@@ -233,15 +234,22 @@ contract PoolStatusManager is IPoolStatusManager, Owned {
         PoolKey memory key = status.key;
         uint32 blockTS = uint32(block.timestamp % 2 ** 32);
         if (status.blockTimestampLast != blockTS) {
+            PoolId poolId = key.toId();
             (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = marginFees.getBorrowRateCumulativeLast(status);
             (uint256 flowReserve0, uint256 flowReserve1) =
-                marginLiquidity.getFlowReserves(pairPoolManager, key.toId(), status);
+                marginLiquidity.getFlowReserves(pairPoolManager, poolId, status);
             uint256 interest0 = _updateInterest0(status, flowReserve0, rate0CumulativeLast, inUpdate);
             uint256 interest1 = _updateInterest1(status, flowReserve1, rate1CumulativeLast, inUpdate);
             status.blockTimestampLast = blockTS;
             status.rate0CumulativeLast = rate0CumulativeLast;
             status.rate1CumulativeLast = rate1CumulativeLast;
-            marginLiquidity.addInterests(key.toId(), status.reserve0(), status.reserve1(), interest0, interest1);
+            marginLiquidity.addInterests(poolId, status.reserve0(), status.reserve1(), interest0, interest1);
+            if (interest0 > 0) {
+                emit Fees(poolId, key.currency0, address(this), uint8(FeeType.INTERESTS), interest0);
+            }
+            if (interest1 > 0) {
+                emit Fees(poolId, key.currency1, address(this), uint8(FeeType.INTERESTS), interest1);
+            }
         }
     }
 
@@ -293,8 +301,8 @@ contract PoolStatusManager is IPoolStatusManager, Owned {
         } else {
             balanceStatus.balance1 = 0;
         }
-        uint256 id0 = key.currency0.toKeyId(key);
-        uint256 id1 = key.currency1.toKeyId(key);
+        uint256 id0 = key.currency0.toTokenId(key);
+        uint256 id1 = key.currency1.toTokenId(key);
         balanceStatus.mirrorBalance0 = mirrorTokenManager.balanceOf(pairPoolManager, id0);
         balanceStatus.mirrorBalance1 = mirrorTokenManager.balanceOf(pairPoolManager, id1);
 

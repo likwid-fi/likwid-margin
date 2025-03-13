@@ -23,10 +23,12 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     using PerLibrary for *;
     using UQ112x112 for *;
 
+    event UpdateInterestRatio(uint256 indexed id, uint256 incrementRatioX112Old, uint256 incrementRatioX112New);
+
     event Deposit(
-        address indexed sender,
         PoolId indexed poolId,
         Currency indexed currency,
+        address indexed sender,
         address recipient,
         uint256 amount,
         uint256 originalAmount,
@@ -34,9 +36,9 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     );
 
     event Withdraw(
-        address indexed sender,
         PoolId indexed poolId,
         Currency indexed currency,
+        address indexed sender,
         address recipient,
         uint256 amount,
         uint256 originalAmount,
@@ -142,7 +144,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         view
         returns (uint256 amount)
     {
-        uint256 id = currency.toPoolId(poolId);
+        uint256 id = currency.toTokenId(poolId);
         amount = originalAmount.mulRatioX112(incrementRatioX112Of[id]);
     }
 
@@ -152,12 +154,18 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         uint256 totalSupply = balanceOf(address(this), id);
         uint256 incrementRatioX112Old = incrementRatioX112Of[id];
         incrementRatioX112Of[id] = incrementRatioX112Old.growRatioX112(interest, totalSupply);
+        emit UpdateInterestRatio(id, incrementRatioX112Old, incrementRatioX112Of[id]);
     }
 
-    function mirrorIn(address receiver, PoolId poolId, Currency currency, uint256 amount) external onlyPairManager {
-        uint256 id = currency.toPoolId(poolId);
+    function mirrorIn(address receiver, PoolId poolId, Currency currency, uint256 amount)
+        external
+        onlyPairManager
+        returns (uint256 originalAmount)
+    {
+        uint256 id = currency.toTokenId(poolId);
         mirrorTokenManager.transferFrom(msg.sender, address(this), id, amount);
-        _mint(receiver, id, amount);
+        originalAmount = _mintReturn(receiver, id, amount);
+        emit Deposit(poolId, currency, msg.sender, receiver, amount, originalAmount, incrementRatioX112Of[id]);
     }
 
     function mirrorInRealOut(PoolId poolId, Currency currency, uint256 amount)
@@ -170,7 +178,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         exchangeAmount = Math.min(balance, amount);
         if (exchangeAmount > 0) {
             poolManager.transfer(msg.sender, id, exchangeAmount);
-            mirrorTokenManager.transferFrom(msg.sender, address(this), currency.toPoolId(poolId), exchangeAmount);
+            mirrorTokenManager.transferFrom(msg.sender, address(this), currency.toTokenId(poolId), exchangeAmount);
         }
     }
 
@@ -179,13 +187,17 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         onlyPairManager
         returns (uint256 originalAmount)
     {
+        uint256 id = currency.toTokenId(poolId);
         poolManager.transferFrom(msg.sender, address(this), currency.toId(), amount);
-        originalAmount = _mintReturn(recipient, currency.toPoolId(poolId), amount);
+        originalAmount = _mintReturn(recipient, id, amount);
+        emit Deposit(poolId, currency, msg.sender, recipient, amount, originalAmount, incrementRatioX112Of[id]);
     }
 
     function realOut(address sender, PoolId poolId, Currency currency, uint256 amount) external onlyPairManager {
+        uint256 tokenId = currency.toTokenId(poolId);
         poolManager.transfer(msg.sender, currency.toId(), amount);
-        _burn(sender, currency.toPoolId(poolId), amount);
+        uint256 originalAmount = _burnReturn(sender, tokenId, amount);
+        emit Withdraw(poolId, currency, msg.sender, sender, amount, originalAmount, incrementRatioX112Of[tokenId]);
     }
 
     // ******************** USER CALL ********************
@@ -207,11 +219,11 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         selfOnly
         returns (uint256 originalAmount)
     {
-        uint256 id = currency.toPoolId(poolId);
+        uint256 id = currency.toTokenId(poolId);
         currency.settle(poolManager, sender, amount, false);
         currency.take(poolManager, address(this), amount, true);
         originalAmount = _mintReturn(recipient, id, amount);
-        emit Deposit(msg.sender, poolId, currency, recipient, amount, originalAmount, incrementRatioX112Of[id]);
+        emit Deposit(poolId, currency, msg.sender, recipient, amount, originalAmount, incrementRatioX112Of[id]);
     }
 
     function withdrawOriginal(address recipient, PoolId poolId, Currency currency, uint256 originalAmount) external {
@@ -227,7 +239,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         external
         selfOnly
     {
-        uint256 id = currency.toPoolId(poolId);
+        uint256 id = currency.toTokenId(poolId);
         uint256 balance = poolManager.balanceOf(address(this), currency.toId());
         if (balance < amount) {
             bool success = pairPoolManager.mirrorInRealOut(poolId, currency, amount - balance);
@@ -236,7 +248,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         currency.settle(poolManager, address(this), amount, true);
         currency.take(poolManager, recipient, amount, false);
         uint256 originalAmount = _burnReturn(sender, id, amount);
-        emit Withdraw(msg.sender, poolId, currency, recipient, amount, originalAmount, incrementRatioX112Of[id]);
+        emit Withdraw(poolId, currency, msg.sender, recipient, amount, originalAmount, incrementRatioX112Of[id]);
     }
 
     // ******************** OWNER CALL ********************

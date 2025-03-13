@@ -219,7 +219,7 @@ contract MarginRouterTest is DeployHelper {
             position.borrowAmount,
             position.rateCumulativeLast
         );
-        uint256 tokenBId = nativeKey.currency1.toPoolId(poolId);
+        uint256 tokenBId = nativeKey.currency1.toTokenId(poolId);
         uint256 lb = lendingPoolManager.balanceOf(user, tokenBId);
         assertEq(lb, 0);
         uint256 amountIn = 0.001 ether;

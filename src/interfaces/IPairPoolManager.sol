@@ -63,7 +63,7 @@ interface IPairPoolManager is IImmutableState {
 
     function initialize(PoolKey calldata key) external;
 
-    function swap(PoolKey calldata key, IPoolManager.SwapParams calldata params)
+    function swap(address sender, PoolKey calldata key, IPoolManager.SwapParams calldata params)
         external
         returns (
             Currency specified,

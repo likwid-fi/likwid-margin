@@ -53,7 +53,7 @@ contract MarginHook is BaseHook, Owned {
     /// @dev Facilitate a custom curve via beforeSwap + return delta
     /// @dev input tokens are taken from the PoolManager, creating a debt paid by the swapper
     /// @dev output tokens are transferred from the hook to the PoolManager, creating a credit claimed by the swapper
-    function beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
+    function beforeSwap(address sender, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
         external
         override
         onlyPoolManager
@@ -61,7 +61,7 @@ contract MarginHook is BaseHook, Owned {
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         (Currency specified, Currency unspecified, uint256 specifiedAmount, uint256 unspecifiedAmount, uint24 swapFee) =
-            pairPoolManager.swap(key, params);
+            pairPoolManager.swap(sender, key, params);
 
         bool exactInput = params.amountSpecified < 0;
         BeforeSwapDelta returnDelta;

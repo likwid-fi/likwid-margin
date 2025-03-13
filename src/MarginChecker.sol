@@ -127,17 +127,14 @@ contract MarginChecker is IMarginChecker, Owned {
         marginWithoutFee = marginFee.deductFrom(marginTotal);
     }
 
-    function _getMarginReserve(IPairPoolManager poolManager, PoolId poolId, bool marginForOne)
-        internal
+    function getBorrowMax(IPairPoolManager poolManager, PoolId poolId, bool marginForOne, uint256 marginAmount)
+        external
         view
-        returns (uint256 marginReserve)
+        returns (uint256 marginAmountIn, uint256 borrowAmount)
     {
-        PoolStatus memory status = poolManager.getStatus(poolId);
-        (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) =
-            poolManager.marginLiquidity().getPoolSupplies(address(poolManager), poolId);
-        uint256 marginReserve0 = Math.mulDiv(_totalSupply - retainSupply0, status.realReserve0, _totalSupply);
-        uint256 marginReserve1 = Math.mulDiv(_totalSupply - retainSupply1, status.realReserve1, _totalSupply);
-        marginReserve = (marginForOne ? marginReserve1 : marginReserve0);
+        (uint256 reserveBorrow, uint256 reserveMargin) = getReserves(poolManager, poolId, marginForOne);
+        marginAmountIn = marginAmount.mulMillionDiv(minMarginLevel);
+        borrowAmount = Math.mulDiv(marginAmountIn, reserveBorrow, reserveMargin);
     }
 
     /// @inheritdoc IMarginChecker
@@ -146,17 +143,35 @@ contract MarginChecker is IMarginChecker, Owned {
         view
         returns (uint256 marginMax, uint256 borrowAmount)
     {
-        uint256 marginMaxTotal = _getMarginReserve(poolManager, poolId, marginForOne);
-        if (marginMaxTotal > 1000) {
-            (uint256 reserve0, uint256 reserve1) = poolManager.getReserves(poolId);
-            uint256 marginMaxReserve = (marginForOne ? reserve1 : reserve0);
-            uint24 part = leverageThousandths[leverage - 1];
-            marginMaxReserve = marginMaxReserve * part / 1000;
-            marginMaxTotal = Math.min(marginMaxTotal, marginMaxReserve);
-            marginMaxTotal -= 1000;
+        PoolStatus memory status = poolManager.getStatus(poolId);
+        (uint256 marginReserve1, uint256 marginReserve0) =
+            poolManager.marginLiquidity().getFlowReserves(address(poolManager), poolId, status);
+        if (leverage > 0) {
+            uint256 marginMaxTotal = (marginForOne ? marginReserve1 : marginReserve0);
+            if (marginMaxTotal > 1000) {
+                (uint256 reserve0, uint256 reserve1) = poolManager.getReserves(poolId);
+                uint256 marginMaxReserve = (marginForOne ? reserve1 : reserve0);
+                uint24 part = leverageThousandths[leverage - 1];
+                marginMaxReserve = marginMaxReserve * part / 1000;
+                marginMaxTotal = Math.min(marginMaxTotal, marginMaxReserve);
+                marginMaxTotal -= 1000;
+            }
+            borrowAmount = poolManager.getAmountIn(poolId, marginForOne, marginMaxTotal);
+            marginMax = marginMaxTotal / leverage;
+        } else {
+            uint256 borrowMaxAmount = (marginForOne ? marginReserve0 : marginReserve1);
+            if (borrowMaxAmount > 1000) {
+                borrowAmount = borrowMaxAmount - 1000;
+            } else {
+                borrowAmount = 0;
+            }
+            if (borrowAmount > 0) {
+                (uint256 reserve0, uint256 reserve1) = (status.reserve0(), status.reserve1());
+                (uint256 reserveBorrow, uint256 reserveMargin) =
+                    marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+                marginMax = Math.mulDiv(reserveMargin, borrowAmount, reserveBorrow);
+            }
         }
-        borrowAmount = poolManager.getAmountIn(poolId, marginForOne, marginMaxTotal);
-        marginMax = marginMaxTotal / leverage;
     }
 
     /// @inheritdoc IMarginChecker

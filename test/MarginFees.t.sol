@@ -65,7 +65,7 @@ contract MarginFeesTest is DeployHelper {
     function testDynamicFee() public {
         address user = address(this);
         PoolId poolId = nativeKey.toId();
-        uint256 keyId = CurrencyLibrary.ADDRESS_ZERO.toPoolId(poolId);
+        uint256 keyId = CurrencyLibrary.ADDRESS_ZERO.toTokenId(poolId);
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         uint24 _beforeFee = marginFees.dynamicFee(status);
         assertEq(_beforeFee, status.key.fee);

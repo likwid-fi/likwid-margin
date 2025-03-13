@@ -12,6 +12,7 @@ import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IStatusBase} from "./interfaces/IStatusBase.sol";
+import {IPoolBase} from "./interfaces/IPoolBase.sol";
 
 contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
     using LiquidityLevel for *;
@@ -193,6 +194,18 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         view
         returns (uint256 reserve0, uint256 reserve1)
     {
+        uint256 uPoolId = _getPoolId(poolId);
+        (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) = _getPoolSupplies(pairPoolManager, uPoolId);
+        reserve0 = Math.mulDiv(totalSupply - retainSupply0, status.realReserve0, totalSupply);
+        reserve1 = Math.mulDiv(totalSupply - retainSupply1, status.realReserve1, totalSupply);
+    }
+
+    function getFlowReserves(address pairPoolManager, PoolId poolId)
+        external
+        view
+        returns (uint256 reserve0, uint256 reserve1)
+    {
+        PoolStatus memory status = IPoolBase(pairPoolManager).getStatus(poolId);
         uint256 uPoolId = _getPoolId(poolId);
         (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) = _getPoolSupplies(pairPoolManager, uPoolId);
         reserve0 = Math.mulDiv(totalSupply - retainSupply0, status.realReserve0, totalSupply);

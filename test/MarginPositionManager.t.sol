@@ -158,7 +158,7 @@ contract MarginPositionManagerTest is DeployHelper {
 
         (positionId, borrowAmount) = marginPositionManager.margin(params);
         Currency marginCurrency = key.currency0;
-        uint256 lendingId = marginCurrency.toPoolId(poolId);
+        uint256 lendingId = marginCurrency.toTokenId(poolId);
         positionId = marginPositionManager.getPositionId(key.toId(), false, user, true);
         assertGt(positionId, 0);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
@@ -328,7 +328,7 @@ contract MarginPositionManagerTest is DeployHelper {
     function test_hook_margin_native() public {
         address user = address(this);
         PoolId poolId = nativeKey.toId();
-        uint256 keyId = CurrencyLibrary.ADDRESS_ZERO.toPoolId(poolId);
+        uint256 keyId = CurrencyLibrary.ADDRESS_ZERO.toTokenId(poolId);
         uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
         assertEq(rate, 50000);
         uint256 positionId;
@@ -359,7 +359,7 @@ contract MarginPositionManagerTest is DeployHelper {
     function testMarginNative() public {
         address user = address(this);
         PoolId poolId = nativeKey.toId();
-        uint256 currencyPoolId = CurrencyLibrary.ADDRESS_ZERO.toPoolId(poolId);
+        uint256 currencyPoolId = CurrencyLibrary.ADDRESS_ZERO.toTokenId(poolId);
         uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
         assertEq(rate, 50000);
         uint256 positionId;
@@ -1101,8 +1101,8 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256[] memory positionIds = new uint256[](length);
         uint256 debtAmount = 0;
         uint256 borrowAmountAll = 0;
-        uint256 keyId = nativeKey.currency1.toKeyId(nativeKey);
-        uint256 keyId0 = nativeKey.currency0.toKeyId(nativeKey);
+        uint256 keyId = nativeKey.currency1.toTokenId(nativeKey);
+        uint256 keyId0 = nativeKey.currency0.toTokenId(nativeKey);
         for (uint256 i = 0; i < length; i++) {
             address user = vm.addr(i + 1);
             uint256 positionId;
@@ -1177,7 +1177,7 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256 length = 2;
         uint256[] memory positionIds = new uint256[](length);
         address user = vm.addr(1);
-        uint256 keyId = CurrencyLibrary.ADDRESS_ZERO.toKeyId(nativeKey);
+        uint256 keyId = CurrencyLibrary.ADDRESS_ZERO.toTokenId(nativeKey);
         uint256 debtAmount = 0;
         {
             uint256 positionId;

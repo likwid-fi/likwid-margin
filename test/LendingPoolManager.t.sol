@@ -48,7 +48,7 @@ contract LendingPoolManagerTest is DeployHelper {
         console.log("balance:%s", user.balance);
         Currency eth = CurrencyLibrary.ADDRESS_ZERO;
         PoolId nativeId = nativeKey.toId();
-        uint256 id = eth.toPoolId(nativeId);
+        uint256 id = eth.toTokenId(nativeId);
         vm.startPrank(user);
         uint256 lb = lendingPoolManager.balanceOf(user, id);
         assertEq(lb, 0);
@@ -70,7 +70,7 @@ contract LendingPoolManagerTest is DeployHelper {
         console.log("balance:%s", user.balance);
         Currency eth = CurrencyLibrary.ADDRESS_ZERO;
         PoolId nativeId = nativeKey.toId();
-        uint256 id = eth.toPoolId(nativeId);
+        uint256 id = eth.toTokenId(nativeId);
         vm.startPrank(user);
         uint256 lb = lendingPoolManager.balanceOf(user, id);
         assertEq(lb, 0);
@@ -81,7 +81,7 @@ contract LendingPoolManagerTest is DeployHelper {
         vm.stopPrank();
         tokenB.approve(address(lendingPoolManager), 0.1 ether);
         lendingPoolManager.deposit(user, nativeId, nativeKey.currency1, 0.099 ether);
-        uint256 tokenBId = nativeKey.currency1.toPoolId(nativeId);
+        uint256 tokenBId = nativeKey.currency1.toTokenId(nativeId);
         lb = lendingPoolManager.balanceOf(user, tokenBId);
         assertGt(lb, 0);
         uint256 tokenBAmount = manager.balanceOf(address(lendingPoolManager), nativeKey.currency1.toId());
