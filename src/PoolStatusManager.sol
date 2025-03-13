@@ -34,6 +34,15 @@ contract PoolStatusManager is IPoolStatusManager, Owned {
     error PairAlreadyExists();
     error PairNotExists();
 
+    event Initialize(
+        PoolId indexed id,
+        Currency indexed currency0,
+        Currency indexed currency1,
+        uint24 fee,
+        int24 tickSpacing,
+        IHooks hooks
+    );
+
     event Sync(
         PoolId indexed poolId,
         uint256 realReserve0,
@@ -261,6 +270,7 @@ contract PoolStatusManager is IPoolStatusManager, Owned {
         status.rate1CumulativeLast = PerLibrary.ONE_TRILLION;
         status.blockTimestampLast = uint32(block.timestamp % 2 ** 32);
         statusStore[id] = status;
+        emit Initialize(id, key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks);
     }
 
     function getBalances(PoolKey memory key)

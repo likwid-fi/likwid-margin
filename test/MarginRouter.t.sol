@@ -11,6 +11,7 @@ import {PoolStatus} from "../src/types/PoolStatus.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
+import {CurrencyUtils} from "../src/libraries/CurrencyUtils.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
@@ -31,6 +32,8 @@ import {HookMiner} from "./utils/HookMiner.sol";
 import {DeployHelper} from "./utils/DeployHelper.sol";
 
 contract MarginRouterTest is DeployHelper {
+    using CurrencyUtils for Currency;
+
     function setUp() public {
         deployHookAndRouter();
         initPoolLiquidity();
@@ -178,5 +181,60 @@ contract MarginRouterTest is DeployHelper {
         assertEq(amountIn, _balance0 - balance0);
         assertEq(amountOut, _balanceUSDT - balanceUSDT);
         assertEq(amountOut, balance1 - _balance1);
+    }
+
+    function testSwapMirror() public {
+        address user = address(this);
+        PoolId poolId = nativeKey.toId();
+        uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
+        assertEq(rate, 50000);
+        uint256 positionId;
+        uint256 borrowAmount;
+        uint256 payValue = 0.01 ether;
+
+        MarginParams memory params = MarginParams({
+            poolId: poolId,
+            marginForOne: false,
+            minMarginLevel: 0,
+            leverage: 1,
+            marginAmount: payValue,
+            marginTotal: 0,
+            borrowAmount: 0,
+            borrowMaxAmount: 0,
+            recipient: user,
+            deadline: block.timestamp + 1000
+        });
+
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        console.log(
+            "pairPoolManager.balance:%s,marginPositionManager.balance:%s",
+            address(pairPoolManager).balance,
+            address(marginPositionManager).balance
+        );
+        console.log("positionId:%s,borrowAmount:%s", positionId, borrowAmount);
+        MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        console.log(
+            "positionId:%s,position.borrowAmount:%s,rateCumulativeLast:%s",
+            positionId,
+            position.borrowAmount,
+            position.rateCumulativeLast
+        );
+        uint256 tokenBId = nativeKey.currency1.toPoolId(poolId);
+        uint256 lb = lendingPoolManager.balanceOf(user, tokenBId);
+        assertEq(lb, 0);
+        uint256 amountIn = 0.001 ether;
+        MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+            poolId: poolId,
+            zeroForOne: true,
+            to: user,
+            amountIn: amountIn,
+            amountOut: 0,
+            amountOutMin: 0,
+            deadline: type(uint256).max
+        });
+        uint256 amountOut = swapRouter.swapMirror{value: amountIn}(swapParams);
+        lb = lendingPoolManager.balanceOf(user, tokenBId);
+        console.log(amountOut, lb);
+        assertEq(lb, amountOut);
     }
 }

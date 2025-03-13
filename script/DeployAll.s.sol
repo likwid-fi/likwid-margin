@@ -19,7 +19,6 @@ import {PoolStatusManager} from "../src/PoolStatusManager.sol";
 
 contract DeployAllScript is Script {
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
-    address manager = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
     address owner = 0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1;
     MirrorTokenManager mirrorTokenManager;
     LendingPoolManager lendingPoolManager;
@@ -31,28 +30,53 @@ contract DeployAllScript is Script {
     MarginPositionManager marginPositionManager;
     PoolStatusManager poolStatusManager;
 
+    error ManagerNotExist();
+
     function setUp() public {}
 
-    function run() public {
+    function _getManager(uint256 chainId) internal pure returns (address manager) {
+        if (chainId == 11155111) {
+            manager = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
+        } else if (chainId == 97) {
+            manager = 0x7cAf3F63D481555361Ad3b17703Ac95f7a320D0c;
+        }
+    }
+
+    function run(uint256 chainId) public {
         vm.startBroadcast();
+        console.log(chainId);
+        address manager = _getManager(chainId);
+        if (manager == address(0)) {
+            revert ManagerNotExist();
+        }
+        console2.log("poolManager:", manager);
+
         mirrorTokenManager = new MirrorTokenManager(owner);
         console2.log("mirrorTokenManager:", address(mirrorTokenManager));
+
         marginLiquidity = new MarginLiquidity(owner);
         console2.log("marginLiquidity:", address(marginLiquidity));
+
         marginChecker = new MarginChecker(owner);
         console2.log("marginChecker:", address(marginChecker));
+
         marginOracle = new MarginOracle();
         console2.log("marginOracle:", address(marginOracle));
+
         marginFees = new MarginFees(owner);
         console2.log("marginFees:", address(marginFees));
+
         lendingPoolManager = new LendingPoolManager(owner, IPoolManager(manager), mirrorTokenManager);
-        console2.log("marginFees:", address(marginFees));
+        console2.log("lendingPoolManager:", address(lendingPoolManager));
+
         pairPoolManager = new PairPoolManager(
             owner, IPoolManager(manager), mirrorTokenManager, lendingPoolManager, marginLiquidity, marginFees
         );
-        console2.log("pairPoolManager", address(pairPoolManager));
+        console2.log("pairPoolManager:", address(pairPoolManager));
+
         marginPositionManager = new MarginPositionManager(owner, pairPoolManager, marginChecker);
-        console2.log("marginPositionManager", address(marginPositionManager));
+        console2.log("marginPositionManager:", address(marginPositionManager));
+
         poolStatusManager = new PoolStatusManager(
             owner,
             IPoolManager(manager),
@@ -62,7 +86,10 @@ contract DeployAllScript is Script {
             pairPoolManager,
             marginFees
         );
-        console2.log("poolStatusManager", address(poolStatusManager));
+        console2.log("poolStatusManager:", address(poolStatusManager));
+
+        MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), pairPoolManager);
+        console2.log("swapRouter:", address(swapRouter));
 
         bytes memory constructorArgs = abi.encode(owner, manager, address(pairPoolManager));
         uint160 flags = uint160(
@@ -84,16 +111,19 @@ contract DeployAllScript is Script {
 
         // verify proper create2 usage
         require(deployedHook == hookAddress, "DeployScript: hook address mismatch");
+        console2.log("hookAddress:", hookAddress);
+        // config marginLiquidity
+        marginLiquidity.addPoolManager(address(pairPoolManager));
+        // config mirrorTokenManager
+        mirrorTokenManager.addPoolManger(address(pairPoolManager));
+        // config poolStatusManager
+        poolStatusManager.setMarginOracle(address(marginOracle));
+        // config pairPoolManager
         pairPoolManager.addPositionManager(address(marginPositionManager));
         pairPoolManager.setHooks(MarginHook(hookAddress));
         pairPoolManager.setStatusManager(poolStatusManager);
-        poolStatusManager.setMarginOracle(address(marginOracle));
+        // config lendingPoolManager
         lendingPoolManager.setPairPoolManger(pairPoolManager);
-        console2.log("hookAddress:", hookAddress);
-        marginLiquidity.addPoolManager(address(pairPoolManager));
-        mirrorTokenManager.addPoolManger(address(pairPoolManager));
-        MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), pairPoolManager);
-        console2.log("swapRouter:", address(swapRouter));
 
         vm.stopBroadcast();
     }

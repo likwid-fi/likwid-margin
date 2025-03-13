@@ -72,7 +72,7 @@ interface IPairPoolManager is IImmutableState {
             uint256 unspecifiedAmount,
             uint24 swapFee
         );
-    // ******************** HOOK CALL ********************
+    // ******************** EXTERNAL CALL ********************
 
     /// @notice Add liquidity to a pool
     /// @param params The parameters for the add liquidity hook
@@ -97,6 +97,13 @@ interface IPairPoolManager is IImmutableState {
     /// @param params The parameters for the release hook
     /// @return The amount of tokens repaid
     function release(ReleaseParams memory params) external payable returns (uint256);
+
+    function mirrorInRealOut(PoolId poolId, Currency currency, uint256 amount) external returns (bool success);
+
+    function swapMirror(address sender, address recipient, PoolId poolId, bool zeroForOne, uint256 amountIn)
+        external
+        payable
+        returns (uint256 amountOut);
 
     /// @notice Collects the protocol fees for a given recipient and currency, returning the amount collected
     /// @dev This will revert if the contract is unlocked

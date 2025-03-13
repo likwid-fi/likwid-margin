@@ -63,11 +63,6 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         _;
     }
 
-    function transferNative(address to, uint256 amount) internal {
-        (bool success,) = to.call{value: amount}("");
-        require(success, "TRANSFER_FAILED");
-    }
-
     // ******************** ERC6909 INTERNAL ********************
 
     function _mint(address receiver, uint256 id, uint256 amount) internal override {
@@ -159,9 +154,10 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         incrementRatioX112Of[id] = incrementRatioX112Old.growRatioX112(interest, totalSupply);
     }
 
-    function mirrorIn(PoolId poolId, Currency currency, uint256 amount) external onlyPairManager {
+    function mirrorIn(address receiver, PoolId poolId, Currency currency, uint256 amount) external onlyPairManager {
         uint256 id = currency.toPoolId(poolId);
         mirrorTokenManager.transferFrom(msg.sender, address(this), id, amount);
+        _mint(receiver, id, amount);
     }
 
     function mirrorInRealOut(PoolId poolId, Currency currency, uint256 amount)
@@ -232,6 +228,11 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         selfOnly
     {
         uint256 id = currency.toPoolId(poolId);
+        uint256 balance = poolManager.balanceOf(address(this), currency.toId());
+        if (balance < amount) {
+            bool success = pairPoolManager.mirrorInRealOut(poolId, currency, amount - balance);
+            require(success, "NOT_ENOUGH_RESERVE");
+        }
         currency.settle(poolManager, address(this), amount, true);
         currency.take(poolManager, recipient, amount, false);
         uint256 originalAmount = _burnReturn(sender, id, amount);
@@ -242,5 +243,6 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
 
     function setPairPoolManger(IPairPoolManager _manager) external onlyOwner {
         pairPoolManager = _manager;
+        mirrorTokenManager.setOperator(address(_manager), true);
     }
 }

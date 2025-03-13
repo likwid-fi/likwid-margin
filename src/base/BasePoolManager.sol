@@ -17,6 +17,11 @@ abstract contract BasePoolManager is SafeCallback, Owned {
         _;
     }
 
+    function transferNative(address to, uint256 amount) internal {
+        (bool success,) = to.call{value: amount}("");
+        require(success, "TRANSFER_FAILED");
+    }
+
     modifier ensure(uint256 deadline) {
         require(deadline >= block.timestamp, "EXPIRED");
         _;

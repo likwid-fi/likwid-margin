@@ -124,4 +124,16 @@ contract MarginRouter is SafeCallback, Owned {
         }
         return 0;
     }
+
+    function swapMirror(SwapParams calldata params)
+        external
+        payable
+        ensure(params.deadline)
+        returns (uint256 amountOut)
+    {
+        require(params.amountIn > 0, "AMOUNT_ERROR");
+        amountOut = pairPoolManager.swapMirror{value: msg.value}(
+            msg.sender, params.to, params.poolId, params.zeroForOne, params.amountIn
+        );
+    }
 }

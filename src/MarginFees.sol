@@ -54,18 +54,30 @@ contract MarginFees is IMarginFees, Owned {
         _marginFee = status.marginFee == 0 ? marginFee : status.marginFee;
     }
 
+    function differencePrice(uint256 price, uint256 lastPrice) internal pure returns (uint256 priceDiff) {
+        priceDiff = price > lastPrice ? price - lastPrice : lastPrice - price;
+    }
+
     /// @inheritdoc IMarginFees
     function dynamicFee(PoolStatus memory status) public view returns (uint24 _fee) {
         uint256 timeElapsed = status.marginTimestampLast.getTimeElapsed();
         _fee = status.key.fee;
         uint256 lastPrice1X112 = status.lastPrice1X112;
+        uint256 feeUp;
         if (timeElapsed < dynamicFeeDurationSeconds && lastPrice1X112 > 0) {
-            uint256 timeDiff = uint256(dynamicFeeDurationSeconds - timeElapsed);
-            (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
-            uint224 price1X112 = UQ112x112.encode(uint112(_reserve0)).div(uint112(_reserve1));
-            uint256 priceDiff = price1X112 > lastPrice1X112 ? price1X112 - lastPrice1X112 : lastPrice1X112 - price1X112;
-            uint256 timeMul = timeDiff.mulMillionDiv(uint256(dynamicFeeDurationSeconds));
-            uint256 feeUp = Math.mulDiv(priceDiff * dynamicFeeUnit * _fee, timeMul, lastPrice1X112).divMillion();
+            {
+                uint256 lastPrice0X112 = Math.mulDiv(UQ112x112.Q112, UQ112x112.Q112, status.lastPrice1X112);
+                (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
+                uint224 price0X112 = UQ112x112.encode(uint112(_reserve1)).div(uint112(_reserve0));
+                uint224 price1X112 = UQ112x112.encode(uint112(_reserve0)).div(uint112(_reserve1));
+                uint256 price0Diff = differencePrice(price0X112, lastPrice0X112);
+                uint256 price1Diff = differencePrice(price1X112, lastPrice1X112);
+                uint256 timeMul =
+                    uint256(dynamicFeeDurationSeconds - timeElapsed).mulMillionDiv(uint256(dynamicFeeDurationSeconds));
+                uint256 fee0Up = Math.mulDiv(price0Diff * dynamicFeeUnit * _fee, timeMul, lastPrice0X112).divMillion();
+                uint256 fee1Up = Math.mulDiv(price1Diff * dynamicFeeUnit * _fee, timeMul, lastPrice1X112).divMillion();
+                feeUp = Math.max(fee0Up, fee1Up);
+            }
             uint256 dFee = feeUp + _fee;
             if (dFee >= PerLibrary.ONE_MILLION) {
                 _fee = uint24(PerLibrary.ONE_MILLION) - 1;

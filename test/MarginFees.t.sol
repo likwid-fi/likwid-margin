@@ -100,6 +100,7 @@ contract MarginFeesTest is DeployHelper {
         vm.warp(10);
         _afterFee = marginFees.dynamicFee(status);
         assertLe(_afterFee, 20 * status.key.fee);
+        console.log("_afterFee:", _afterFee);
         vm.warp(130);
         _afterFee = marginFees.dynamicFee(status);
         assertEq(_afterFee, status.key.fee);

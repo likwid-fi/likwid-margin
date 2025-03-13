@@ -106,6 +106,11 @@ contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTr
         _;
     }
 
+    modifier onlyLendingPool() {
+        require(msg.sender == address(lendingPoolManager), "UNAUTHORIZED");
+        _;
+    }
+
     function getStatus(PoolId poolId) external view returns (PoolStatus memory _status) {
         _status = statusManager.getStatus(poolId);
     }
@@ -422,6 +427,57 @@ contract PairPoolManager is IPairPoolManager, BasePoolManager, ReentrancyGuardTr
         }
         statusManager.update(status.key, true);
         return params.repayAmount;
+    }
+
+    function mirrorInRealOut(PoolId poolId, Currency currency, uint256 amount)
+        external
+        onlyLendingPool
+        returns (bool success)
+    {
+        uint256 id = currency.toId();
+        uint256 balance = poolManager.balanceOf(address(this), id);
+        if (balance > amount) {
+            PoolStatus memory status = statusManager.getStatus(poolId);
+            (uint256 marginReserve0, uint256 marginReserve1) =
+                marginLiquidity.getFlowReserves(address(this), poolId, status);
+            uint256 marginReserves = status.key.currency0 == currency ? marginReserve0 : marginReserve1;
+            if (marginReserves >= amount) {
+                statusManager.setBalances(status.key);
+                poolManager.transfer(msg.sender, id, amount);
+                mirrorTokenManager.transferFrom(msg.sender, address(this), currency.toPoolId(poolId), amount);
+                statusManager.update(status.key);
+                success = true;
+            }
+        }
+    }
+
+    function swapMirror(address sender, address recipient, PoolId poolId, bool zeroForOne, uint256 amountIn)
+        external
+        payable
+        returns (uint256 amountOut)
+    {
+        PoolStatus memory status = statusManager.getStatus(poolId);
+        (amountOut,,) = marginFees.getAmountOut(status, zeroForOne, amountIn);
+        uint256 mirrorOut = zeroForOne ? status.mirrorReserve1 : status.mirrorReserve0;
+        require(amountOut <= mirrorOut, "NOT_ENOUGH_RESERVE");
+        (Currency inputCurrency, Currency outputCurrency) =
+            zeroForOne ? (status.key.currency0, status.key.currency1) : (status.key.currency1, status.key.currency0);
+        uint256 sendValue = inputCurrency.checkAmount(amountIn);
+        if (sendValue > 0) {
+            amountIn = sendValue;
+            if (msg.value > sendValue) {
+                transferNative(sender, msg.value - sendValue);
+            }
+        }
+        statusManager.setBalances(status.key);
+        poolManager.unlock(abi.encodeCall(this.handleSwapMirror, (sender, inputCurrency, amountIn)));
+        lendingPoolManager.mirrorIn(recipient, poolId, outputCurrency, amountOut);
+        statusManager.update(status.key);
+    }
+
+    function handleSwapMirror(address sender, Currency currency, uint256 amount) external selfOnly {
+        currency.settle(poolManager, sender, amount, false);
+        currency.take(poolManager, address(this), amount, true);
     }
 
     /// @inheritdoc IPairPoolManager
