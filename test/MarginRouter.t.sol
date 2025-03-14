@@ -8,7 +8,7 @@ import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
 import {MarginOracle} from "../src/MarginOracle.sol";
 import {PoolStatus} from "../src/types/PoolStatus.sol";
-import {MarginParams} from "../src/types/MarginParams.sol";
+import {MarginParams, MarginParamsVo} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
 import {CurrencyUtils} from "../src/libraries/CurrencyUtils.sol";
@@ -195,10 +195,8 @@ contract MarginRouterTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 1,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,

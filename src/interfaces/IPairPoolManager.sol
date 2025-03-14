@@ -10,7 +10,7 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
 
 import {AddLiquidityParams, RemoveLiquidityParams} from "../types/LiquidityParams.sol";
-import {MarginParams} from "../types/MarginParams.sol";
+import {MarginParamsVo} from "../types/MarginParams.sol";
 import {ReleaseParams} from "../types/ReleaseParams.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
 import {IMarginFees} from "../interfaces/IMarginFees.sol";
@@ -91,7 +91,7 @@ interface IPairPoolManager is IImmutableState {
     /// @param sender The address of sender
     /// @param params The parameters for the margin hook
     /// @return The updated parameters for the margin hook
-    function margin(address sender, MarginParams memory params) external payable returns (MarginParams memory);
+    function margin(address sender, MarginParamsVo memory params) external payable returns (MarginParamsVo memory);
 
     /// @notice Release
     /// @param params The parameters for the release hook

@@ -7,7 +7,7 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 // Local
 import {PoolStatus} from "./types/PoolStatus.sol";
-import {MarginParams} from "./types/MarginParams.sol";
+import {MarginParams, MarginParamsVo} from "./types/MarginParams.sol";
 import {LiquidateStatus} from "./types/LiquidateStatus.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PriceMath} from "./libraries/PriceMath.sol";
@@ -15,6 +15,7 @@ import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {MarginPosition, MarginPositionVo} from "./types/MarginPosition.sol";
 import {BurnParams} from "./types/BurnParams.sol";
+import {IStatusBase} from "./interfaces/IStatusBase.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginChecker} from "./interfaces/IMarginChecker.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
@@ -77,7 +78,7 @@ contract MarginChecker is IMarginChecker, Owned {
         PoolStatus memory _status,
         MarginPosition memory _position,
         uint256 closeMillionth
-    ) external view returns (int256 pnlAmount) {
+    ) public view returns (int256 pnlAmount) {
         if (_position.borrowAmount == 0) {
             return 0;
         }
@@ -95,11 +96,23 @@ contract MarginChecker is IMarginChecker, Owned {
         pnlAmount = int256(releaseTotalReal) - int256(releaseAmount);
     }
 
-    function checkMinMarginLevel(IPairPoolManager poolManager, MarginParams memory params, PoolStatus memory _status)
+    function estimatePNL(IMarginPositionManager positionManager, uint256 positionId, uint256 closeMillionth)
         external
         view
-        returns (bool valid)
+        returns (int256 pnlAmount)
     {
+        IPairPoolManager pairPoolManager = IPairPoolManager(IStatusBase(address(positionManager)).pairPoolManager());
+        MarginPosition memory position = positionManager.getPosition(positionId);
+        PoolStatus memory status = pairPoolManager.getStatus(position.poolId);
+        pnlAmount = estimatePNL(pairPoolManager, status, position, closeMillionth);
+    }
+
+    function checkMinMarginLevel(
+        IPairPoolManager poolManager,
+        MarginParamsVo memory paramsVo,
+        PoolStatus memory _status
+    ) external view returns (bool valid) {
+        MarginParams memory params = paramsVo.params;
         (uint256 reserve0, uint256 reserve1) =
             (_status.realReserve0 + _status.mirrorReserve0, _status.realReserve1 + _status.mirrorReserve1);
         (uint256 reserveBorrow, uint256 reserveMargin) =
@@ -110,7 +123,7 @@ contract MarginChecker is IMarginChecker, Owned {
         } else {
             debtAmount = poolManager.getAmountOut(params.poolId, params.marginForOne, params.borrowAmount);
         }
-        valid = params.marginAmount + params.marginTotal >= debtAmount.mulDivMillion(minMarginLevel);
+        valid = params.marginAmount + paramsVo.marginTotal >= debtAmount.mulDivMillion(minMarginLevel);
     }
 
     /// @inheritdoc IMarginChecker
@@ -130,11 +143,11 @@ contract MarginChecker is IMarginChecker, Owned {
     function getBorrowMax(IPairPoolManager poolManager, PoolId poolId, bool marginForOne, uint256 marginAmount)
         external
         view
-        returns (uint256 marginAmountIn, uint256 borrowAmount)
+        returns (uint256 marginAmountIn, uint256 borrowMax)
     {
         (uint256 reserveBorrow, uint256 reserveMargin) = getReserves(poolManager, poolId, marginForOne);
         marginAmountIn = marginAmount.mulMillionDiv(minMarginLevel);
-        borrowAmount = Math.mulDiv(marginAmountIn, reserveBorrow, reserveMargin);
+        borrowMax = Math.mulDiv(marginAmountIn, reserveBorrow, reserveMargin);
     }
 
     /// @inheritdoc IMarginChecker
@@ -202,7 +215,7 @@ contract MarginChecker is IMarginChecker, Owned {
     function getMaxDecrease(address positionManager, uint256 positionId) external view returns (uint256 maxAmount) {
         IMarginPositionManager manager = IMarginPositionManager(positionManager);
         MarginPosition memory _position = manager.getPosition(positionId);
-        IPairPoolManager poolManager = IPairPoolManager(manager.getPairPool());
+        IPairPoolManager poolManager = IPairPoolManager(IStatusBase(positionManager).pairPoolManager());
         PoolStatus memory _status = poolManager.getStatus(_position.poolId);
         maxAmount = getMaxDecrease(poolManager, _status, _position);
     }
@@ -242,8 +255,9 @@ contract MarginChecker is IMarginChecker, Owned {
     {
         IMarginPositionManager positionManager = IMarginPositionManager(manager);
         MarginPosition memory _position = positionManager.getPosition(positionId);
-        PoolStatus memory _status = IPairPoolManager(positionManager.getPairPool()).getStatus(_position.poolId);
-        return checkLiquidate(IPairPoolManager(positionManager.getPairPool()), _status, _position);
+        IPairPoolManager pairPoolManager = IPairPoolManager(IStatusBase(manager).pairPoolManager());
+        PoolStatus memory _status = pairPoolManager.getStatus(_position.poolId);
+        return checkLiquidate(pairPoolManager, _status, _position);
     }
 
     /// @inheritdoc IMarginChecker

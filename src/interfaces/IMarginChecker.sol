@@ -4,9 +4,10 @@ pragma solidity ^0.8.24;
 import {PoolId} from "v4-core/types/PoolId.sol";
 
 import {IPairPoolManager} from "../interfaces/IPairPoolManager.sol";
+import {IMarginPositionManager} from "../interfaces/IMarginPositionManager.sol";
 import {MarginPosition, MarginPositionVo} from "../types/MarginPosition.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
-import {MarginParams} from "../types/MarginParams.sol";
+import {MarginParams, MarginParamsVo} from "../types/MarginParams.sol";
 import {LiquidateStatus} from "../types/LiquidateStatus.sol";
 import {BurnParams} from "../types/BurnParams.sol";
 
@@ -45,10 +46,21 @@ interface IMarginChecker {
         uint256 closeMillionth
     ) external view returns (int256 pnlAmount);
 
-    function checkMinMarginLevel(IPairPoolManager poolManager, MarginParams memory params, PoolStatus memory _status)
+    /// @notice Return the PNL amount of the position with the given ID and repayment ratio
+    /// @param positionManager The address of manager
+    /// @param positionId The ID of the position to retrieve
+    /// @param closeMillionth   The repayment ratio is calculated as one millionth
+    /// @return pnlAmount The PNL amount of the position
+    function estimatePNL(IMarginPositionManager positionManager, uint256 positionId, uint256 closeMillionth)
         external
         view
-        returns (bool valid);
+        returns (int256 pnlAmount);
+
+    function checkMinMarginLevel(
+        IPairPoolManager poolManager,
+        MarginParamsVo memory paramsVo,
+        PoolStatus memory _status
+    ) external view returns (bool valid);
 
     /// @notice Get the marginTotal amount and borrow amount for the given pool, leverage, and marginAmount
     /// @param poolManager The manager of the pool

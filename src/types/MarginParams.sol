@@ -11,12 +11,8 @@ struct MarginParams {
     bool marginForOne;
     /// @notice Leverage factor of the margin position.
     uint24 leverage;
-    /// @notice Min margin level.
-    uint24 minMarginLevel;
     /// @notice The amount of margin
     uint256 marginAmount;
-    /// @notice The total amount of margin,equals to marginAmount * leverage * (1-marginFee).
-    uint256 marginTotal;
     /// @notice The borrow amount of the margin position.When the parameter is passed in, it is 0.
     uint256 borrowAmount;
     /// @notice The maximum borrow amount of the margin position.
@@ -25,4 +21,12 @@ struct MarginParams {
     address recipient;
     /// @notice Deadline for the transaction
     uint256 deadline;
+}
+
+struct MarginParamsVo {
+    MarginParams params;
+    /// @notice The total amount of margin,equals to marginAmount * leverage * (1-marginFee).
+    uint256 marginTotal;
+    /// @notice Min margin level.
+    uint24 minMarginLevel;
 }

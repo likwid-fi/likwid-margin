@@ -125,7 +125,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
             if (liquidity > 0) {
                 _mint(pairPoolManager, uPoolId, liquidity);
                 denominator = interest0 + Math.mulDiv(interest1, _reserve0, _reserve1);
-                uint256 liquidity0 = liquidity * Math.mulDiv(liquidity, interest0, denominator);
+                uint256 liquidity0 = Math.mulDiv(liquidity, interest0, denominator);
                 uint256 liquidity1 = liquidity - liquidity0;
                 _updateLevelRatio(pairPoolManager, id, liquidity0, liquidity1);
             }

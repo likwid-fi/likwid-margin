@@ -93,10 +93,8 @@ contract LendingPoolManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user0,
@@ -111,5 +109,28 @@ contract LendingPoolManagerTest is DeployHelper {
         uint256 mirrorBalance = mirrorTokenManager.balanceOf(address(lendingPoolManager), tokenBId);
         tokenBAmount = manager.balanceOf(address(lendingPoolManager), nativeKey.currency1.toId());
         console.log("lending.balance:%s,tokenBAmount:%s,mirrorBalance:%s", lb, tokenBAmount, mirrorBalance);
+    }
+
+    function testLendingAPR() public {
+        uint256 apr = lendingPoolManager.getLendingAPR(nativeKey.toId(), nativeKey.currency1, 0);
+        assertEq(apr, 0);
+        uint256 payValue = 0.01 ether;
+        MarginParams memory params = MarginParams({
+            poolId: nativeKey.toId(),
+            marginForOne: false,
+            leverage: 3,
+            marginAmount: payValue,
+            borrowAmount: 0,
+            borrowMaxAmount: 0,
+            recipient: address(this),
+            deadline: block.timestamp + 1000
+        });
+        marginPositionManager.margin{value: payValue}(params);
+        vm.warp(3600 * 10);
+        uint256 borrowRate = marginFees.getBorrowRate(address(pairPoolManager), nativeKey.toId(), false);
+        apr = lendingPoolManager.getLendingAPR(nativeKey.toId(), nativeKey.currency1, 0);
+        PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
+        assertGt(borrowRate, apr);
+        assertEq(borrowRate * status.totalMirrorReserve1() / status.totalRealReserve1(), apr);
     }
 }

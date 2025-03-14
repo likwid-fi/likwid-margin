@@ -16,7 +16,6 @@ import {BaseFees} from "./base/BaseFees.sol";
 import {BasePoolManager} from "./base/BasePoolManager.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {TransientSlot} from "./external/openzeppelin-contracts/TransientSlot.sol";
-import {ReentrancyGuardTransient} from "./external/openzeppelin-contracts/ReentrancyGuardTransient.sol";
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {TimeUtils} from "./libraries/TimeUtils.sol";
@@ -24,7 +23,7 @@ import {LiquidityLevel} from "./libraries/LiquidityLevel.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {MarginPosition} from "./types/MarginPosition.sol";
-import {MarginParams} from "./types/MarginParams.sol";
+import {MarginParams, MarginParamsVo} from "./types/MarginParams.sol";
 import {ReleaseParams} from "./types/ReleaseParams.sol";
 import {BalanceStatus} from "./types/BalanceStatus.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams.sol";
@@ -37,7 +36,7 @@ import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 
-contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager, ReentrancyGuardTransient {
+contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     using TransientSlot for *;
     using UQ112x112 for *;
     using SafeCast for uint256;
@@ -51,15 +50,27 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager, Reentra
     error InsufficientLiquidityBurnt();
     error NotPositionManager();
 
+    event Initialize(
+        PoolId indexed id,
+        Currency indexed currency0,
+        Currency indexed currency1,
+        uint24 fee,
+        int24 tickSpacing,
+        IHooks hooks
+    );
+
     event Mint(
         PoolId indexed poolId,
         address indexed sender,
         address indexed to,
         uint256 liquidity,
         uint256 amount0,
-        uint256 amount1
+        uint256 amount1,
+        uint8 level
     );
-    event Burn(PoolId indexed poolId, address indexed sender, uint256 liquidity, uint256 amount0, uint256 amount1);
+    event Burn(
+        PoolId indexed poolId, address indexed sender, uint256 liquidity, uint256 amount0, uint256 amount1, uint8 level
+    );
 
     IMirrorTokenManager public immutable mirrorTokenManager;
     ILendingPoolManager public immutable lendingPoolManager;
@@ -128,6 +139,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager, Reentra
 
     function initialize(PoolKey calldata key) external onlyHooks {
         statusManager.initialize(key);
+        emit Initialize(key.toId(), key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks);
     }
 
     function setBalances(PoolKey calldata key) external onlyHooks {
@@ -208,7 +220,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager, Reentra
             abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, params.amount0, params.amount1))
         );
         statusManager.update(status.key, false);
-        emit Mint(params.poolId, msg.sender, params.to, liquidity, params.amount0, params.amount1);
+        emit Mint(params.poolId, msg.sender, params.to, liquidity, params.amount0, params.amount1, params.level);
     }
 
     /// @dev Handle liquidity addition by taking tokens from the sender and claiming ERC6909 to the hook address
@@ -263,7 +275,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager, Reentra
 
         poolManager.unlock(abi.encodeCall(this.handleRemoveLiquidity, (msg.sender, status.key, amount0, amount1)));
         statusManager.update(status.key);
-        emit Burn(params.poolId, msg.sender, params.liquidity, amount0, amount1);
+        emit Burn(params.poolId, msg.sender, params.liquidity, amount0, amount1, params.level);
     }
 
     function handleRemoveLiquidity(address sender, PoolKey calldata key, uint256 amount0, uint256 amount1)
@@ -298,22 +310,24 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager, Reentra
     // ******************** MARGIN FUNCTIONS ********************
 
     /// @inheritdoc IPairPoolManager
-    function margin(address sender, MarginParams memory params)
+    function margin(address sender, MarginParamsVo memory paramsVo)
         external
         payable
         onlyPosition
-        returns (MarginParams memory)
+        returns (MarginParamsVo memory)
     {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (msg.sender, sender, params)));
-        (params.marginAmount, params.marginTotal, params.borrowAmount) = abi.decode(result, (uint256, uint256, uint256));
-        return params;
+        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (msg.sender, sender, paramsVo)));
+        (paramsVo.params.marginAmount, paramsVo.marginTotal, paramsVo.params.borrowAmount) =
+            abi.decode(result, (uint256, uint256, uint256));
+        return paramsVo;
     }
 
-    function handleMargin(address _positionManager, address sender, MarginParams calldata params)
+    function handleMargin(address _positionManager, address sender, MarginParamsVo calldata paramsVo)
         external
         selfOnly
         returns (uint256 marginAmount, uint256 marginWithoutFee, uint256 borrowAmount)
     {
+        MarginParams memory params = paramsVo.params;
         PoolStatus memory status = statusManager.getStatus(params.poolId);
         statusManager.setBalances(status.key);
         (Currency borrowCurrency, Currency marginCurrency) = params.marginForOne
@@ -343,11 +357,11 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager, Reentra
                 lendingPoolManager.realIn(_positionManager, params.poolId, marginCurrency, marginWithoutFee);
         } else {
             {
-                marginWithoutFee = marginAmount.mulMillionDiv(params.minMarginLevel);
+                uint256 actualAmount = params.marginAmount.mulMillionDiv(paramsVo.minMarginLevel);
                 (uint256 reserve0, uint256 reserve1) = status.getReserves();
                 (uint256 reserveBorrow, uint256 reserveMargin) =
                     params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
-                uint256 borrowMaxAmount = Math.mulDiv(marginWithoutFee, reserveBorrow, reserveMargin);
+                uint256 borrowMaxAmount = Math.mulDiv(actualAmount, reserveBorrow, reserveMargin);
                 if (params.borrowAmount > 0) {
                     borrowAmount = Math.min(borrowMaxAmount, params.borrowAmount);
                 } else {
@@ -359,6 +373,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager, Reentra
                 borrowCurrency.settle(poolManager, address(this), borrowAmount, true);
                 borrowCurrency.take(poolManager, params.recipient, borrowAmount, false);
             }
+            marginWithoutFee = 0;
         }
 
         if (marginFeeAmount > 0) {

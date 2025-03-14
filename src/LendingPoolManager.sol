@@ -12,6 +12,7 @@ import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 
+import {PoolStatus} from "./types/PoolStatus.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IERC6909Accrues} from "./interfaces/external/IERC6909Accrues.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
@@ -146,6 +147,19 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     {
         uint256 id = currency.toTokenId(poolId);
         amount = originalAmount.mulRatioX112(incrementRatioX112Of[id]);
+    }
+
+    function getLendingAPR(PoolId poolId, Currency currency, uint256 inputAmount) public view returns (uint256 apr) {
+        uint256 id = currency.toTokenId(poolId);
+        PoolStatus memory status = pairPoolManager.getStatus(poolId);
+        bool borrowForOne = currency == status.key.currency1;
+        uint256 mirrorReserve = borrowForOne ? status.mirrorReserve1 : status.mirrorReserve0;
+        uint256 borrowRate = pairPoolManager.marginFees().getBorrowRate(status, !borrowForOne);
+        (uint256 reserve0, uint256 reserve1) =
+            pairPoolManager.marginLiquidity().getFlowReserves(address(pairPoolManager), poolId, status);
+        uint256 flowReserve = borrowForOne ? reserve1 : reserve0;
+        uint256 totalSupply = balanceOf(address(this), id);
+        apr = Math.mulDiv(borrowRate, mirrorReserve, flowReserve + inputAmount + totalSupply);
     }
 
     // ******************** POOL CALL ********************

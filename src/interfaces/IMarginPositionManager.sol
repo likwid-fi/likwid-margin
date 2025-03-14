@@ -8,19 +8,10 @@ import {MarginParams} from "../types/MarginParams.sol";
 import {ReleaseParams} from "../types/ReleaseParams.sol";
 
 interface IMarginPositionManager is IERC721 {
-    /// @notice Return the address of the hook contract
-    function getPairPool() external view returns (address _pairPool);
-
     /// @notice Return the position with the given ID
     /// @param positionId The ID of the position to retrieve
     /// @return _position The position with the given ID
     function getPosition(uint256 positionId) external view returns (MarginPosition memory _position);
-
-    /// @notice Return the PNL amount of the position with the given ID and repayment ratio
-    /// @param positionId The ID of the position to retrieve
-    /// @param closeMillionth   The repayment ratio is calculated as one millionth
-    /// @return pnlAmount The PNL amount of the position
-    function estimatePNL(uint256 positionId, uint256 closeMillionth) external view returns (int256 pnlAmount);
 
     /// @notice Margin a position
     /// @param params The parameters of the margin position

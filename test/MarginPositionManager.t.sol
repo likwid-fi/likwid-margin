@@ -55,10 +55,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: key.toId(),
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -85,10 +83,8 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: key.toId(),
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -146,10 +142,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -172,7 +166,7 @@ contract MarginPositionManagerTest is DeployHelper {
         );
         uint256 releaseAmount = 0.01 ether;
         tokenA.approve(address(pairPoolManager), releaseAmount);
-        int256 pnlAmount = marginPositionManager.estimatePNL(positionId, 30000);
+        int256 pnlAmount = marginChecker.estimatePNL(marginPositionManager, positionId, 30000);
         marginPositionManager.close(positionId, 30000, pnlAmount, UINT256_MAX);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
         console.log("after close positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
@@ -185,7 +179,7 @@ contract MarginPositionManagerTest is DeployHelper {
             position.borrowAmount,
             marginBalance
         );
-        pnlAmount = marginPositionManager.estimatePNL(positionId, 1000000);
+        pnlAmount = marginChecker.estimatePNL(marginPositionManager, positionId, 1000000);
         marginPositionManager.close(positionId, 1000000, pnlAmount, UINT256_MAX);
         newPosition = marginPositionManager.getPosition(positionId);
         console.log("after close positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
@@ -205,10 +199,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -247,10 +239,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 1,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -293,10 +283,8 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: poolId,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 1,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -337,10 +325,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -368,10 +354,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -401,10 +385,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -428,10 +410,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -503,10 +483,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -579,10 +557,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -655,10 +631,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -682,10 +656,8 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -719,10 +691,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -741,10 +711,8 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: poolId,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -778,10 +746,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: true,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -800,10 +766,8 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: poolId,
             marginForOne: true,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -904,10 +868,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -919,10 +881,8 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: poolId,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -1000,10 +960,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId1,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -1014,10 +972,8 @@ contract MarginPositionManagerTest is DeployHelper {
         params = MarginParams({
             poolId: poolId2,
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 3,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -1044,10 +1000,8 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: poolId1,
             marginForOne: marginForOne,
-            minMarginLevel: 0,
             leverage: leverage,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user,
@@ -1111,10 +1065,8 @@ contract MarginPositionManagerTest is DeployHelper {
             MarginParams memory params = MarginParams({
                 poolId: nativeKey.toId(),
                 marginForOne: false,
-                minMarginLevel: 0,
                 leverage: 3,
                 marginAmount: payValue,
-                marginTotal: 0,
                 borrowAmount: 0,
                 borrowMaxAmount: 0,
                 recipient: user,
@@ -1186,10 +1138,8 @@ contract MarginPositionManagerTest is DeployHelper {
             MarginParams memory params = MarginParams({
                 poolId: nativeKey.toId(),
                 marginForOne: false,
-                minMarginLevel: 0,
                 leverage: 3,
                 marginAmount: payValue,
-                marginTotal: 0,
                 borrowAmount: 0,
                 borrowMaxAmount: 0,
                 recipient: user,
@@ -1247,11 +1197,47 @@ contract MarginPositionManagerTest is DeployHelper {
         MarginParams memory params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
-            minMarginLevel: 0,
             leverage: 0,
             marginAmount: payValue,
-            marginTotal: 0,
             borrowAmount: 0,
+            borrowMaxAmount: 0,
+            recipient: user,
+            deadline: block.timestamp + 1000
+        });
+        uint256 beforeBalance = tokenB.balanceOf(user);
+        assertEq(beforeBalance, 0);
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        uint256 afterBalance = tokenB.balanceOf(user);
+        assertEq(positionId, 1);
+        uint256 borrowPositionId = marginPositionManager.getPositionId(nativeKey.toId(), false, user, false);
+        assertEq(positionId, borrowPositionId);
+        assertEq(afterBalance, borrowAmount);
+        vm.startPrank(user);
+        uint256 beforeETH = user.balance;
+        assertEq(beforeETH, 0);
+        tokenB.approve(address(pairPoolManager), borrowAmount / 2);
+        marginPositionManager.repay(positionId, borrowAmount / 2, block.timestamp + 1000);
+        uint256 afterETH = user.balance;
+        assertGt(afterETH, 0);
+        uint256 newAfterBalance = tokenB.balanceOf(user);
+        assertEq(newAfterBalance, afterBalance - borrowAmount / 2);
+        vm.expectRevert(bytes("DISABLE_CLOSE"));
+        marginPositionManager.close(positionId, 500000, 0, block.timestamp + 1000);
+        vm.stopPrank();
+    }
+
+    function testBorrowMax() public {
+        uint256 positionId;
+        uint256 borrowAmount;
+        uint256 payValue = 0.0001 ether;
+        address user = vm.addr(1);
+        (, uint256 borrowMax) = marginChecker.getBorrowMax(pairPoolManager, nativeKey.toId(), false, payValue);
+        MarginParams memory params = MarginParams({
+            poolId: nativeKey.toId(),
+            marginForOne: false,
+            leverage: 0,
+            marginAmount: payValue,
+            borrowAmount: borrowMax,
             borrowMaxAmount: 0,
             recipient: user,
             deadline: block.timestamp + 1000
