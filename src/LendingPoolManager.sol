@@ -10,7 +10,8 @@ import {BasePoolManager} from "./base/BasePoolManager.sol";
 import {ERC6909Accrues} from "./base/ERC6909Accrues.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
-import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
+import {CurrencyExtLibrary} from "./libraries/CurrencyExtLibrary.sol";
+import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
@@ -20,7 +21,8 @@ import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 
 contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolManager {
     using PoolIdLibrary for PoolId;
-    using CurrencyUtils for Currency;
+    using CurrencyExtLibrary for Currency;
+    using CurrencyPoolLibrary for Currency;
     using PerLibrary for *;
     using UQ112x112 for *;
 

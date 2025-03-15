@@ -12,8 +12,8 @@ import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition, MarginPositionVo} from "../src/types/MarginPosition.sol";
 import {BurnParams} from "../src/types/BurnParams.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
-import {TimeUtils} from "../src/libraries/TimeUtils.sol";
-import {CurrencyUtils} from "../src/libraries/CurrencyUtils.sol";
+import {TimeLibrary} from "../src/libraries/TimeLibrary.sol";
+import {CurrencyPoolLibrary} from "../src/libraries/CurrencyPoolLibrary.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
@@ -35,8 +35,8 @@ import {HookMiner} from "./utils/HookMiner.sol";
 import {DeployHelper} from "./utils/DeployHelper.sol";
 
 contract MarginPositionManagerTest is DeployHelper {
-    using TimeUtils for *;
-    using CurrencyUtils for Currency;
+    using TimeLibrary for *;
+    using CurrencyPoolLibrary for Currency;
 
     function setUp() public {
         deployHookAndRouter();
@@ -369,7 +369,7 @@ contract MarginPositionManagerTest is DeployHelper {
         );
         uint256 _positionId = marginPositionManager.getPositionId(poolId, false, user, true);
         assertEq(positionId, _positionId);
-        vm.expectPartialRevert(CurrencyUtils.InsufficientValue.selector);
+        vm.expectPartialRevert(CurrencyPoolLibrary.InsufficientValue.selector);
         (positionId, borrowAmount) = marginPositionManager.margin(params);
     }
 
@@ -393,7 +393,7 @@ contract MarginPositionManagerTest is DeployHelper {
             deadline: block.timestamp + 1000
         });
         payValue = 0.001 ether;
-        vm.expectPartialRevert(CurrencyUtils.InsufficientValue.selector);
+        vm.expectPartialRevert(CurrencyPoolLibrary.InsufficientValue.selector);
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         vm.stopPrank();
     }

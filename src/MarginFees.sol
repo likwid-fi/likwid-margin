@@ -17,13 +17,13 @@ import {PoolStatus} from "./types/PoolStatus.sol";
 import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
-import {TimeUtils} from "./libraries/TimeUtils.sol";
+import {TimeLibrary} from "./libraries/TimeLibrary.sol";
 
 contract MarginFees is IMarginFees, Owned {
     using UQ112x112 for uint112;
     using UQ112x112 for uint224;
     using PoolIdLibrary for PoolKey;
-    using TimeUtils for uint32;
+    using TimeLibrary for uint32;
     using FeeLibrary for uint24;
     using PerLibrary for uint256;
     using PoolStatusLibrary for PoolStatus;

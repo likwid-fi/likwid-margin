@@ -10,12 +10,9 @@ import {PoolStatus} from "../types/PoolStatus.sol";
 import {IMarginFees} from "../interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "../interfaces/IMarginLiquidity.sol";
 import {ILendingPoolManager} from "../interfaces/ILendingPoolManager.sol";
-import {IPoolStatusManager} from "../interfaces/IPoolStatusManager.sol";
 
 interface IPairMarginManager {
     function lendingPoolManager() external view returns (ILendingPoolManager);
-
-    function statusManager() external view returns (IPoolStatusManager);
 
     /// @notice Get current IMarginFees
     function marginFees() external view returns (IMarginFees);

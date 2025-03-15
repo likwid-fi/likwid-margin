@@ -14,11 +14,11 @@ import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
-import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
+import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 
 contract MarginHook is BaseHook, Owned {
     using SafeCast for uint256;
-    using CurrencyUtils for Currency;
+    using CurrencyPoolLibrary for Currency;
 
     error InvalidInitialization();
 

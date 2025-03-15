@@ -12,7 +12,7 @@ import {RateStatus} from "../src/types/RateStatus.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
-import {CurrencyUtils} from "../src/libraries/CurrencyUtils.sol";
+import {CurrencyPoolLibrary} from "../src/libraries/CurrencyPoolLibrary.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
@@ -33,7 +33,7 @@ import {HookMiner} from "./utils/HookMiner.sol";
 import {DeployHelper} from "./utils/DeployHelper.sol";
 
 contract MarginFeesTest is DeployHelper {
-    using CurrencyUtils for *;
+    using CurrencyPoolLibrary for *;
 
     function setUp() public {
         deployHookAndRouter();

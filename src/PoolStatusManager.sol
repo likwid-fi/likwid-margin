@@ -16,7 +16,7 @@ import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {BalanceStatus} from "./types/BalanceStatus.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
-import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
+import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 import {TransientSlot} from "./external/openzeppelin-contracts/TransientSlot.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
@@ -29,7 +29,7 @@ import {IPoolStatusManager} from "./interfaces/IPoolStatusManager.sol";
 contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     using UQ112x112 for *;
     using TransientSlot for *;
-    using CurrencyUtils for *;
+    using CurrencyPoolLibrary for *;
     using PoolStatusLibrary for *;
 
     error UpdateBalanceGuardErrorCall();

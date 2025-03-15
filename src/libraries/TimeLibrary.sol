@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-library TimeUtils {
+library TimeLibrary {
     function getTimeElapsed(uint32 blockTimestampLast) internal view returns (uint256 timeElapsed) {
         uint32 blockTS = uint32(block.timestamp % 2 ** 32);
         if (blockTimestampLast <= blockTS) {

@@ -16,9 +16,10 @@ import {BaseFees} from "./base/BaseFees.sol";
 import {BasePoolManager} from "./base/BasePoolManager.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
-import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
+import {CurrencyExtLibrary} from "./libraries/CurrencyExtLibrary.sol";
+import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
-import {TimeUtils} from "./libraries/TimeUtils.sol";
+import {TimeLibrary} from "./libraries/TimeLibrary.sol";
 import {LiquidityLevel} from "./libraries/LiquidityLevel.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
@@ -39,11 +40,12 @@ import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     using UQ112x112 for *;
     using SafeCast for uint256;
-    using TimeUtils for uint32;
+    using TimeLibrary for uint32;
     using LiquidityLevel for uint8;
     using FeeLibrary for uint24;
     using PerLibrary for uint256;
-    using CurrencyUtils for Currency;
+    using CurrencyExtLibrary for Currency;
+    using CurrencyPoolLibrary for Currency;
     using PoolStatusLibrary for PoolStatus;
 
     error InsufficientLiquidityMinted();

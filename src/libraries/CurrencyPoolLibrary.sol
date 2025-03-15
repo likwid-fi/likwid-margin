@@ -6,12 +6,14 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 
+import {CurrencyExtLibrary} from "./CurrencyExtLibrary.sol";
 import {IERC20} from "../external/openzeppelin-contracts/IERC20.sol";
 import {SafeERC20} from "../external/openzeppelin-contracts/SafeERC20.sol";
 
-library CurrencyUtils {
+library CurrencyPoolLibrary {
     using PoolIdLibrary for PoolId;
     using SafeERC20 for IERC20;
+    using CurrencyExtLibrary for Currency;
 
     error InsufficientValue();
 
@@ -48,38 +50,6 @@ library CurrencyUtils {
     /// @param claims If true, mint the ERC-6909 token, otherwise ERC20-transfer from the PoolManager to recipient
     function take(Currency currency, IPoolManager manager, address recipient, uint256 amount, bool claims) internal {
         claims ? manager.mint(recipient, currency.toId(), amount) : manager.take(currency, recipient, amount);
-    }
-
-    function approve(Currency currency, address spender, uint256 amount) internal returns (bool success) {
-        if (!currency.isAddressZero()) {
-            IERC20 token = IERC20(Currency.unwrap(currency));
-            token.forceApprove(spender, amount);
-        }
-        success = true;
-    }
-
-    function checkAmount(Currency currency, uint256 amount) internal returns (uint256 sendValue) {
-        if (currency.isAddressZero()) {
-            if (msg.value < amount) revert InsufficientValue();
-            sendValue = amount < msg.value ? amount : msg.value;
-        }
-    }
-
-    function transfer(Currency currency, address payer, address recipient, uint256 amount)
-        internal
-        returns (bool success)
-    {
-        if (currency.isAddressZero()) {
-            (success,) = recipient.call{value: amount}("");
-        } else {
-            IERC20 token = IERC20(Currency.unwrap(currency));
-            if (payer != address(this)) {
-                token.safeTransferFrom(payer, recipient, amount);
-            } else {
-                token.safeTransfer(recipient, amount);
-            }
-            success = true;
-        }
     }
 
     function toTokenId(Currency currency, PoolId poolId) internal pure returns (uint256) {

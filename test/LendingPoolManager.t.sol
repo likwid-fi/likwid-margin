@@ -11,7 +11,7 @@ import {PoolStatusLibrary} from "../src/types/PoolStatusLibrary.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {PerLibrary} from "../src/libraries/PerLibrary.sol";
-import {CurrencyUtils} from "../src/libraries/CurrencyUtils.sol";
+import {CurrencyPoolLibrary} from "../src/libraries/CurrencyPoolLibrary.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
@@ -35,7 +35,7 @@ import {EIP20NonStandardThrowHarness} from "./mocks/EIP20NonStandardThrowHarness
 import {DeployHelper} from "./utils/DeployHelper.sol";
 
 contract LendingPoolManagerTest is DeployHelper {
-    using CurrencyUtils for Currency;
+    using CurrencyPoolLibrary for Currency;
     using PoolStatusLibrary for *;
 
     function setUp() public {

@@ -6,7 +6,7 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
-import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
+import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 import {SafeCallback} from "v4-periphery/src/base/SafeCallback.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 
@@ -15,7 +15,7 @@ import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 
 contract MarginRouter is SafeCallback, Owned {
     using CurrencyLibrary for Currency;
-    using CurrencyUtils for Currency;
+    using CurrencyPoolLibrary for Currency;
     using BalanceDeltaLibrary for BalanceDelta;
 
     error LockFailure();

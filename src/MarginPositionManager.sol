@@ -8,7 +8,7 @@ import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 // Local
 import {ReentrancyGuardTransient} from "./external/openzeppelin-contracts/ReentrancyGuardTransient.sol";
-import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
+import {CurrencyExtLibrary} from "./libraries/CurrencyExtLibrary.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
 import {IPairMarginManager} from "./interfaces/IPairMarginManager.sol";
@@ -26,7 +26,7 @@ import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 
 contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, ReentrancyGuardTransient {
     using CurrencyLibrary for Currency;
-    using CurrencyUtils for Currency;
+    using CurrencyExtLibrary for Currency;
     using UQ112x112 for *;
     using PriceMath for uint224;
     using PerLibrary for uint256;
