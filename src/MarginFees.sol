@@ -14,6 +14,7 @@ import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {TruncatedOracle} from "./libraries/TruncatedOracle.sol";
 import {RateStatus} from "./types/RateStatus.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
+import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {TimeUtils} from "./libraries/TimeUtils.sol";
@@ -25,6 +26,7 @@ contract MarginFees is IMarginFees, Owned {
     using TimeUtils for uint32;
     using FeeLibrary for uint24;
     using PerLibrary for uint256;
+    using PoolStatusLibrary for PoolStatus;
 
     uint24 public marginFee = 3000; // 0.3%
     uint24 public protocolFee = 50000; // 5%

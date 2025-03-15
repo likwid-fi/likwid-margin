@@ -15,7 +15,7 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {BaseFees} from "./base/BaseFees.sol";
 import {BasePoolManager} from "./base/BasePoolManager.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
-import {TransientSlot} from "./external/openzeppelin-contracts/TransientSlot.sol";
+import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {TimeUtils} from "./libraries/TimeUtils.sol";
@@ -37,7 +37,6 @@ import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 
 contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
-    using TransientSlot for *;
     using UQ112x112 for *;
     using SafeCast for uint256;
     using TimeUtils for uint32;
@@ -45,6 +44,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     using FeeLibrary for uint24;
     using PerLibrary for uint256;
     using CurrencyUtils for Currency;
+    using PoolStatusLibrary for PoolStatus;
 
     error InsufficientLiquidityMinted();
     error InsufficientLiquidityBurnt();
@@ -383,16 +383,24 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
 
         // mint mirror token
         mirrorTokenManager.mint(borrowCurrency.toTokenId(params.poolId), borrowAmount);
-        statusManager.update(status.key, true);
+        BalanceStatus memory balanceStatus = statusManager.update(status.key, true);
         {
-            BalanceStatus memory balanceStatus = statusManager.setBalances(status.key);
-            if (balanceStatus.mirrorBalance0 > 0) {
-                lendingPoolManager.mirrorInRealOut(params.poolId, status.key.currency0, balanceStatus.mirrorBalance0);
+            bool exchangeBalance0 = balanceStatus.mirrorBalance0 > 0 && balanceStatus.lendingBalance0 > 0;
+            bool exchangeBalance1 = balanceStatus.mirrorBalance1 > 0 && balanceStatus.lendingBalance1 > 0;
+            if (exchangeBalance0 || exchangeBalance1) {
+                statusManager.setBalances(status.key);
+                if (exchangeBalance0) {
+                    lendingPoolManager.mirrorInRealOut(
+                        params.poolId, status.key.currency0, balanceStatus.mirrorBalance0
+                    );
+                }
+                if (exchangeBalance1) {
+                    lendingPoolManager.mirrorInRealOut(
+                        params.poolId, status.key.currency1, balanceStatus.mirrorBalance1
+                    );
+                }
+                statusManager.update(status.key, false);
             }
-            if (balanceStatus.mirrorBalance1 > 0) {
-                lendingPoolManager.mirrorInRealOut(params.poolId, status.key.currency1, balanceStatus.mirrorBalance1);
-            }
-            statusManager.update(status.key, false);
         }
     }
 

@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 // Local
 import {PairPoolManager} from "../src/PairPoolManager.sol";
+import {BaseFees} from "../src/base/BaseFees.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
@@ -184,6 +185,9 @@ contract MarginRouterTest is DeployHelper {
     }
 
     function testSwapMirror() public {
+        console.log("pairPoolManager:%s", address(pairPoolManager));
+        console.log("poolStatusManager:%s", address(poolStatusManager));
+        console.log("SWAP.feeType:%s", uint256(BaseFees.FeeType.SWAP));
         address user = address(this);
         PoolId poolId = nativeKey.toId();
         uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);

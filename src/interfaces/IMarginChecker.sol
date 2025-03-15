@@ -3,8 +3,8 @@ pragma solidity ^0.8.24;
 
 import {PoolId} from "v4-core/types/PoolId.sol";
 
-import {IPairPoolManager} from "../interfaces/IPairPoolManager.sol";
-import {IMarginPositionManager} from "../interfaces/IMarginPositionManager.sol";
+import {IPairMarginManager} from "./IPairMarginManager.sol";
+import {IMarginPositionManager} from "./IMarginPositionManager.sol";
 import {MarginPosition, MarginPositionVo} from "../types/MarginPosition.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
 import {MarginParams, MarginParamsVo} from "../types/MarginParams.sol";
@@ -32,15 +32,11 @@ interface IMarginChecker {
     /// @notice Check the validity of the signature
     /// @param sender The address of the sender
     /// @param positionId The id of the position
-    /// @param signature The signature of the position
     /// @return valid The validity of the signature
-    function checkValidity(address sender, uint256 positionId, bytes calldata signature)
-        external
-        view
-        returns (bool valid);
+    function checkValidity(address sender, uint256 positionId) external view returns (bool valid);
 
     function estimatePNL(
-        IPairPoolManager poolManager,
+        IPairMarginManager poolManager,
         PoolStatus memory _status,
         MarginPosition memory _position,
         uint256 closeMillionth
@@ -56,8 +52,13 @@ interface IMarginChecker {
         view
         returns (int256 pnlAmount);
 
+    function updatePosition(IMarginPositionManager positionManager, MarginPosition memory _position)
+        external
+        view
+        returns (MarginPosition memory);
+
     function checkMinMarginLevel(
-        IPairPoolManager poolManager,
+        IPairMarginManager poolManager,
         MarginParamsVo memory paramsVo,
         PoolStatus memory _status
     ) external view returns (bool valid);
@@ -71,7 +72,7 @@ interface IMarginChecker {
     /// @return marginWithoutFee The marginTotal amount without fee
     /// @return borrowAmount The borrow amount
     function getMarginTotal(
-        IPairPoolManager poolManager,
+        address poolManager,
         PoolId poolId,
         bool marginForOne,
         uint24 leverage,
@@ -85,7 +86,7 @@ interface IMarginChecker {
     /// @param leverage The leverage ratio
     /// @return marginMax The maximum margin amount
     /// @return borrowAmount The borrow amount
-    function getMarginMax(IPairPoolManager poolManager, PoolId poolId, bool marginForOne, uint24 leverage)
+    function getMarginMax(address poolManager, PoolId poolId, bool marginForOne, uint24 leverage)
         external
         view
         returns (uint256 marginMax, uint256 borrowAmount);
@@ -95,7 +96,7 @@ interface IMarginChecker {
     /// @param _status The status of the margin pool
     /// @param _position The position to check
     /// @return maxAmount The maximum decrease amount
-    function getMaxDecrease(IPairPoolManager poolManager, PoolStatus memory _status, MarginPosition memory _position)
+    function getMaxDecrease(address poolManager, PoolStatus memory _status, MarginPosition memory _position)
         external
         view
         returns (uint256 maxAmount);
@@ -104,7 +105,7 @@ interface IMarginChecker {
     /// @param poolManager The manager of the pool
     /// @param poolId  The pool id
     /// @return reserves The oracle reserve amount of the pool
-    function getOracleReserves(IPairPoolManager poolManager, PoolId poolId) external view returns (uint224 reserves);
+    function getOracleReserves(address poolManager, PoolId poolId) external view returns (uint224 reserves);
 
     /// @notice Get the reserve amount of the pool
     /// @param poolManager The manager of the pool
@@ -112,10 +113,15 @@ interface IMarginChecker {
     /// @param marginForOne  If it is margin for one
     /// @return reserveBorrow The reserve amount of the borrow token
     /// @return reserveMargin The reserve amount of the margin token
-    function getReserves(IPairPoolManager poolManager, PoolId poolId, bool marginForOne)
+    function getReserves(address poolManager, PoolId poolId, bool marginForOne)
         external
         view
         returns (uint256 reserveBorrow, uint256 reserveMargin);
+
+    function getLiquidateStatus(address pairPoolManager, PoolId poolId, bool marginForOne)
+        external
+        view
+        returns (LiquidateStatus memory liquidateStatus);
 
     /// @notice Check if the position is liquidated
     /// @param manager The position manager address
@@ -133,7 +139,7 @@ interface IMarginChecker {
     /// @param _position The position to check
     /// @return liquidated  If the position is liquidated
     /// @return borrowAmount  The borrow amount of the position
-    function checkLiquidate(IPairPoolManager poolManager, PoolStatus memory _status, MarginPosition memory _position)
+    function checkLiquidate(IPairMarginManager poolManager, PoolStatus memory _status, MarginPosition memory _position)
         external
         view
         returns (bool liquidated, uint256 borrowAmount);
@@ -155,7 +161,7 @@ interface IMarginChecker {
     /// @return liquidatedList  The liquidated list
     /// @return borrowAmountList  The borrow amount list
     function checkLiquidate(
-        IPairPoolManager poolManager,
+        IPairMarginManager poolManager,
         LiquidateStatus memory _liqStatus,
         MarginPosition[] memory inPositions
     ) external view returns (bool[] memory liquidatedList, uint256[] memory borrowAmountList);

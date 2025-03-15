@@ -28,12 +28,15 @@ interface ILendingPoolManager is IERC6909Accrues {
 
     function realOut(address sender, PoolId poolId, Currency currency, uint256 amount) external;
 
+    function deposit(address sender, address recipient, PoolId poolId, Currency currency, uint256 amount)
+        external
+        payable
+        returns (uint256 originalAmount);
+
     function deposit(address recipient, PoolId poolId, Currency currency, uint256 amount)
         external
         payable
         returns (uint256 originalAmount);
 
     function withdraw(address recipient, PoolId poolId, Currency currency, uint256 amount) external;
-
-    function withdrawOriginal(address recipient, PoolId poolId, Currency currency, uint256 originalAmount) external;
 }

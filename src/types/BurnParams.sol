@@ -11,6 +11,4 @@ struct BurnParams {
     bool marginForOne;
     /// @notice The ids of the positions to be burned.
     uint256[] positionIds;
-    /// @notice The signatures of the operator.
-    bytes signature;
 }

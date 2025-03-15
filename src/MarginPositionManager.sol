@@ -3,18 +3,15 @@ pragma solidity ^0.8.26;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
-import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 // Local
-import {BasePositionManager} from "./base/BasePositionManager.sol";
 import {ReentrancyGuardTransient} from "./external/openzeppelin-contracts/ReentrancyGuardTransient.sol";
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
-import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
+import {IPairMarginManager} from "./interfaces/IPairMarginManager.sol";
 import {IMarginChecker} from "./interfaces/IMarginChecker.sol";
 import {MarginPosition, MarginPositionVo} from "./types/MarginPosition.sol";
 import {BurnParams} from "./types/BurnParams.sol";
@@ -24,16 +21,14 @@ import {ReleaseParams} from "./types/ReleaseParams.sol";
 import {MarginParams, MarginParamsVo} from "./types/MarginParams.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PriceMath} from "./libraries/PriceMath.sol";
-import {TimeUtils} from "./libraries/TimeUtils.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 
-contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
+contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, ReentrancyGuardTransient {
     using CurrencyLibrary for Currency;
     using CurrencyUtils for Currency;
     using UQ112x112 for *;
     using PriceMath for uint224;
-    using TimeUtils for uint32;
     using PerLibrary for uint256;
     using FeeLibrary for uint24;
 
@@ -89,16 +84,27 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
         LIQUIDATE
     }
 
+    IPairMarginManager public immutable pairPoolManager;
+    IMarginChecker public checker;
+    ILendingPoolManager private immutable lendingPoolManager;
+
+    uint256 private nextId = 1;
     mapping(uint256 => MarginPosition) private _positions;
     mapping(PoolId => mapping(bool => mapping(address => uint256))) private _marginPositionIds;
     mapping(PoolId => mapping(bool => mapping(address => uint256))) private _borrowPositionIds;
 
-    constructor(address initialOwner, IPairPoolManager _pairPoolManager, IMarginChecker _checker)
-        BasePositionManager("LIKWIDMarginPositionManager", "LMPM", initialOwner, _pairPoolManager, _checker)
+    constructor(address initialOwner, IPairMarginManager _pairPoolManager, IMarginChecker _checker)
+        Owned(initialOwner)
+        ERC721("LIKWIDMarginPositionManager", "LMPM")
     {
         pairPoolManager = _pairPoolManager;
         lendingPoolManager = _pairPoolManager.lendingPoolManager();
         checker = _checker;
+    }
+
+    modifier ensure(uint256 deadline) {
+        require(deadline >= block.timestamp, "EXPIRED");
+        _;
     }
 
     function _burnPosition(uint256 positionId, BurnType burnType) internal {
@@ -130,15 +136,7 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
 
     /// @inheritdoc IMarginPositionManager
     function getPosition(uint256 positionId) external view returns (MarginPosition memory _position) {
-        _position = _getPosition(positionId);
-    }
-
-    function getPositions(uint256[] calldata positionIds) external view returns (MarginPositionVo[] memory _position) {
-        _position = new MarginPositionVo[](positionIds.length);
-        for (uint256 i = 0; i < positionIds.length; i++) {
-            _position[i].position = _getPosition(positionIds[i]);
-            _position[i].pnl = checker.estimatePNL(this, positionIds[i], PerLibrary.ONE_MILLION);
-        }
+        _position = checker.updatePosition(this, _positions[positionId]);
     }
 
     function getPositionId(PoolId poolId, bool marginForOne, address owner, bool isMargin)
@@ -156,8 +154,6 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
     /// @inheritdoc IMarginPositionManager
     function margin(MarginParams memory params) external payable ensure(params.deadline) returns (uint256, uint256) {
         PoolStatus memory _status = pairPoolManager.getStatus(params.poolId);
-        Currency marginCurrency = params.marginForOne ? _status.key.currency1 : _status.key.currency0;
-        uint256 sendValue = marginCurrency.checkAmount(params.marginAmount);
         uint256 positionId;
         if (params.leverage > 0) {
             positionId = _marginPositionIds[params.poolId][params.marginForOne][params.recipient];
@@ -165,10 +161,18 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
             positionId = _borrowPositionIds[params.poolId][params.marginForOne][params.recipient];
         }
         // call margin
-        MarginParamsVo memory paramsVo =
-            MarginParamsVo({params: params, minMarginLevel: checker.minMarginLevel(), marginTotal: 0});
-        paramsVo = pairPoolManager.margin{value: sendValue}(msg.sender, paramsVo);
-        params = paramsVo.params;
+        MarginParamsVo memory paramsVo = MarginParamsVo({
+            params: params,
+            minMarginLevel: checker.minMarginLevel(),
+            marginTotal: 0,
+            marginCurrency: params.marginForOne ? _status.key.currency1 : _status.key.currency0
+        });
+        {
+            uint256 sendValue = paramsVo.marginCurrency.checkAmount(params.marginAmount);
+            paramsVo = pairPoolManager.margin{value: sendValue}(msg.sender, paramsVo);
+            params = paramsVo.params;
+            if (msg.value > sendValue) transferNative(msg.sender, msg.value - sendValue);
+        }
         if (params.borrowMaxAmount > 0 && params.borrowAmount > params.borrowMaxAmount) {
             revert InsufficientBorrowReceived();
         }
@@ -209,16 +213,22 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
             (bool liquidated,) = checker.checkLiquidate(pairPoolManager, _status, _position);
             if (liquidated) revert PositionLiquidated();
         }
-        emit Margin(
-            params.poolId,
-            params.recipient,
-            positionId,
-            params.marginAmount,
-            paramsVo.marginTotal,
-            params.borrowAmount,
-            params.marginForOne
-        );
-        if (msg.value > sendValue) transferNative(msg.sender, msg.value - sendValue);
+        {
+            uint256 marginAmount =
+                lendingPoolManager.computeRealAmount(params.poolId, paramsVo.marginCurrency, params.marginAmount);
+            uint256 marginTotal =
+                lendingPoolManager.computeRealAmount(params.poolId, paramsVo.marginCurrency, paramsVo.marginTotal);
+            emit Margin(
+                params.poolId,
+                params.recipient,
+                positionId,
+                marginAmount,
+                marginTotal,
+                params.borrowAmount,
+                params.marginForOne
+            );
+        }
+
         return (positionId, params.borrowAmount);
     }
 
@@ -226,7 +236,8 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
         uint256 positionId,
         PoolStatus memory _status,
         MarginPosition storage _position,
-        ReleaseParams memory params
+        ReleaseParams memory params,
+        Currency marginCurrency
     ) internal returns (uint256 releaseAmount) {
         int256 pnlAmount = checker.estimatePNL(
             pairPoolManager, _status, _position, params.repayAmount.mulMillionDiv(_position.borrowAmount)
@@ -234,12 +245,15 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
         uint128 borrowAmount = _position.borrowAmount;
         uint256 releaseMargin = Math.mulDiv(_position.marginAmount, params.repayAmount, borrowAmount);
         uint256 releaseTotal = Math.mulDiv(_position.marginTotal, params.repayAmount, borrowAmount);
+        uint256 realReleaseMargin =
+            lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, releaseMargin);
+        uint256 realReleaseTotal = lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, releaseTotal);
         emit RepayClose(
             _position.poolId,
             msg.sender,
             positionId,
-            releaseMargin,
-            releaseTotal,
+            realReleaseMargin,
+            realReleaseTotal,
             params.repayAmount,
             params.rawBorrowAmount,
             pnlAmount
@@ -252,7 +266,7 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
             _position.marginTotal -= releaseTotal.toUint112();
             _position.rawBorrowAmount -= params.rawBorrowAmount.toUint112();
         }
-        releaseAmount = releaseMargin + releaseTotal;
+        releaseAmount = realReleaseMargin + realReleaseTotal;
     }
 
     /// @inheritdoc IMarginPositionManager
@@ -291,9 +305,9 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
         }
         PoolId poolId = _position.poolId;
         // update position
-        uint256 releaseAmount = _repay(positionId, _status, _position, params);
+        uint256 releaseAmount = _repay(positionId, _status, _position, params, marginCurrency);
         // withdraw original
-        lendingPoolManager.withdrawOriginal(msg.sender, poolId, marginCurrency, releaseAmount);
+        lendingPoolManager.withdraw(msg.sender, poolId, marginCurrency, releaseAmount);
     }
 
     function _close(
@@ -343,8 +357,8 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
             poolId,
             msg.sender,
             positionId,
-            releaseMargin,
-            releaseTotal,
+            lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, releaseMargin),
+            lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, releaseTotal),
             params.repayAmount,
             params.rawBorrowAmount,
             pnlAmount
@@ -388,21 +402,6 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
         _close(positionId, closeMillionth, pnlMinAmount, _position, marginCurrency, params);
     }
 
-    function _getLiquidateStatus(PoolId poolId, bool marginForOne)
-        internal
-        view
-        returns (LiquidateStatus memory liquidateStatus)
-    {
-        PoolStatus memory _status = pairPoolManager.getStatus(poolId);
-        liquidateStatus.poolId = poolId;
-        liquidateStatus.marginForOne = marginForOne;
-        (liquidateStatus.borrowCurrency, liquidateStatus.marginCurrency) = marginForOne
-            ? (_status.key.currency0, _status.key.currency1)
-            : (_status.key.currency1, _status.key.currency0);
-        liquidateStatus.statusReserves = _status.getReservesX224();
-        liquidateStatus.oracleReserves = checker.getOracleReserves(pairPoolManager, poolId);
-    }
-
     function _liquidateProfit(PoolId poolId, Currency marginCurrency, uint256 marginAmount)
         internal
         returns (uint256 profit, uint256 protocolProfit)
@@ -422,26 +421,23 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
         }
     }
 
-    function liquidateBurn(uint256 positionId, bytes calldata signature) external returns (uint256 profit) {
-        require(checker.checkValidity(msg.sender, positionId, signature), "AUTH_ERROR");
+    function liquidateBurn(uint256 positionId) external returns (uint256 profit) {
+        require(checker.checkValidity(msg.sender, positionId), "AUTH_ERROR");
         MarginPosition memory _position = _positions[positionId];
-        BurnParams memory params = BurnParams({
-            poolId: _position.poolId,
-            marginForOne: _position.marginForOne,
-            positionIds: new uint256[](1),
-            signature: signature
-        });
+        BurnParams memory params =
+            BurnParams({poolId: _position.poolId, marginForOne: _position.marginForOne, positionIds: new uint256[](1)});
         params.positionIds[0] = positionId;
         return liquidateBurn(params);
     }
 
     function liquidateBurn(BurnParams memory params) public returns (uint256 profit) {
-        require(checker.checkValidity(msg.sender, 0, params.signature), "AUTH_ERROR");
         MarginPosition[] memory inPositions = new MarginPosition[](params.positionIds.length);
         for (uint256 i = 0; i < params.positionIds.length; i++) {
+            require(checker.checkValidity(msg.sender, params.positionIds[i]), "AUTH_ERROR");
             inPositions[i] = _positions[params.positionIds[i]];
         }
-        LiquidateStatus memory liquidateStatus = _getLiquidateStatus(params.poolId, params.marginForOne);
+        LiquidateStatus memory liquidateStatus =
+            checker.getLiquidateStatus(address(pairPoolManager), params.poolId, params.marginForOne);
         ReleaseParams memory releaseParams = ReleaseParams({
             poolId: params.poolId,
             marginForOne: params.marginForOne,
@@ -459,30 +455,38 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
             for (uint256 i = 0; i < params.positionIds.length; i++) {
                 if (liquidatedList[i]) {
                     MarginPosition memory _position = inPositions[i];
-                    marginAmount += _position.marginAmount;
-                    assetAmount += _position.marginAmount + _position.marginTotal;
                     releaseParams.repayAmount += borrowAmountList[i];
                     releaseParams.rawBorrowAmount += _position.rawBorrowAmount;
-                    emit Liquidate(
-                        releaseParams.poolId,
-                        msg.sender,
-                        params.positionIds[i],
-                        _position.marginAmount,
-                        _position.marginTotal,
-                        borrowAmountList[i],
-                        liquidateStatus.oracleReserves,
-                        liquidateStatus.statusReserves
-                    );
+                    {
+                        uint256 realMarginAmount = lendingPoolManager.computeRealAmount(
+                            params.poolId, liquidateStatus.marginCurrency, _position.marginAmount
+                        );
+                        marginAmount += realMarginAmount;
+                        uint256 realMarginTotal = lendingPoolManager.computeRealAmount(
+                            params.poolId, liquidateStatus.marginCurrency, _position.marginTotal
+                        );
+                        assetAmount += realMarginAmount + realMarginTotal;
+                        uint256 positionId = params.positionIds[i];
+                        uint256 borrowAmount = borrowAmountList[i];
+                        uint256 oracleReserves = liquidateStatus.oracleReserves;
+                        uint256 statusReserves = liquidateStatus.statusReserves;
+                        emit Liquidate(
+                            releaseParams.poolId,
+                            msg.sender,
+                            positionId,
+                            realMarginAmount,
+                            realMarginTotal,
+                            borrowAmount,
+                            oracleReserves,
+                            statusReserves
+                        );
+                    }
                     _burnPosition(params.positionIds[i], BurnType.LIQUIDATE);
                 }
             }
             if (marginAmount == 0) {
                 return profit;
             }
-            marginAmount =
-                lendingPoolManager.computeRealAmount(params.poolId, liquidateStatus.marginCurrency, marginAmount);
-            assetAmount =
-                lendingPoolManager.computeRealAmount(params.poolId, liquidateStatus.marginCurrency, assetAmount);
             uint256 protocolProfit;
             (profit, protocolProfit) = _liquidateProfit(params.poolId, liquidateStatus.marginCurrency, marginAmount);
             releaseParams.releaseAmount = assetAmount - profit - protocolProfit;
@@ -492,14 +496,15 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
         }
     }
 
-    function liquidateCall(uint256 positionId, bytes calldata signature) external payable returns (uint256 profit) {
-        require(checker.checkValidity(msg.sender, positionId, signature), "AUTH_ERROR");
+    function liquidateCall(uint256 positionId) external payable returns (uint256 profit) {
+        require(checker.checkValidity(msg.sender, positionId), "AUTH_ERROR");
         (bool liquidated, uint256 borrowAmount) = checker.checkLiquidate(address(this), positionId);
         if (!liquidated) {
             return profit;
         }
         MarginPosition memory _position = _positions[positionId];
-        LiquidateStatus memory liquidateStatus = _getLiquidateStatus(_position.poolId, _position.marginForOne);
+        LiquidateStatus memory liquidateStatus =
+            checker.getLiquidateStatus(address(pairPoolManager), _position.poolId, _position.marginForOne);
         uint256 sendValue = liquidateStatus.borrowCurrency.checkAmount(borrowAmount);
         ReleaseParams memory params = ReleaseParams({
             poolId: _position.poolId,
@@ -511,21 +516,30 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
             deadline: block.timestamp + 1000
         });
         pairPoolManager.release{value: sendValue}(params);
-        profit = _position.marginAmount + _position.marginTotal;
-        lendingPoolManager.withdraw(msg.sender, _position.poolId, liquidateStatus.marginCurrency, profit);
         if (msg.value > sendValue) {
             transferNative(msg.sender, msg.value - sendValue);
         }
-        emit Liquidate(
-            _position.poolId,
-            msg.sender,
-            positionId,
-            _position.marginAmount,
-            _position.marginTotal,
-            borrowAmount,
-            liquidateStatus.oracleReserves,
-            liquidateStatus.statusReserves
-        );
+        {
+            uint256 realMarginAmount = lendingPoolManager.computeRealAmount(
+                _position.poolId, liquidateStatus.marginCurrency, _position.marginAmount
+            );
+            uint256 realMarginTotal = lendingPoolManager.computeRealAmount(
+                _position.poolId, liquidateStatus.marginCurrency, _position.marginTotal
+            );
+            profit = realMarginAmount + realMarginTotal;
+            lendingPoolManager.withdraw(msg.sender, _position.poolId, liquidateStatus.marginCurrency, profit);
+
+            emit Liquidate(
+                _position.poolId,
+                msg.sender,
+                positionId,
+                realMarginAmount,
+                realMarginTotal,
+                borrowAmount,
+                liquidateStatus.oracleReserves,
+                liquidateStatus.statusReserves
+            );
+        }
         _burnPosition(positionId, BurnType.LIQUIDATE);
     }
 
@@ -539,12 +553,13 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
         uint256 amount = changeAmount < 0 ? uint256(-changeAmount) : uint256(changeAmount);
         if (changeAmount > 0) {
             uint256 sendValue = marginCurrency.checkAmount(amount);
-            amount =
-                lendingPoolManager.deposit{value: sendValue}(address(this), _position.poolId, marginCurrency, amount);
+            amount = lendingPoolManager.deposit{value: sendValue}(
+                msg.sender, address(this), _position.poolId, marginCurrency, amount
+            );
             _position.marginAmount += amount.toUint112();
             if (msg.value > sendValue) transferNative(msg.sender, msg.value - sendValue);
         } else {
-            require(amount <= checker.getMaxDecrease(pairPoolManager, _status, _position), "OVER_AMOUNT");
+            require(amount <= checker.getMaxDecrease(address(pairPoolManager), _status, _position), "OVER_AMOUNT");
             lendingPoolManager.withdraw(msg.sender, _position.poolId, marginCurrency, amount);
             _position.marginAmount -= amount.toUint112();
             if (msg.value > 0) transferNative(msg.sender, msg.value);
@@ -553,8 +568,8 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
             _position.poolId,
             msg.sender,
             positionId,
-            _position.marginAmount,
-            _position.marginTotal,
+            lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, _position.marginAmount),
+            lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, _position.marginTotal),
             _position.borrowAmount,
             changeAmount
         );
@@ -562,22 +577,21 @@ contract MarginPositionManager is IMarginPositionManager, BasePositionManager {
 
     // ******************** INTERNAL CALL ********************
 
-    function _getPosition(uint256 positionId) internal view returns (MarginPosition memory _position) {
-        _position = _positions[positionId];
-        if (_position.rateCumulativeLast > 0) {
-            uint256 rateLast = pairPoolManager.marginFees().getBorrowRateCumulativeLast(
-                address(pairPoolManager), _position.poolId, _position.marginForOne
-            );
-            _position.borrowAmount = _position.borrowAmount.increaseInterestCeil(_position.rateCumulativeLast, rateLast);
-            _position.rateCumulativeLast = rateLast;
-        }
-    }
-
     function _updatePosition(MarginPosition storage _position, PoolStatus memory _status)
         internal
         returns (uint256 rateCumulativeLast)
     {
         rateCumulativeLast = _position.marginForOne ? _status.rate0CumulativeLast : _status.rate1CumulativeLast;
         _position.update(rateCumulativeLast);
+    }
+
+    function transferNative(address to, uint256 amount) internal {
+        (bool success,) = to.call{value: amount}("");
+        require(success, "TRANSFER_FAILED");
+    }
+
+    // ******************** OWNER CALL ********************
+    function setMarginChecker(address _checker) external onlyOwner {
+        checker = IMarginChecker(_checker);
     }
 }

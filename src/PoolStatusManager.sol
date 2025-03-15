@@ -15,6 +15,7 @@ import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {BalanceStatus} from "./types/BalanceStatus.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
+import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {CurrencyUtils} from "./libraries/CurrencyUtils.sol";
 import {TransientSlot} from "./external/openzeppelin-contracts/TransientSlot.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
@@ -29,6 +30,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     using UQ112x112 for *;
     using TransientSlot for *;
     using CurrencyUtils for *;
+    using PoolStatusLibrary for *;
 
     error UpdateBalanceGuardErrorCall();
     error NotPairPoolManager();
@@ -325,7 +327,11 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         _updateInterests(status, false);
     }
 
-    function update(PoolKey memory key, bool fromMargin) public onlyPairPoolManager {
+    function update(PoolKey memory key, bool fromMargin)
+        public
+        onlyPairPoolManager
+        returns (BalanceStatus memory afterStatus)
+    {
         PoolId pooId = key.toId();
         PoolStatus storage status = statusStore[pooId];
         // save margin price before changed
@@ -340,7 +346,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
 
         BalanceStatus memory beforeStatus = _getBalances();
         _updateInterests(status, true);
-        BalanceStatus memory afterStatus = getBalances(key);
+        afterStatus = getBalances(key);
         status.realReserve0 = status.realReserve0.add(afterStatus.balance0).sub(beforeStatus.balance0);
         status.realReserve1 = status.realReserve1.add(afterStatus.balance1).sub(beforeStatus.balance1);
         status.mirrorReserve0 = status.mirrorReserve0.add(afterStatus.mirrorBalance0).sub(beforeStatus.mirrorBalance0);
@@ -374,8 +380,8 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         _callUpdate();
     }
 
-    function update(PoolKey memory key) external onlyPairPoolManager {
-        update(key, false);
+    function update(PoolKey memory key) external onlyPairPoolManager returns (BalanceStatus memory afterStatus) {
+        afterStatus = update(key, false);
     }
 
     function updateProtocolFees(Currency currency, uint256 amount)

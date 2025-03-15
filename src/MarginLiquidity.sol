@@ -53,34 +53,12 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
     {
         uPoolId = uPoolId & LiquidityLevel.LP_FLAG;
         totalSupply = balanceOf(pool, uPoolId);
-        uint256 lPoolId = uPoolId + LiquidityLevel.NO_MARGIN;
+        uint256 lPoolId = LiquidityLevel.NO_MARGIN.getLevelId(uPoolId);
         retainSupply0 = retainSupply1 = balanceOf(pool, lPoolId);
-        lPoolId = uPoolId + LiquidityLevel.ONE_MARGIN;
+        lPoolId = LiquidityLevel.ONE_MARGIN.getLevelId(uPoolId);
         retainSupply0 += balanceOf(pool, lPoolId);
-        lPoolId = uPoolId + LiquidityLevel.ZERO_MARGIN;
+        lPoolId = LiquidityLevel.ZERO_MARGIN.getLevelId(uPoolId);
         retainSupply1 += balanceOf(pool, lPoolId);
-    }
-
-    // ******************** OWNER CALL ********************
-    function addPoolManager(address _manager) external onlyOwner {
-        poolManagers[_manager] = true;
-    }
-
-    function setMaxSliding(uint24 _maxSliding) external onlyOwner {
-        maxSliding = _maxSliding;
-    }
-
-    // ********************  HOOK CALL ********************
-    function mint(address receiver, uint256 id, uint256 amount) external onlyPoolManager {
-        unchecked {
-            _mint(receiver, id, amount);
-        }
-    }
-
-    function burn(address sender, uint256 id, uint256 amount) external onlyPoolManager {
-        unchecked {
-            _burn(sender, id, amount);
-        }
     }
 
     function _updateLevelRatio(address pairPoolManager, uint256 id, uint256 liquidity0, uint256 liquidity1) internal {
@@ -106,6 +84,17 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         level4InterestRatioX112 = level4InterestRatioX112.growRatioX112(level4Liquidity, total4Liquidity);
         _mint(pairPoolManager, level4Id, level4Liquidity);
     }
+
+    // ******************** OWNER CALL ********************
+    function addPoolManager(address _manager) external onlyOwner {
+        poolManagers[_manager] = true;
+    }
+
+    function setMaxSliding(uint24 _maxSliding) external onlyOwner {
+        maxSliding = _maxSliding;
+    }
+
+    // ********************  POOL CALL ********************
 
     function addInterests(PoolId poolId, uint256 _reserve0, uint256 _reserve1, uint256 interest0, uint256 interest1)
         external
@@ -189,6 +178,28 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         (totalSupply, retainSupply0, retainSupply1) = _getPoolSupplies(msg.sender, uPoolId);
     }
 
+    // ********************  EXTERNAL CALL ********************
+    function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId) {
+        uPoolId = _getPoolId(poolId);
+    }
+
+    function getPoolSupplies(address pool, PoolId poolId)
+        external
+        view
+        returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1)
+    {
+        uint256 uPoolId = _getPoolId(poolId);
+        (totalSupply, retainSupply0, retainSupply1) = _getPoolSupplies(pool, uPoolId);
+    }
+
+    function getPoolLiquidities(PoolId poolId, address owner) external view returns (uint256[4] memory liquidities) {
+        uint256 uPoolId = uint256(PoolId.unwrap(poolId));
+        for (uint256 i = 0; i < 4; i++) {
+            uint256 lPoolId = uint8(1 + i).getLevelId(uPoolId);
+            liquidities[i] = balanceOf(owner, lPoolId);
+        }
+    }
+
     function getFlowReserves(address pairPoolManager, PoolId poolId, PoolStatus memory status)
         external
         view
@@ -210,27 +221,5 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) = _getPoolSupplies(pairPoolManager, uPoolId);
         reserve0 = Math.mulDiv(totalSupply - retainSupply0, status.realReserve0, totalSupply);
         reserve1 = Math.mulDiv(totalSupply - retainSupply1, status.realReserve1, totalSupply);
-    }
-
-    // ********************  EXTERNAL CALL ********************
-    function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId) {
-        uPoolId = _getPoolId(poolId);
-    }
-
-    function getPoolSupplies(address pool, PoolId poolId)
-        external
-        view
-        returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1)
-    {
-        uint256 uPoolId = _getPoolId(poolId);
-        (totalSupply, retainSupply0, retainSupply1) = _getPoolSupplies(pool, uPoolId);
-    }
-
-    function getPoolLiquidities(PoolId poolId, address owner) external view returns (uint256[4] memory liquidities) {
-        uint256 uPoolId = uint256(PoolId.unwrap(poolId));
-        for (uint256 i = 0; i < 4; i++) {
-            uint256 lPoolId = uint8(1 + i).getLevelId(uPoolId);
-            liquidities[i] = balanceOf(owner, lPoolId);
-        }
     }
 }

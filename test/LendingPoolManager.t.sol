@@ -7,6 +7,7 @@ import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
 import {PoolStatus} from "../src/types/PoolStatus.sol";
+import {PoolStatusLibrary} from "../src/types/PoolStatusLibrary.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {PerLibrary} from "../src/libraries/PerLibrary.sol";
@@ -35,6 +36,7 @@ import {DeployHelper} from "./utils/DeployHelper.sol";
 
 contract LendingPoolManagerTest is DeployHelper {
     using CurrencyUtils for Currency;
+    using PoolStatusLibrary for *;
 
     function setUp() public {
         deployHookAndRouter();

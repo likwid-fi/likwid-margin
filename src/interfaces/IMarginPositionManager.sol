@@ -11,7 +11,7 @@ interface IMarginPositionManager is IERC721 {
     /// @notice Return the position with the given ID
     /// @param positionId The ID of the position to retrieve
     /// @return _position The position with the given ID
-    function getPosition(uint256 positionId) external view returns (MarginPosition memory _position);
+    function getPosition(uint256 positionId) external view returns (MarginPosition memory);
 
     /// @notice Margin a position
     /// @param params The parameters of the margin position

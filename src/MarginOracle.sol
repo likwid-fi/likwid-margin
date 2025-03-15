@@ -39,19 +39,6 @@ contract MarginOracle {
         return uint32(block.timestamp % 2 ** 32);
     }
 
-    function initialize(PoolKey calldata key, uint112 reserve0, uint112 reserve1)
-        external
-        onlyPairPoolManager(key.hooks)
-    {
-        PoolId id = key.toId();
-        address hook = address(key.hooks);
-        ObservationState storage _state = states[hook][id];
-        if (_state.cardinality == 0) {
-            (_state.cardinality, _state.cardinalityNext) =
-                observations[hook][id].initialize(_blockTimestamp(), reserve0, reserve1);
-        }
-    }
-
     function write(PoolKey calldata key, uint112 reserve0, uint112 reserve1) external onlyPairPoolManager(key.hooks) {
         PoolId id = key.toId();
         address hook = address(key.hooks);

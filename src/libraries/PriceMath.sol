@@ -9,8 +9,6 @@ library PriceMath {
     using UQ112x112 for *;
     using PerLibrary for *;
 
-    uint32 constant ONE_MILLION = 10 ** 6;
-
     function getReserves(uint112 reserve0, uint112 reserve1) internal pure returns (uint224 reserves) {
         reserves = (uint224(reserve0) << 112) + uint224(reserve1);
     }
@@ -37,11 +35,13 @@ library PriceMath {
         returns (uint112 reverse0Result)
     {
         uint112 reverse0Min;
-        if (moved < ONE_MILLION) {
-            reverse0Min = Math.mulDiv(reverse1, price1X112 * (ONE_MILLION - moved), ONE_MILLION).toUint224().decode();
+        if (moved < PerLibrary.ONE_MILLION) {
+            reverse0Min = Math.mulDiv(reverse1, price1X112 * (PerLibrary.ONE_MILLION - moved), PerLibrary.ONE_MILLION)
+                .toUint224().decode();
         }
-        uint112 reverse0Max =
-            Math.mulDiv(reverse1, price1X112 * (ONE_MILLION + moved), ONE_MILLION).toUint224().decode();
+        uint112 reverse0Max = Math.mulDiv(
+            reverse1, price1X112 * (PerLibrary.ONE_MILLION + moved), PerLibrary.ONE_MILLION
+        ).toUint224().decode();
         if (reverse0 < reverse0Min) {
             reverse0Result = reverse0Min;
         } else if (reverse0 > reverse0Max) {

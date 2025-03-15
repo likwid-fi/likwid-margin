@@ -7,10 +7,6 @@ import {IERC6909Accrues} from "../interfaces/external/IERC6909Accrues.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
 
 interface IMarginLiquidity is IERC6909Accrues {
-    function mint(address receiver, uint256 id, uint256 amount) external;
-
-    function burn(address sender, uint256 id, uint256 amount) external;
-
     function addLiquidity(address receiver, uint256 id, uint8 level, uint256 amount)
         external
         returns (uint256 liquidity);

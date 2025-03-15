@@ -17,15 +17,18 @@ contract MirrorTokenManager is IMirrorTokenManager, ERC6909Accrues, Owned {
         _;
     }
 
+    modifier onlyStatusManager() {
+        require(poolManagers[IStatusBase(msg.sender).pairPoolManager()], "UNAUTHORIZED");
+        _;
+    }
+
     function mint(uint256 id, uint256 amount) external onlyPoolManager {
         unchecked {
             _mint(msg.sender, id, amount);
         }
     }
 
-    function mintInStatus(address receiver, uint256 id, uint256 amount) external {
-        address poolManager = IStatusBase(msg.sender).pairPoolManager();
-        require(poolManagers[poolManager], "UNAUTHORIZED");
+    function mintInStatus(address receiver, uint256 id, uint256 amount) external onlyStatusManager {
         unchecked {
             _mint(receiver, id, amount);
         }

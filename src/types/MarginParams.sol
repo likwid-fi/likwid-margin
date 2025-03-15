@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {PoolId} from "v4-core/types/PoolId.sol";
+import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 
 /// @notice MarginParams is a struct that contains all the parameters needed to open a margin position.
 struct MarginParams {
@@ -29,4 +30,6 @@ struct MarginParamsVo {
     uint256 marginTotal;
     /// @notice Min margin level.
     uint24 minMarginLevel;
+    /// @notice Min margin level.
+    Currency marginCurrency;
 }

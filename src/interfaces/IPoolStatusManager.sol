@@ -28,9 +28,9 @@ interface IPoolStatusManager is IStatusBase {
 
     function updateInterests(PoolKey memory key) external;
 
-    function update(PoolKey memory key, bool fromMargin) external;
+    function update(PoolKey memory key, bool fromMargin) external returns (BalanceStatus memory afterStatus);
 
-    function update(PoolKey memory key) external;
+    function update(PoolKey memory key) external returns (BalanceStatus memory afterStatus);
 
     function updateProtocolFees(Currency currency, uint256 amount) external returns (uint256 restAmount);
 

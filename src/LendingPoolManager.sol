@@ -145,8 +145,10 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         view
         returns (uint256 amount)
     {
-        uint256 id = currency.toTokenId(poolId);
-        amount = originalAmount.mulRatioX112(incrementRatioX112Of[id]);
+        if (originalAmount > 0) {
+            uint256 id = currency.toTokenId(poolId);
+            amount = originalAmount.mulRatioX112(incrementRatioX112Of[id]);
+        }
     }
 
     function getLendingAPR(PoolId poolId, Currency currency, uint256 inputAmount) public view returns (uint256 apr) {
@@ -216,16 +218,24 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
 
     // ******************** USER CALL ********************
 
-    function deposit(address recipient, PoolId poolId, Currency currency, uint256 amount)
-        external
+    function deposit(address sender, address recipient, PoolId poolId, Currency currency, uint256 amount)
+        public
         payable
         returns (uint256 originalAmount)
     {
         uint256 sendAmount = currency.checkAmount(amount);
         bytes memory result =
-            poolManager.unlock(abi.encodeCall(this.handleDeposit, (msg.sender, recipient, poolId, currency, amount)));
+            poolManager.unlock(abi.encodeCall(this.handleDeposit, (sender, recipient, poolId, currency, amount)));
         originalAmount = abi.decode(result, (uint256));
         if (msg.value > sendAmount) transferNative(msg.sender, msg.value - sendAmount);
+    }
+
+    function deposit(address recipient, PoolId poolId, Currency currency, uint256 amount)
+        external
+        payable
+        returns (uint256 originalAmount)
+    {
+        originalAmount = deposit(msg.sender, recipient, poolId, currency, amount);
     }
 
     function handleDeposit(address sender, address recipient, PoolId poolId, Currency currency, uint256 amount)
@@ -238,11 +248,6 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         currency.take(poolManager, address(this), amount, true);
         originalAmount = _mintReturn(recipient, id, amount);
         emit Deposit(poolId, currency, msg.sender, recipient, amount, originalAmount, incrementRatioX112Of[id]);
-    }
-
-    function withdrawOriginal(address recipient, PoolId poolId, Currency currency, uint256 originalAmount) external {
-        uint256 amount = computeRealAmount(poolId, currency, originalAmount);
-        poolManager.unlock(abi.encodeCall(this.handleWithdraw, (msg.sender, recipient, poolId, currency, amount)));
     }
 
     function withdraw(address recipient, PoolId poolId, Currency currency, uint256 amount) external {
