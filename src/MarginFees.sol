@@ -11,13 +11,14 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
+import {TimeLibrary} from "./libraries/TimeLibrary.sol";
 import {TruncatedOracle} from "./libraries/TruncatedOracle.sol";
 import {RateStatus} from "./types/RateStatus.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
-import {TimeLibrary} from "./libraries/TimeLibrary.sol";
+import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 
 contract MarginFees is IMarginFees, Owned {
     using UQ112x112 for uint112;
@@ -49,10 +50,10 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     /// @inheritdoc IMarginFees
-    function getPoolFees(address pool, PoolId poolId) external view returns (uint24 _fee, uint24 _marginFee) {
-        IPairPoolManager poolManager = IPairPoolManager(pool);
+    function getPoolFees(address _poolManager, PoolId poolId) external view returns (uint24 _fee, uint24 _marginFee) {
+        IPairPoolManager poolManager = IPairPoolManager(_poolManager);
         PoolStatus memory status = poolManager.getStatus(poolId);
-        _fee = dynamicFee(status);
+        _fee = dynamicFee(_poolManager, status);
         _marginFee = status.marginFee == 0 ? marginFee : status.marginFee;
     }
 
@@ -60,43 +61,59 @@ contract MarginFees is IMarginFees, Owned {
         priceDiff = price > lastPrice ? price - lastPrice : lastPrice - price;
     }
 
+    function _getPriceDiff(uint256 timeMul, uint24 _fee, uint256 lastPrice1X112, PoolStatus memory status)
+        internal
+        view
+        returns (uint256 feeUp)
+    {
+        if (lastPrice1X112 > 0) {
+            uint256 lastPrice0X112 = Math.mulDiv(UQ112x112.Q112, UQ112x112.Q112, lastPrice1X112);
+            (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
+            uint224 price0X112 = UQ112x112.encode(uint112(_reserve1)).div(uint112(_reserve0));
+            uint224 price1X112 = UQ112x112.encode(uint112(_reserve0)).div(uint112(_reserve1));
+            uint256 fee0Up = Math.mulDiv(
+                differencePrice(price0X112, lastPrice0X112) * dynamicFeeUnit * _fee, timeMul, lastPrice0X112
+            ).divMillion();
+            uint256 fee1Up = Math.mulDiv(
+                differencePrice(price1X112, lastPrice1X112) * dynamicFeeUnit * _fee, timeMul, lastPrice1X112
+            ).divMillion();
+            feeUp = Math.max(fee0Up, fee1Up);
+        }
+    }
+
     /// @inheritdoc IMarginFees
-    function dynamicFee(PoolStatus memory status) public view returns (uint24 _fee) {
+    function dynamicFee(address _poolManager, PoolStatus memory status) public view returns (uint24 _fee) {
         uint256 timeElapsed = status.marginTimestampLast.getTimeElapsed();
         _fee = status.key.fee;
-        uint256 lastPrice1X112 = status.lastPrice1X112;
-        uint256 feeUp;
-        if (timeElapsed < dynamicFeeDurationSeconds && lastPrice1X112 > 0) {
-            {
-                uint256 lastPrice0X112 = Math.mulDiv(UQ112x112.Q112, UQ112x112.Q112, status.lastPrice1X112);
-                (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
-                uint224 price0X112 = UQ112x112.encode(uint112(_reserve1)).div(uint112(_reserve0));
-                uint224 price1X112 = UQ112x112.encode(uint112(_reserve0)).div(uint112(_reserve1));
-                uint256 price0Diff = differencePrice(price0X112, lastPrice0X112);
-                uint256 price1Diff = differencePrice(price1X112, lastPrice1X112);
-                uint256 timeMul =
-                    uint256(dynamicFeeDurationSeconds - timeElapsed).mulMillionDiv(uint256(dynamicFeeDurationSeconds));
-                uint256 fee0Up = Math.mulDiv(price0Diff * dynamicFeeUnit * _fee, timeMul, lastPrice0X112).divMillion();
-                uint256 fee1Up = Math.mulDiv(price1Diff * dynamicFeeUnit * _fee, timeMul, lastPrice1X112).divMillion();
-                feeUp = Math.max(fee0Up, fee1Up);
-            }
-            uint256 dFee = feeUp + _fee;
-            if (dFee >= PerLibrary.ONE_MILLION) {
-                _fee = uint24(PerLibrary.ONE_MILLION) - 1;
-            } else {
-                _fee = uint24(dFee);
-                if (timeElapsed == 0) {
-                    uint24 oneBlockFee = 20 * status.key.fee;
-                    if (oneBlockFee > _fee) {
-                        _fee = oneBlockFee;
+        if (timeElapsed < dynamicFeeDurationSeconds) {
+            IMarginOracleReader oracleReader = IPairPoolManager(_poolManager).marginOracleReader();
+            if (address(oracleReader) != address(0)) {
+                (, uint256 timeInterval, uint256 price1CumulativeLast) =
+                    oracleReader.observeNow(IPairPoolManager(_poolManager), status.key.toId());
+                if (timeInterval > 0) {
+                    uint256 timeMul =
+                        uint256(dynamicFeeDurationSeconds - timeElapsed).mulMillionDiv(dynamicFeeDurationSeconds);
+                    uint256 lastPrice1X112 = price1CumulativeLast / timeInterval;
+                    uint256 feeUp = _getPriceDiff(timeMul, _fee, lastPrice1X112, status);
+                    uint256 dFee = feeUp + _fee;
+                    if (dFee >= PerLibrary.ONE_MILLION) {
+                        _fee = uint24(PerLibrary.ONE_MILLION) - 1;
+                    } else {
+                        _fee = uint24(dFee);
                     }
                 }
+            }
+        }
+        if (timeElapsed == 0) {
+            uint24 oneBlockFee = 20 * status.key.fee;
+            if (oneBlockFee > _fee) {
+                _fee = oneBlockFee;
             }
         }
     }
 
     // given an input amount of an asset and pair reserve, returns the maximum output amount of the other asset
-    function getAmountOut(PoolStatus memory status, bool zeroForOne, uint256 amountIn)
+    function getAmountOut(address _poolManager, PoolStatus memory status, bool zeroForOne, uint256 amountIn)
         external
         view
         returns (uint256 amountOut, uint24 fee, uint256 feeAmount)
@@ -105,7 +122,7 @@ contract MarginFees is IMarginFees, Owned {
         (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
         (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
         require(reserveIn > 0 && reserveOut > 0, " INSUFFICIENT_LIQUIDITY");
-        fee = dynamicFee(status);
+        fee = dynamicFee(_poolManager, status);
         uint256 amountInWithoutFee;
         (amountInWithoutFee, feeAmount) = fee.deduct(amountIn);
         uint256 numerator = amountInWithoutFee * reserveOut;
@@ -114,7 +131,7 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     // given an output amount of an asset and pair reserve, returns a required input amount of the other asset
-    function getAmountIn(PoolStatus memory status, bool zeroForOne, uint256 amountOut)
+    function getAmountIn(address _poolManager, PoolStatus memory status, bool zeroForOne, uint256 amountOut)
         external
         view
         returns (uint256 amountIn, uint24 fee, uint256 feeAmount)
@@ -124,7 +141,7 @@ contract MarginFees is IMarginFees, Owned {
         (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
         require(reserveIn > 0 && reserveOut > 0, "INSUFFICIENT_LIQUIDITY");
         require(amountOut < reserveOut, "OUTPUT_AMOUNT_OVERFLOW");
-        fee = dynamicFee(status);
+        fee = dynamicFee(_poolManager, status);
         uint256 numerator = reserveIn * amountOut;
         uint256 denominator = (reserveOut - amountOut);
         uint256 amountInWithoutFee = (numerator / denominator) + 1;

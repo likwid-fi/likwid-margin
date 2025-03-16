@@ -74,6 +74,8 @@ contract PairPoolManagerTest is DeployHelper {
         });
         vm.roll(100);
         pairPoolManager.removeLiquidity(removeParams);
+        liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
+        console.log("remove all liquidity:%s", liquidityHalf);
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         assertEq(status.marginFee, 0);
         (uint24 _fee, uint24 _marginFee) = marginFees.getPoolFees(address(pairPoolManager), poolId);

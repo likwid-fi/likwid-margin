@@ -199,7 +199,7 @@ contract MarginChecker is IMarginChecker, Owned {
     {
         IPairPoolManager poolManager = IPairPoolManager(_poolManager);
         PoolStatus memory status = poolManager.getStatus(poolId);
-        (uint256 marginReserve1, uint256 marginReserve0) =
+        (uint256 marginReserve0, uint256 marginReserve1) =
             poolManager.marginLiquidity().getFlowReserves(address(poolManager), poolId, status);
         if (leverage > 0) {
             uint256 marginMaxTotal = (marginForOne ? marginReserve1 : marginReserve0);
@@ -270,7 +270,7 @@ contract MarginChecker is IMarginChecker, Owned {
         if (marginOracle == address(0)) {
             reserves = 0;
         } else {
-            (reserves,) = IMarginOracleReader(marginOracle).observeNow(IPairPoolManager(poolManager), poolId);
+            (reserves,,) = IMarginOracleReader(marginOracle).observeNow(IPairPoolManager(poolManager), poolId);
         }
     }
 

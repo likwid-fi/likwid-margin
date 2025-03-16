@@ -35,7 +35,7 @@ import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
-import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
+import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 
 contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     using UQ112x112 for *;
@@ -118,6 +118,10 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         _;
     }
 
+    function marginOracleReader() external view returns (IMarginOracleReader oracleReader) {
+        oracleReader = IMarginOracleReader(statusManager.marginOracle());
+    }
+
     function getStatus(PoolId poolId) external view returns (PoolStatus memory _status) {
         _status = statusManager.getStatus(poolId);
     }
@@ -129,12 +133,12 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
 
     function getAmountIn(PoolId poolId, bool zeroForOne, uint256 amountOut) external view returns (uint256 amountIn) {
         PoolStatus memory status = statusManager.getStatus(poolId);
-        (amountIn,,) = marginFees.getAmountIn(status, zeroForOne, amountOut);
+        (amountIn,,) = marginFees.getAmountIn(address(this), status, zeroForOne, amountOut);
     }
 
     function getAmountOut(PoolId poolId, bool zeroForOne, uint256 amountIn) external view returns (uint256 amountOut) {
         PoolStatus memory status = statusManager.getStatus(poolId);
-        (amountOut,,) = marginFees.getAmountOut(status, zeroForOne, amountIn);
+        (amountOut,,) = marginFees.getAmountOut(address(this), status, zeroForOne, amountIn);
     }
 
     // ******************** HOOK CALL ********************
@@ -172,11 +176,11 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         uint256 feeAmount;
         if (exactInput) {
             (unspecifiedAmount, swapFee, feeAmount) =
-                marginFees.getAmountOut(_status, params.zeroForOne, specifiedAmount);
+                marginFees.getAmountOut(address(this), _status, params.zeroForOne, specifiedAmount);
             poolManager.approve(address(hooks), unspecified.toId(), unspecifiedAmount);
         } else {
             (unspecifiedAmount, swapFee, feeAmount) =
-                marginFees.getAmountIn(_status, params.zeroForOne, specifiedAmount);
+                marginFees.getAmountIn(address(this), _status, params.zeroForOne, specifiedAmount);
             poolManager.approve(address(hooks), specified.toId(), specifiedAmount);
         }
         if (feeAmount > 0) {
@@ -350,7 +354,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             }
             uint256 marginTotal = params.marginAmount * params.leverage;
             require(marginReserves >= marginTotal, "TOKEN_NOT_ENOUGH");
-            (borrowAmount,,) = marginFees.getAmountIn(status, params.marginForOne, marginTotal);
+            (borrowAmount,,) = marginFees.getAmountIn(address(this), status, params.marginForOne, marginTotal);
             (, uint24 marginFee) = marginFees.getPoolFees(address(this), params.poolId);
             (marginWithoutFee, marginFeeAmount) = marginFee.deduct(marginTotal);
             // transfer marginTotal to lendingPoolManager
@@ -479,7 +483,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     {
         PoolStatus memory status = statusManager.getStatus(poolId);
         uint256 feeAmount;
-        (amountOut,, feeAmount) = marginFees.getAmountOut(status, zeroForOne, amountIn);
+        (amountOut,, feeAmount) = marginFees.getAmountOut(address(this), status, zeroForOne, amountIn);
         uint256 mirrorOut = zeroForOne ? status.mirrorReserve1 : status.mirrorReserve0;
         require(amountOut <= mirrorOut, "NOT_ENOUGH_RESERVE");
         (Currency inputCurrency, Currency outputCurrency) =

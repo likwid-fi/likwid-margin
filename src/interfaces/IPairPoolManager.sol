@@ -17,6 +17,7 @@ import {IMarginFees} from "./IMarginFees.sol";
 import {IMarginLiquidity} from "./IMarginLiquidity.sol";
 import {ILendingPoolManager} from "./ILendingPoolManager.sol";
 import {IPoolStatusManager} from "./IPoolStatusManager.sol";
+import {IMarginOracleReader} from "./IMarginOracleReader.sol";
 
 interface IPairPoolManager is IPairMarginManager {
     function hooks() external view returns (IHooks hook);
@@ -24,6 +25,8 @@ interface IPairPoolManager is IPairMarginManager {
     function lendingPoolManager() external view returns (ILendingPoolManager);
 
     function statusManager() external view returns (IPoolStatusManager);
+
+    function marginOracleReader() external view returns (IMarginOracleReader oracleReader);
 
     /// @notice Get current IMarginFees
     function marginFees() external view returns (IMarginFees);

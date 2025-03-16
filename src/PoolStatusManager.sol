@@ -116,12 +116,12 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
 
     function getAmountIn(PoolId poolId, bool zeroForOne, uint256 amountOut) external view returns (uint256 amountIn) {
         PoolStatus memory status = getStatus(poolId);
-        (amountIn,,) = marginFees.getAmountIn(status, zeroForOne, amountOut);
+        (amountIn,,) = marginFees.getAmountIn(address(this), status, zeroForOne, amountOut);
     }
 
     function getAmountOut(PoolId poolId, bool zeroForOne, uint256 amountIn) external view returns (uint256 amountOut) {
         PoolStatus memory status = getStatus(poolId);
-        (amountOut,,) = marginFees.getAmountOut(status, zeroForOne, amountIn);
+        (amountOut,,) = marginFees.getAmountOut(address(this), status, zeroForOne, amountIn);
     }
 
     function _callSet() internal {
@@ -339,9 +339,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
             uint32 blockTS = uint32(block.timestamp % 2 ** 32);
             if (status.marginTimestampLast != blockTS) {
                 status.marginTimestampLast = blockTS;
-                status.lastPrice1X112 = status.getPrice1X112();
             }
-            if (status.lastPrice1X112 == 0) status.lastPrice1X112 = status.getPrice1X112();
         }
 
         BalanceStatus memory beforeStatus = _getBalances();

@@ -10,10 +10,10 @@ interface IMarginOracleReader {
     function observeNow(IPairPoolManager poolManager, PoolId id)
         external
         view
-        returns (uint224 reserves, uint256 price1CumulativeLast);
+        returns (uint224 reserves, uint256 timeInterval, uint256 price1CumulativeLast);
 
     function observe(PoolKey calldata key, uint32[] calldata secondsAgos)
         external
         view
-        returns (uint224[] memory reserves, uint256[] memory price1CumulativeLast);
+        returns (uint224[] memory reserves, uint256[] memory timeInterval, uint256[] memory price1CumulativeLast);
 }

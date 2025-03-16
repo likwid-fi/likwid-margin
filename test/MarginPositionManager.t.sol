@@ -1291,4 +1291,16 @@ contract MarginPositionManagerTest is DeployHelper {
             "_position.marginAmount:%s,_position.borrowAmount:%s", _position.marginAmount, _position.borrowAmount
         );
     }
+
+    function testGetMarginMax() public view {
+        (uint256 marginMax, uint256 borrowAmount) =
+            marginChecker.getMarginMax(address(pairPoolManager), nativeKey.toId(), true, 0);
+        console.log("marginMax:%s,borrowAmount:%s", marginMax, borrowAmount);
+        assertGt(marginMax, borrowAmount);
+        (marginMax, borrowAmount) = marginChecker.getMarginMax(address(pairPoolManager), nativeKey.toId(), false, 0);
+        console.log("marginMax:%s,borrowAmount:%s", marginMax, borrowAmount);
+        assertLt(marginMax, borrowAmount);
+        (marginMax, borrowAmount) = marginChecker.getMarginMax(address(pairPoolManager), nativeKey.toId(), false, 1);
+        console.log("marginMax:%s,borrowAmount:%s", marginMax, borrowAmount);
+    }
 }

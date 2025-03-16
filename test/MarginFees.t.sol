@@ -67,7 +67,7 @@ contract MarginFeesTest is DeployHelper {
         PoolId poolId = nativeKey.toId();
         uint256 keyId = CurrencyLibrary.ADDRESS_ZERO.toTokenId(poolId);
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
-        uint24 _beforeFee = marginFees.dynamicFee(status);
+        uint24 _beforeFee = marginFees.dynamicFee(address(pairPoolManager), status);
         assertEq(_beforeFee, status.key.fee);
         uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
         assertEq(rate, 50000);
@@ -93,14 +93,14 @@ contract MarginFeesTest is DeployHelper {
         uint256 _positionId = marginPositionManager.getPositionId(poolId, false, user, true);
         assertEq(positionId, _positionId);
         status = pairPoolManager.getStatus(poolId);
-        uint24 _afterFee = marginFees.dynamicFee(status);
+        uint24 _afterFee = marginFees.dynamicFee(address(pairPoolManager), status);
         assertEq(_afterFee, 20 * status.key.fee);
         vm.warp(10);
-        _afterFee = marginFees.dynamicFee(status);
+        _afterFee = marginFees.dynamicFee(address(pairPoolManager), status);
         assertLe(_afterFee, 20 * status.key.fee);
         console.log("_afterFee:", _afterFee);
         vm.warp(130);
-        _afterFee = marginFees.dynamicFee(status);
+        _afterFee = marginFees.dynamicFee(address(pairPoolManager), status);
         assertEq(_afterFee, status.key.fee);
     }
 }
