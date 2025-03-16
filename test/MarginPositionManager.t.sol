@@ -1250,6 +1250,7 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256 borrowPositionId = marginPositionManager.getPositionId(nativeKey.toId(), false, user, false);
         assertEq(positionId, borrowPositionId);
         assertEq(afterBalance, borrowAmount);
+        vm.warp(3600);
         vm.startPrank(user);
         uint256 beforeETH = user.balance;
         assertEq(beforeETH, 0);
@@ -1285,6 +1286,7 @@ contract MarginPositionManagerTest is DeployHelper {
             "_position.marginAmount:%s,_position.borrowAmount:%s", _position.marginAmount, _position.borrowAmount
         );
         tokenB.approve(address(lendingPoolManager), payValue);
+        vm.warp(3600);
         marginPositionManager.modify(positionId, int256(payValue));
         _position = marginPositionManager.getPosition(positionId);
         console.log(

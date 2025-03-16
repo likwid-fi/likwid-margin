@@ -8,6 +8,7 @@ import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
 import {MarginOracle} from "../src/MarginOracle.sol";
 import {PoolStatus} from "../src/types/PoolStatus.sol";
+import {PoolStatusLibrary} from "../src/types/PoolStatusLibrary.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
@@ -32,6 +33,7 @@ import {DeployHelper} from "./utils/DeployHelper.sol";
 
 contract PairPoolManagerTest is DeployHelper {
     using LiquidityLevel for uint8;
+    using PoolStatusLibrary for PoolStatus;
 
     function setUp() public {
         deployHookAndRouter();
@@ -56,6 +58,7 @@ contract PairPoolManagerTest is DeployHelper {
         (uint256 _reserves0, uint256 _reserves1) = pairPoolManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
         assertEq(_reserves0, _reserves1);
+        vm.warp(3600);
         RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
             poolId: poolId,
             level: LiquidityLevel.BOTH_MARGIN,
@@ -73,14 +76,61 @@ contract PairPoolManagerTest is DeployHelper {
             deadline: type(uint256).max
         });
         vm.roll(100);
+        vm.warp(3600 * 2);
         pairPoolManager.removeLiquidity(removeParams);
         liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
         console.log("remove all liquidity:%s", liquidityHalf);
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
+        console.log("status.reserve0:%s,status.reserve1:%s", status.reserve0(), status.reserve1());
         assertEq(status.marginFee, 0);
         (uint24 _fee, uint24 _marginFee) = marginFees.getPoolFees(address(pairPoolManager), poolId);
         assertEq(_fee, 3000);
         assertEq(_marginFee, 3000);
+    }
+
+    function testLiquidityNativeOne() public {
+        uint256 amount0 = 1 ether;
+        uint256 amount1 = 1 ether;
+        PoolId poolId = nativeKey.toId();
+        AddLiquidityParams memory params = AddLiquidityParams({
+            poolId: poolId,
+            amount0: amount0,
+            amount1: amount1,
+            to: address(this),
+            level: LiquidityLevel.NO_MARGIN,
+            deadline: type(uint256).max
+        });
+        pairPoolManager.addLiquidity{value: amount0}(params);
+        uint256 uPoolId = marginLiquidity.getPoolId(poolId);
+        uint256 liquidity = marginLiquidity.balanceOf(address(this), LiquidityLevel.NO_MARGIN.getLevelId(uPoolId));
+        assertGt(liquidity, 0);
+        (uint256 _reserves0, uint256 _reserves1) = pairPoolManager.getReserves(poolId);
+        assertEq(_reserves0, amount0);
+        assertEq(_reserves0, _reserves1);
+        RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
+            poolId: poolId,
+            level: LiquidityLevel.NO_MARGIN,
+            liquidity: liquidity / 2,
+            deadline: type(uint256).max
+        });
+        vm.roll(100);
+        vm.warp(3600);
+        pairPoolManager.removeLiquidity(removeParams);
+        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.NO_MARGIN.getLevelId(uPoolId));
+        assertEq(liquidityHalf, liquidity - liquidity / 2);
+        removeParams = RemoveLiquidityParams({
+            poolId: poolId,
+            level: LiquidityLevel.NO_MARGIN,
+            liquidity: liquidityHalf,
+            deadline: type(uint256).max
+        });
+        vm.roll(100);
+        vm.warp(3600 * 2);
+        pairPoolManager.removeLiquidity(removeParams);
+        liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.NO_MARGIN.getLevelId(uPoolId));
+        console.log("remove all liquidity:%s", liquidityHalf);
+        PoolStatus memory status = pairPoolManager.getStatus(poolId);
+        console.log("status.reserve0:%s,status.reserve1:%s", status.reserve0(), status.reserve1());
     }
 
     function test_hook_liquidity_tokens() public {

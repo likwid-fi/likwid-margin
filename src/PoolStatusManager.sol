@@ -226,7 +226,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     function _updateInterests(PoolStatus storage status, bool inUpdate) internal {
         PoolKey memory key = status.key;
         uint32 blockTS = uint32(block.timestamp % 2 ** 32);
-        if (status.blockTimestampLast != blockTS) {
+        if (status.blockTimestampLast != blockTS && (status.mirrorReserve0 + status.mirrorReserve1 > 0)) {
             PoolId poolId = key.toId();
             (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = marginFees.getBorrowRateCumulativeLast(status);
             (uint256 flowReserve0, uint256 flowReserve1) =
