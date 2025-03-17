@@ -44,6 +44,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     using LiquidityLevel for uint8;
     using FeeLibrary for uint24;
     using PerLibrary for uint256;
+    using CurrencyLibrary for Currency;
     using CurrencyExtLibrary for Currency;
     using CurrencyPoolLibrary for Currency;
     using PoolStatusLibrary for PoolStatus;
@@ -202,31 +203,28 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         PoolStatus memory status = statusManager.getStatus(params.poolId);
         statusManager.setBalances(status.key);
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
+        uint256 amount0In;
+        uint256 amount1In;
         {
             uint256 _totalSupply = marginLiquidity.balanceOf(address(this), uPoolId);
             if (_totalSupply == 0) {
                 liquidity = Math.sqrt(params.amount0 * params.amount1);
+                amount0In = params.amount0;
+                amount1In = params.amount1;
             } else {
-                uint256 amount0In;
-                uint256 amount1In;
                 uint24 maxSliding = marginLiquidity.getMaxSliding();
                 (liquidity, amount0In, amount1In) =
                     status.computeLiquidity(_totalSupply, params.amount0, params.amount1, maxSliding);
-                if (params.amount0 > amount0In) {
+                if (params.amount0 > amount0In && status.key.currency0.isAddressZero()) {
                     status.key.currency0.transfer(msg.sender, params.amount0 - amount0In);
-                }
-                if (params.amount1 > amount1In) {
-                    status.key.currency1.transfer(msg.sender, params.amount1 - amount1In);
                 }
             }
             if (liquidity == 0) revert InsufficientLiquidityMinted();
         }
         liquidity = marginLiquidity.addLiquidity(params.to, uPoolId, params.level, liquidity);
-        poolManager.unlock(
-            abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, params.amount0, params.amount1))
-        );
+        poolManager.unlock(abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, amount0In, amount1In)));
         statusManager.update(status.key, false);
-        emit Mint(params.poolId, msg.sender, params.to, liquidity, params.amount0, params.amount1, params.level);
+        emit Mint(params.poolId, msg.sender, params.to, liquidity, amount0In, amount1In, params.level);
     }
 
     /// @dev Handle liquidity addition by taking tokens from the sender and claiming ERC6909 to the hook address
@@ -259,20 +257,20 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             amount1 = Math.mulDiv(params.liquidity, _reserve1, _totalSupply);
             // currency0 enable margin,can claim interest1
             if (params.level.zeroForMargin()) {
-                uint256 retainAmount0 = Math.mulDiv(retainSupply0, _reserve0, _totalSupply);
-                if (maxReserve0 > retainAmount0) {
-                    maxReserve0 -= retainAmount0;
-                } else {
-                    maxReserve0 = 0;
-                }
-            }
-            // currency1 enable margin,can claim interest0
-            if (params.level.oneForMargin()) {
                 uint256 retainAmount1 = Math.mulDiv(retainSupply1, _reserve1, _totalSupply);
                 if (maxReserve1 > retainAmount1) {
                     maxReserve1 -= retainAmount1;
                 } else {
                     maxReserve1 = 0;
+                }
+            }
+            // currency1 enable margin,can claim interest0
+            if (params.level.oneForMargin()) {
+                uint256 retainAmount0 = Math.mulDiv(retainSupply0, _reserve0, _totalSupply);
+                if (maxReserve0 > retainAmount0) {
+                    maxReserve0 -= retainAmount0;
+                } else {
+                    maxReserve0 = 0;
                 }
             }
             require(amount0 <= maxReserve0 && amount1 <= maxReserve1, "NOT_ENOUGH_RESERVE");
@@ -347,16 +345,25 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         marginAmount = lendingPoolManager.realIn(_positionManager, params.poolId, marginCurrency, params.marginAmount);
         if (params.leverage > 0) {
             uint256 marginReserves;
+            uint256 incrementMaxMirror;
             {
-                (uint256 marginReserve0, uint256 marginReserve1) =
-                    marginLiquidity.getFlowReserves(address(this), params.poolId, status);
+                (
+                    uint256 marginReserve0,
+                    uint256 marginReserve1,
+                    uint256 incrementMaxMirror0,
+                    uint256 incrementMaxMirror1
+                ) = marginLiquidity.getMarginReserves(address(this), params.poolId, status);
                 marginReserves = params.marginForOne ? marginReserve1 : marginReserve0;
+                incrementMaxMirror = params.marginForOne ? incrementMaxMirror0 : incrementMaxMirror1;
             }
-            uint256 marginTotal = params.marginAmount * params.leverage;
-            require(marginReserves >= marginTotal, "TOKEN_NOT_ENOUGH");
-            (borrowAmount,,) = marginFees.getAmountIn(address(this), status, params.marginForOne, marginTotal);
-            (, uint24 marginFee) = marginFees.getPoolFees(address(this), params.poolId);
-            (marginWithoutFee, marginFeeAmount) = marginFee.deduct(marginTotal);
+            {
+                uint256 marginTotal = params.marginAmount * params.leverage;
+                require(marginReserves >= marginTotal, "MARGIN_NOT_ENOUGH");
+                (borrowAmount,,) = marginFees.getAmountIn(address(this), status, params.marginForOne, marginTotal);
+                require(incrementMaxMirror >= borrowAmount, "MIRROR_TOO_MUCH");
+                (, uint24 marginFee) = marginFees.getPoolFees(address(this), params.poolId);
+                (marginWithoutFee, marginFeeAmount) = marginFee.deduct(marginTotal);
+            }
             // transfer marginTotal to lendingPoolManager
             poolManager.approve(address(lendingPoolManager), marginCurrency.toId(), marginWithoutFee);
             marginWithoutFee =
@@ -463,10 +470,10 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         uint256 balance = poolManager.balanceOf(address(this), id);
         if (balance > amount) {
             PoolStatus memory status = statusManager.getStatus(poolId);
-            (uint256 marginReserve0, uint256 marginReserve1) =
-                marginLiquidity.getFlowReserves(address(this), poolId, status);
-            uint256 marginReserves = status.key.currency0 == currency ? marginReserve0 : marginReserve1;
-            if (marginReserves >= amount) {
+            (,, uint256 incrementMaxMirror0, uint256 incrementMaxMirror1) =
+                marginLiquidity.getMarginReserves(address(this), poolId, status);
+            uint256 incrementMaxMirror = status.key.currency0 == currency ? incrementMaxMirror0 : incrementMaxMirror1;
+            if (incrementMaxMirror >= amount) {
                 statusManager.setBalances(status.key);
                 poolManager.transfer(msg.sender, id, amount);
                 mirrorTokenManager.transferFrom(msg.sender, address(this), currency.toTokenId(poolId), amount);

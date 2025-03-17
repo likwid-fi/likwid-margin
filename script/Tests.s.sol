@@ -26,6 +26,10 @@ interface IMarginChecker {
         returns (uint256 marginAmountIn, uint256 borrowAmount);
 }
 
+interface IPoolStatusManager {
+    function setMarginOracle(address _oracle) external;
+}
+
 contract TestsScript is Script {
     using PriceMath for uint224;
     // address marginLiquidity = 0xDD0AebD45cd5c339e366fB7DEF71143C78585a6f;
@@ -72,11 +76,13 @@ contract TestsScript is Script {
         // address marginOracle = PairPoolManager(hookAddress).statusManager().marginOracle();
         // (uint224 reserves,) = MarginOracle(marginOracle).observeNow(PairPoolManager(hookAddress), poolId);
         // console2.log("reserves", marginOracle, reserves.getReverse0(), reserves.getReverse1());
-        bytes32 poolId = 0x494ce156181fe01988446d1879ddcdd2e5f665f73e86fd6c7d6c3c6731c6441b;
-        (uint256 marginAmountIn, uint256 borrowAmount) = IMarginChecker(marginChecker).getBorrowMax(
-            0xd2f3f130690fcDB779a778C0fDB28FE13Ef34914, PoolId.wrap(poolId), true, 10000000000000000000
-        );
-        console.log(marginAmountIn, borrowAmount);
+        // bytes32 poolId = 0x494ce156181fe01988446d1879ddcdd2e5f665f73e86fd6c7d6c3c6731c6441b;
+        // (uint256 marginAmountIn, uint256 borrowAmount) = IMarginChecker(marginChecker).getBorrowMax(
+        //     0xd2f3f130690fcDB779a778C0fDB28FE13Ef34914, PoolId.wrap(poolId), true, 10000000000000000000
+        // );
+        // console.log(marginAmountIn, borrowAmount);
+        MarginOracle marginOracle = new MarginOracle();
+        IPoolStatusManager(0x91885403Db4cf2A8b82b46B36905Ba2C11043d1c).setMarginOracle(address(marginOracle));
         vm.stopBroadcast();
     }
 }

@@ -199,22 +199,27 @@ contract MarginChecker is IMarginChecker, Owned {
     {
         IPairPoolManager poolManager = IPairPoolManager(_poolManager);
         PoolStatus memory status = poolManager.getStatus(poolId);
-        (uint256 marginReserve0, uint256 marginReserve1) =
-            poolManager.marginLiquidity().getFlowReserves(address(poolManager), poolId, status);
+        (uint256 marginReserve0, uint256 marginReserve1, uint256 incrementMaxMirror0, uint256 incrementMaxMirror1) =
+            poolManager.marginLiquidity().getMarginReserves(address(poolManager), poolId, status);
+        uint256 borrowMaxAmount = marginForOne ? incrementMaxMirror0 : incrementMaxMirror1;
         if (leverage > 0) {
             uint256 marginMaxTotal = (marginForOne ? marginReserve1 : marginReserve0);
-            if (marginMaxTotal > 1000) {
-                (uint256 reserve0, uint256 reserve1) = poolManager.getReserves(poolId);
-                uint256 marginMaxReserve = (marginForOne ? reserve1 : reserve0);
-                uint24 part = leverageThousandths[leverage - 1];
-                marginMaxReserve = marginMaxReserve * part / 1000;
-                marginMaxTotal = Math.min(marginMaxTotal, marginMaxReserve);
-                marginMaxTotal -= 1000;
+            if (marginMaxTotal > 1000 && borrowMaxAmount > 1000) {
+                borrowMaxAmount -= 1000;
+                uint256 marginBorrowMax = poolManager.getAmountOut(poolId, marginForOne, borrowMaxAmount);
+                if (marginMaxTotal > marginBorrowMax) {
+                    marginMaxTotal = marginBorrowMax;
+                }
+                {
+                    uint256 marginMaxReserve = (marginForOne ? status.reserve1() : status.reserve0());
+                    uint256 part = leverageThousandths[leverage - 1];
+                    marginMaxReserve = Math.mulDiv(marginMaxReserve, part, 1000);
+                    marginMaxTotal = Math.min(marginMaxTotal, marginMaxReserve);
+                }
+                borrowAmount = poolManager.getAmountIn(poolId, marginForOne, marginMaxTotal);
             }
-            borrowAmount = poolManager.getAmountIn(poolId, marginForOne, marginMaxTotal);
             marginMax = marginMaxTotal / leverage;
         } else {
-            uint256 borrowMaxAmount = (marginForOne ? marginReserve0 : marginReserve1);
             if (borrowMaxAmount > 1000) {
                 borrowAmount = borrowMaxAmount - 1000;
             } else {
@@ -270,7 +275,7 @@ contract MarginChecker is IMarginChecker, Owned {
         if (marginOracle == address(0)) {
             reserves = 0;
         } else {
-            (reserves,,) = IMarginOracleReader(marginOracle).observeNow(IPairPoolManager(poolManager), poolId);
+            (reserves,) = IMarginOracleReader(marginOracle).observeNow(IPairPoolManager(poolManager), poolId);
         }
     }
 

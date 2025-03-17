@@ -47,43 +47,51 @@ contract MarginOracle {
             (_state.cardinality, _state.cardinalityNext) =
                 observations[hook][id].initialize(_blockTimestamp(), reserve0, reserve1);
         } else {
-            (_state.index, _state.cardinality) = observations[hook][id].write(
-                _state.index, _blockTimestamp(), reserve0, reserve1, _state.cardinality, _state.cardinalityNext
-            );
+            if (reserve0 == 0 || reserve1 == 0) {
+                delete states[hook][id];
+            } else {
+                (_state.index, _state.cardinality) = observations[hook][id].write(
+                    _state.index, _blockTimestamp(), reserve0, reserve1, _state.cardinality, _state.cardinalityNext
+                );
+            }
         }
     }
 
     function observeNow(IPairPoolManager poolManager, PoolId id)
         external
         view
-        returns (uint224 reserves, uint256 timeInterval, uint256 price1CumulativeLast)
+        returns (uint224 reserves, uint256 price1CumulativeLast)
     {
         address hook = address(poolManager.hooks());
         (uint256 reserve0, uint256 reserve1) = poolManager.getReserves(id);
-        return observations[hook][id].observeSingle(
-            _blockTimestamp(),
-            0,
-            uint112(reserve0),
-            uint112(reserve1),
-            states[hook][id].index,
-            states[hook][id].cardinality
-        );
+        if (reserve0 > 0 && reserve1 > 0) {
+            return observations[hook][id].observeSingle(
+                _blockTimestamp(),
+                0,
+                uint112(reserve0),
+                uint112(reserve1),
+                states[hook][id].index,
+                states[hook][id].cardinality
+            );
+        }
     }
 
     /// @notice Observe the given pool for the timestamps
     function observe(PoolKey calldata key, uint32[] calldata secondsAgos)
         external
         view
-        returns (uint224[] memory reserves, uint256[] memory timeInterval, uint256[] memory price1CumulativeLast)
+        returns (uint224[] memory reserves, uint256[] memory price1CumulativeLast)
     {
         PoolId id = key.toId();
         address sender = address(key.hooks);
         ObservationState memory state = states[sender][id];
         IPairPoolManager hook = IPairPoolManager(sender);
         (uint256 reserve0, uint256 reserve1) = hook.getReserves(id);
-        return observations[sender][id].observe(
-            _blockTimestamp(), secondsAgos, uint112(reserve0), uint112(reserve1), state.index, state.cardinality
-        );
+        if (reserve0 > 0 && reserve1 > 0) {
+            return observations[sender][id].observe(
+                _blockTimestamp(), secondsAgos, uint112(reserve0), uint112(reserve1), state.index, state.cardinality
+            );
+        }
     }
 
     /// @notice Increase the cardinality target for the given pool

@@ -230,7 +230,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
             PoolId poolId = key.toId();
             (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = marginFees.getBorrowRateCumulativeLast(status);
             (uint256 flowReserve0, uint256 flowReserve1) =
-                marginLiquidity.getFlowReserves(pairPoolManager, poolId, status);
+                marginLiquidity.getInterestReserves(pairPoolManager, poolId, status);
             uint256 interest0 = _updateInterest0(status, flowReserve0, rate0CumulativeLast, inUpdate);
             uint256 interest1 = _updateInterest1(status, flowReserve1, rate1CumulativeLast, inUpdate);
             status.blockTimestampLast = blockTS;

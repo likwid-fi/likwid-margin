@@ -23,7 +23,6 @@ library TruncatedOracle {
         // the block timestamp of the observation
         uint32 blockTimestamp;
         uint224 reserves;
-        uint256 totalTimeInterval;
         uint256 price1CumulativeLast;
     }
 
@@ -44,7 +43,6 @@ library TruncatedOracle {
             return Observation({
                 blockTimestamp: blockTimestamp,
                 reserves: reserves,
-                totalTimeInterval: last.totalTimeInterval + delta,
                 price1CumulativeLast: last.price1CumulativeLast + price1X112 * delta
             });
         }
@@ -55,7 +53,7 @@ library TruncatedOracle {
         returns (uint16 cardinality, uint16 cardinalityNext)
     {
         uint224 reserves = PriceMath.getReserves(reserve0, reserve1);
-        self[0] = Observation({blockTimestamp: time, reserves: reserves, totalTimeInterval: 0, price1CumulativeLast: 0});
+        self[0] = Observation({blockTimestamp: time, reserves: reserves, price1CumulativeLast: 0});
         return (1, 1);
     }
 
@@ -232,7 +230,6 @@ library TruncatedOracle {
     /// @param index The index of the observation that was most recently written to the observations array
     /// @param cardinality The number of populated elements in the oracle array
     /// @return reserves reserves
-    /// @return timeInterval timeInterval
     /// @return price1CumulativeLast price1CumulativeLast, as of `secondsAgo`
     function observeSingle(
         Observation[65535] storage self,
@@ -242,12 +239,12 @@ library TruncatedOracle {
         uint112 reserve1,
         uint16 index,
         uint16 cardinality
-    ) internal view returns (uint224 reserves, uint256 timeInterval, uint256 price1CumulativeLast) {
+    ) internal view returns (uint224 reserves, uint256 price1CumulativeLast) {
         unchecked {
             if (secondsAgo == 0) {
                 Observation memory last = self[index];
                 if (last.blockTimestamp != time) last = transform(last, time, reserve0, reserve1);
-                return (last.reserves, last.totalTimeInterval, last.price1CumulativeLast);
+                return (last.reserves, last.price1CumulativeLast);
             }
 
             uint32 target = time - secondsAgo;
@@ -257,10 +254,10 @@ library TruncatedOracle {
 
             if (target == beforeOrAt.blockTimestamp) {
                 // we're at the left boundary
-                return (beforeOrAt.reserves, beforeOrAt.totalTimeInterval, beforeOrAt.price1CumulativeLast);
+                return (beforeOrAt.reserves, beforeOrAt.price1CumulativeLast);
             } else if (target == atOrAfter.blockTimestamp) {
                 // we're at the right boundary
-                return (atOrAfter.reserves, atOrAfter.totalTimeInterval, atOrAfter.price1CumulativeLast);
+                return (atOrAfter.reserves, atOrAfter.price1CumulativeLast);
             } else {
                 // we're in the middle
                 uint32 observationTimeDelta = atOrAfter.blockTimestamp - beforeOrAt.blockTimestamp;
@@ -277,11 +274,7 @@ library TruncatedOracle {
                         / observationTimeDelta
                 ).decode();
                 uint224 reserve = PriceMath.getReserves(reserve0, reserve1);
-                return (
-                    reserve,
-                    beforeOrAt.totalTimeInterval + targetDelta,
-                    beforeOrAt.price1CumulativeLast + reserve.getPrice1X112() * targetDelta
-                );
+                return (reserve, beforeOrAt.price1CumulativeLast + reserve.getPrice1X112() * targetDelta);
             }
         }
     }
@@ -296,7 +289,6 @@ library TruncatedOracle {
     /// @param index The index of the observation that was most recently written to the observations array
     /// @param cardinality The number of populated elements in the oracle array
     /// @return reserves reserves, as of each `secondsAgo`
-    /// @return timeInterval timeInterval, as of each `secondsAgo`
     /// @return price1CumulativeLast price1CumulativeLast, as of each `secondsAgo`
     function observe(
         Observation[65535] storage self,
@@ -306,19 +298,14 @@ library TruncatedOracle {
         uint112 reserve1,
         uint16 index,
         uint16 cardinality
-    )
-        internal
-        view
-        returns (uint224[] memory reserves, uint256[] memory timeInterval, uint256[] memory price1CumulativeLast)
-    {
+    ) internal view returns (uint224[] memory reserves, uint256[] memory price1CumulativeLast) {
         unchecked {
             if (cardinality == 0) revert OracleCardinalityCannotBeZero();
 
             reserves = new uint224[](secondsAgos.length);
-            timeInterval = new uint256[](secondsAgos.length);
             price1CumulativeLast = new uint256[](secondsAgos.length);
             for (uint256 i = 0; i < secondsAgos.length; i++) {
-                (reserves[i], timeInterval[i], price1CumulativeLast[i]) =
+                (reserves[i], price1CumulativeLast[i]) =
                     observeSingle(self, time, secondsAgos[i], reserve0, reserve1, index, cardinality);
             }
         }

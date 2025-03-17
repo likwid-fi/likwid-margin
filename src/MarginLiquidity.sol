@@ -9,7 +9,7 @@ import {ERC6909Accrues} from "./base/ERC6909Accrues.sol";
 import {LiquidityLevel} from "./libraries/LiquidityLevel.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
-import {PoolStatus} from "./types/PoolStatus.sol";
+import {PoolStatus, PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IStatusBase} from "./interfaces/IStatusBase.sol";
 import {IPoolBase} from "./interfaces/IPoolBase.sol";
@@ -18,6 +18,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
     using LiquidityLevel for *;
     using UQ112x112 for *;
     using PerLibrary for *;
+    using PoolStatusLibrary for PoolStatus;
 
     mapping(address => bool) public poolManagers;
     mapping(uint256 => uint256) private liquidityBlockStore;
@@ -55,9 +56,9 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         totalSupply = balanceOf(pool, uPoolId);
         uint256 lPoolId = LiquidityLevel.NO_MARGIN.getLevelId(uPoolId);
         retainSupply0 = retainSupply1 = balanceOf(pool, lPoolId);
-        lPoolId = LiquidityLevel.ONE_MARGIN.getLevelId(uPoolId);
-        retainSupply0 += balanceOf(pool, lPoolId);
         lPoolId = LiquidityLevel.ZERO_MARGIN.getLevelId(uPoolId);
+        retainSupply0 += balanceOf(pool, lPoolId);
+        lPoolId = LiquidityLevel.ONE_MARGIN.getLevelId(uPoolId);
         retainSupply1 += balanceOf(pool, lPoolId);
     }
 
@@ -74,7 +75,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
             _mint(pairPoolManager, level2Id, level2Liquidity);
         }
         if (liquidity1 > 0) {
-            uint256 level3Id = LiquidityLevel.ONE_MARGIN.getLevelId(id);
+            uint256 level3Id = LiquidityLevel.ZERO_MARGIN.getLevelId(id);
             uint256 total3Liquidity = balanceOf(pairPoolManager, level3Id);
             uint256 level3Liquidity = Math.mulDiv(liquidity0, total3Liquidity, total3Liquidity + total4Liquidity);
             level4Liquidity = level4Liquidity + liquidity0 - level3Liquidity;
@@ -184,6 +185,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         uPoolId = _getPoolId(poolId);
     }
 
+    ///@inheritdoc IMarginLiquidity
     function getPoolSupplies(address pool, PoolId poolId)
         external
         view
@@ -201,30 +203,80 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         }
     }
 
-    function getFlowReserves(address pairPoolManager, PoolId poolId, PoolStatus memory status)
-        external
+    ///@inheritdoc IMarginLiquidity
+    function getInterestReserves(address pairPoolManager, PoolId poolId, PoolStatus memory status)
+        public
         view
         returns (uint256 reserve0, uint256 reserve1)
     {
         uint256 uPoolId = _getPoolId(poolId);
         (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) = _getPoolSupplies(pairPoolManager, uPoolId);
         if (totalSupply > 0) {
-            reserve0 = Math.mulDiv(totalSupply - retainSupply0, status.realReserve0, totalSupply);
-            reserve1 = Math.mulDiv(totalSupply - retainSupply1, status.realReserve1, totalSupply);
+            reserve0 = Math.mulDiv(totalSupply - retainSupply0, status.reserve0(), totalSupply);
+            reserve1 = Math.mulDiv(totalSupply - retainSupply1, status.reserve1(), totalSupply);
         }
     }
 
-    function getFlowReserves(address pairPoolManager, PoolId poolId)
+    function getInterestReserves(address pairPoolManager, PoolId poolId)
         external
         view
         returns (uint256 reserve0, uint256 reserve1)
     {
         PoolStatus memory status = IPoolBase(pairPoolManager).getStatus(poolId);
+        (reserve0, reserve1) = getInterestReserves(pairPoolManager, poolId, status);
+    }
+
+    function getMarginReserves(address pairPoolManager, PoolId poolId, PoolStatus memory status)
+        public
+        view
+        returns (
+            uint256 marginReserve0,
+            uint256 marginReserve1,
+            uint256 incrementMaxMirror0,
+            uint256 incrementMaxMirror1
+        )
+    {
         uint256 uPoolId = _getPoolId(poolId);
         (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) = _getPoolSupplies(pairPoolManager, uPoolId);
         if (totalSupply > 0) {
-            reserve0 = Math.mulDiv(totalSupply - retainSupply0, status.realReserve0, totalSupply);
-            reserve1 = Math.mulDiv(totalSupply - retainSupply1, status.realReserve1, totalSupply);
+            marginReserve0 = Math.mulDiv(totalSupply - retainSupply1, status.reserve0(), totalSupply);
+            marginReserve1 = Math.mulDiv(totalSupply - retainSupply0, status.reserve1(), totalSupply);
+            uint256 canMirrorReserve0 = Math.mulDiv(totalSupply - retainSupply0, status.reserve0(), totalSupply);
+            uint256 canMirrorReserve1 = Math.mulDiv(totalSupply - retainSupply1, status.reserve1(), totalSupply);
+            if (canMirrorReserve0 > status.mirrorReserve0) {
+                if (retainSupply0 > 0) {
+                    incrementMaxMirror0 =
+                        Math.mulDiv(canMirrorReserve0 - status.mirrorReserve0, totalSupply, retainSupply0);
+                } else {
+                    incrementMaxMirror0 = type(uint112).max;
+                }
+            }
+            if (canMirrorReserve1 > status.mirrorReserve1) {
+                if (retainSupply1 > 0) {
+                    incrementMaxMirror1 =
+                        Math.mulDiv(canMirrorReserve1 - status.mirrorReserve1, totalSupply, retainSupply1);
+                } else {
+                    incrementMaxMirror1 = type(uint112).max;
+                }
+            }
+
+            marginReserve0 = Math.min(marginReserve0, status.realReserve0);
+            marginReserve1 = Math.min(marginReserve1, status.realReserve1);
         }
+    }
+
+    function getMarginReserves(address pairPoolManager, PoolId poolId)
+        external
+        view
+        returns (
+            uint256 marginReserve0,
+            uint256 marginReserve1,
+            uint256 incrementMaxMirror0,
+            uint256 incrementMaxMirror1
+        )
+    {
+        PoolStatus memory status = IPoolBase(pairPoolManager).getStatus(poolId);
+        (marginReserve0, marginReserve1, incrementMaxMirror0, incrementMaxMirror1) =
+            getMarginReserves(pairPoolManager, poolId, status);
     }
 }

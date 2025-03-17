@@ -131,6 +131,15 @@ contract PairPoolManagerTest is DeployHelper {
         console.log("remove all liquidity:%s", liquidityHalf);
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         console.log("status.reserve0:%s,status.reserve1:%s", status.reserve0(), status.reserve1());
+        params = AddLiquidityParams({
+            poolId: poolId,
+            amount0: amount0,
+            amount1: amount1 * 2,
+            to: address(this),
+            level: LiquidityLevel.NO_MARGIN,
+            deadline: type(uint256).max
+        });
+        pairPoolManager.addLiquidity{value: amount0}(params);
     }
 
     function test_hook_liquidity_tokens() public {
@@ -224,8 +233,8 @@ contract PairPoolManagerTest is DeployHelper {
         assertEq(level3, liquidities[2]);
         assertEq(level4, liquidities[3]);
         assertEq(level1 + level2 + level3 + level4, totalSupply);
-        assertEq(level1 + level2, retainSupply0);
-        assertEq(level1 + level3, retainSupply1);
+        assertEq(level1 + level3, retainSupply0);
+        assertEq(level1 + level2, retainSupply1);
         {
             vm.startPrank(user);
             uint256 liquidity = 0.2 ether;

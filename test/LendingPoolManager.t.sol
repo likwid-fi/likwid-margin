@@ -133,6 +133,8 @@ contract LendingPoolManagerTest is DeployHelper {
         apr = lendingPoolManager.getLendingAPR(nativeKey.toId(), nativeKey.currency1, 0);
         PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
         assertGt(borrowRate, apr);
-        assertEq(borrowRate * status.totalMirrorReserve1() / status.totalRealReserve1(), apr);
+        assertEq(
+            borrowRate * status.totalMirrorReserve1() / (status.totalMirrorReserve1() + status.totalRealReserve1()), apr
+        );
     }
 }

@@ -164,13 +164,20 @@ contract MarginPositionManagerTest is DeployHelper {
             position.borrowAmount,
             marginBalance
         );
+        // vm.warp(3600);
         uint256 releaseAmount = 0.01 ether;
         tokenA.approve(address(pairPoolManager), releaseAmount);
-        int256 pnlAmount = marginChecker.estimatePNL(marginPositionManager, positionId, 30000);
-        marginPositionManager.close(positionId, 30000, pnlAmount, UINT256_MAX);
+        int256 pnlAmount = marginChecker.estimatePNL(marginPositionManager, positionId, 300000);
+        marginPositionManager.close(positionId, 300000, pnlAmount, UINT256_MAX);
+        marginBalance = lendingPoolManager.balanceOf(address(marginPositionManager), lendingId);
         MarginPosition memory newPosition = marginPositionManager.getPosition(positionId);
-        console.log("after close positionId:%s,position.borrowAmount:%s", positionId, newPosition.borrowAmount);
-        vm.warp(3600 * 10);
+        console.log(
+            "after close positionId:%s,position.borrowAmount:%s,marginBalance:%s",
+            positionId,
+            newPosition.borrowAmount,
+            marginBalance
+        );
+        vm.warp(3600 * 2);
         position = marginPositionManager.getPosition(positionId);
         marginBalance = lendingPoolManager.balanceOf(address(marginPositionManager), lendingId);
         console.log(
@@ -653,6 +660,7 @@ contract MarginPositionManagerTest is DeployHelper {
             position.rateCumulativeLast
         );
         (payValue, borrowAmount) = marginChecker.getMarginMax(address(pairPoolManager), nativeKey.toId(), false, 3);
+        console.log("maxPayValue:%s", payValue);
         params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,

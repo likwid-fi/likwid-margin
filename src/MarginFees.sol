@@ -12,7 +12,7 @@ import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {TimeLibrary} from "./libraries/TimeLibrary.sol";
-import {TruncatedOracle} from "./libraries/TruncatedOracle.sol";
+import {TruncatedOracle, PriceMath} from "./libraries/TruncatedOracle.sol";
 import {RateStatus} from "./types/RateStatus.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
@@ -20,9 +20,11 @@ import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 
+import {console} from "forge-std/console.sol";
+
 contract MarginFees is IMarginFees, Owned {
-    using UQ112x112 for uint112;
-    using UQ112x112 for uint224;
+    using UQ112x112 for *;
+    using PriceMath for uint224;
     using PoolIdLibrary for PoolKey;
     using TimeLibrary for uint32;
     using FeeLibrary for uint24;
@@ -31,8 +33,9 @@ contract MarginFees is IMarginFees, Owned {
 
     uint24 public marginFee = 3000; // 0.3%
     uint24 public protocolFee = 50000; // 5%
-    uint24 public dynamicFeeDurationSeconds = 120;
     uint24 public dynamicFeeUnit = 10;
+    uint24 public dynamicFeeMinDegree = 30000; // 3%
+
     address public feeTo;
 
     RateStatus public rateStatus;
@@ -61,23 +64,16 @@ contract MarginFees is IMarginFees, Owned {
         priceDiff = price > lastPrice ? price - lastPrice : lastPrice - price;
     }
 
-    function _getPriceDiff(uint256 timeMul, uint24 _fee, uint256 lastPrice1X112, PoolStatus memory status)
-        internal
-        view
-        returns (uint256 feeUp)
-    {
-        if (lastPrice1X112 > 0) {
-            uint256 lastPrice0X112 = Math.mulDiv(UQ112x112.Q112, UQ112x112.Q112, lastPrice1X112);
+    function _getPriceDegree(uint224 oracleReserves, PoolStatus memory status) internal pure returns (uint256 degree) {
+        if (oracleReserves > 0) {
+            uint256 lastPrice0X112 = oracleReserves.getPrice0X112();
+            uint256 lastPrice1X112 = oracleReserves.getPrice1X112();
             (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
-            uint224 price0X112 = UQ112x112.encode(uint112(_reserve1)).div(uint112(_reserve0));
-            uint224 price1X112 = UQ112x112.encode(uint112(_reserve0)).div(uint112(_reserve1));
-            uint256 fee0Up = Math.mulDiv(
-                differencePrice(price0X112, lastPrice0X112) * dynamicFeeUnit * _fee, timeMul, lastPrice0X112
-            ).divMillion();
-            uint256 fee1Up = Math.mulDiv(
-                differencePrice(price1X112, lastPrice1X112) * dynamicFeeUnit * _fee, timeMul, lastPrice1X112
-            ).divMillion();
-            feeUp = Math.max(fee0Up, fee1Up);
+            uint224 price0X112 = UQ112x112.encode(_reserve1.toUint112()).div(_reserve0.toUint112());
+            uint224 price1X112 = UQ112x112.encode(_reserve0.toUint112()).div(_reserve1.toUint112());
+            uint256 degree0 = differencePrice(price0X112, lastPrice0X112).mulMillionDiv(lastPrice0X112);
+            uint256 degree1 = differencePrice(price1X112, lastPrice1X112).mulMillionDiv(lastPrice1X112);
+            degree = Math.max(degree0, degree1);
         }
     }
 
@@ -85,17 +81,13 @@ contract MarginFees is IMarginFees, Owned {
     function dynamicFee(address _poolManager, PoolStatus memory status) public view returns (uint24 _fee) {
         uint256 timeElapsed = status.marginTimestampLast.getTimeElapsed();
         _fee = status.key.fee;
-        if (timeElapsed < dynamicFeeDurationSeconds) {
-            IMarginOracleReader oracleReader = IPairPoolManager(_poolManager).marginOracleReader();
-            if (address(oracleReader) != address(0)) {
-                (, uint256 timeInterval, uint256 price1CumulativeLast) =
-                    oracleReader.observeNow(IPairPoolManager(_poolManager), status.key.toId());
-                if (timeInterval > 0) {
-                    uint256 timeMul =
-                        uint256(dynamicFeeDurationSeconds - timeElapsed).mulMillionDiv(dynamicFeeDurationSeconds);
-                    uint256 lastPrice1X112 = price1CumulativeLast / timeInterval;
-                    uint256 feeUp = _getPriceDiff(timeMul, _fee, lastPrice1X112, status);
-                    uint256 dFee = feeUp + _fee;
+        IMarginOracleReader oracleReader = IPairPoolManager(_poolManager).marginOracleReader();
+        if (address(oracleReader) != address(0)) {
+            (uint224 oracleReserves,) = oracleReader.observeNow(IPairPoolManager(_poolManager), status.key.toId());
+            if (oracleReserves > 0) {
+                uint256 degree = _getPriceDegree(oracleReserves, status);
+                if (degree > dynamicFeeMinDegree) {
+                    uint256 dFee = degree.mulDivMillion(uint256(dynamicFeeUnit) * _fee) + _fee;
                     if (dFee >= PerLibrary.ONE_MILLION) {
                         _fee = uint24(PerLibrary.ONE_MILLION) - 1;
                     } else {
@@ -227,8 +219,8 @@ contract MarginFees is IMarginFees, Owned {
         rateStatus = _status;
     }
 
-    function setDynamicFeeDurationSeconds(uint24 _dynamicFeeDurationSeconds) external onlyOwner {
-        dynamicFeeDurationSeconds = _dynamicFeeDurationSeconds;
+    function setDynamicFeeMinDegree(uint24 _dynamicFeeMinDegree) external onlyOwner {
+        dynamicFeeMinDegree = _dynamicFeeMinDegree;
     }
 
     function setDynamicFeeUnit(uint24 _dynamicFeeUnit) external onlyOwner {

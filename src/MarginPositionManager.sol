@@ -342,6 +342,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             }
         }
         PoolId poolId = _position.poolId;
+        // call release
+        pairPoolManager.release(params);
         // update _position
         _position.borrowAmount = _position.borrowAmount - params.repayAmount.toUint112();
 
@@ -396,8 +398,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             pairPoolManager.getAmountIn(_position.poolId, !_position.marginForOne, params.repayAmount);
 
         params.rawBorrowAmount = Math.mulDiv(_position.rawBorrowAmount, params.repayAmount, _position.borrowAmount);
-        // call release
-        pairPoolManager.release(params);
 
         _close(positionId, closeMillionth, pnlMinAmount, _position, marginCurrency, params);
     }
