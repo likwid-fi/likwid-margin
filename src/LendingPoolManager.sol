@@ -14,6 +14,7 @@ import {CurrencyExtLibrary} from "./libraries/CurrencyExtLibrary.sol";
 import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 
 import {PoolStatus} from "./types/PoolStatus.sol";
+import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IERC6909Accrues} from "./interfaces/external/IERC6909Accrues.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
@@ -25,6 +26,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     using CurrencyPoolLibrary for Currency;
     using PerLibrary for *;
     using UQ112x112 for *;
+    using PoolStatusLibrary for PoolStatus;
 
     event UpdateInterestRatio(uint256 indexed id, uint256 incrementRatioX112Old, uint256 incrementRatioX112New);
 
@@ -157,7 +159,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         uint256 id = currency.toTokenId(poolId);
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         bool borrowForOne = currency == status.key.currency1;
-        uint256 mirrorReserve = borrowForOne ? status.mirrorReserve1 : status.mirrorReserve0;
+        uint256 mirrorReserve = borrowForOne ? status.totalMirrorReserve1() : status.totalMirrorReserve0();
         uint256 borrowRate = pairPoolManager.marginFees().getBorrowRate(status, !borrowForOne);
         (uint256 reserve0, uint256 reserve1) =
             pairPoolManager.marginLiquidity().getInterestReserves(address(pairPoolManager), poolId, status);
