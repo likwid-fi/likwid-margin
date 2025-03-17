@@ -165,7 +165,10 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
             pairPoolManager.marginLiquidity().getInterestReserves(address(pairPoolManager), poolId, status);
         uint256 flowReserve = borrowForOne ? reserve1 : reserve0;
         uint256 totalSupply = balanceOf(address(this), id);
-        apr = Math.mulDiv(borrowRate, mirrorReserve, flowReserve + inputAmount + totalSupply);
+        uint256 allInterestReserve = flowReserve + inputAmount + totalSupply;
+        if (allInterestReserve > 0) {
+            apr = Math.mulDiv(borrowRate, mirrorReserve, flowReserve + inputAmount + totalSupply);
+        }
     }
 
     // ******************** POOL CALL ********************
@@ -232,6 +235,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
             poolManager.unlock(abi.encodeCall(this.handleDeposit, (sender, recipient, poolId, currency, amount)));
         originalAmount = abi.decode(result, (uint256));
         if (msg.value > sendAmount) transferNative(msg.sender, msg.value - sendAmount);
+        pairPoolManager.statusManager().updateLendingPoolStatus(poolId);
     }
 
     function deposit(address recipient, PoolId poolId, Currency currency, uint256 amount)
@@ -256,6 +260,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
 
     function withdraw(address recipient, PoolId poolId, Currency currency, uint256 amount) external {
         poolManager.unlock(abi.encodeCall(this.handleWithdraw, (msg.sender, recipient, poolId, currency, amount)));
+        pairPoolManager.statusManager().updateLendingPoolStatus(poolId);
     }
 
     function handleWithdraw(address sender, address recipient, PoolId poolId, Currency currency, uint256 amount)

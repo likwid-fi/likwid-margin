@@ -344,37 +344,16 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         poolManager.approve(address(lendingPoolManager), marginCurrency.toId(), params.marginAmount);
         marginAmount = lendingPoolManager.realIn(_positionManager, params.poolId, marginCurrency, params.marginAmount);
         if (params.leverage > 0) {
-            uint256 marginReserves;
-            uint256 incrementMaxMirror;
-            {
-                (
-                    uint256 marginReserve0,
-                    uint256 marginReserve1,
-                    uint256 incrementMaxMirror0,
-                    uint256 incrementMaxMirror1
-                ) = marginLiquidity.getMarginReserves(address(this), params.poolId, status);
-                marginReserves = params.marginForOne ? marginReserve1 : marginReserve0;
-                incrementMaxMirror = params.marginForOne ? incrementMaxMirror0 : incrementMaxMirror1;
-            }
-            {
-                uint256 marginTotal = params.marginAmount * params.leverage;
-                require(marginReserves >= marginTotal, "MARGIN_NOT_ENOUGH");
-                (borrowAmount,,) = marginFees.getAmountIn(address(this), status, params.marginForOne, marginTotal);
-                require(incrementMaxMirror >= borrowAmount, "MIRROR_TOO_MUCH");
-                (, uint24 marginFee) = marginFees.getPoolFees(address(this), params.poolId);
-                (marginWithoutFee, marginFeeAmount) = marginFee.deduct(marginTotal);
-            }
+            (marginWithoutFee, marginFeeAmount, borrowAmount) = marginFees.getMarginBorrow(status, params);
             // transfer marginTotal to lendingPoolManager
             poolManager.approve(address(lendingPoolManager), marginCurrency.toId(), marginWithoutFee);
             marginWithoutFee =
                 lendingPoolManager.realIn(_positionManager, params.poolId, marginCurrency, marginWithoutFee);
         } else {
             {
-                uint256 actualAmount = params.marginAmount.mulMillionDiv(paramsVo.minMarginLevel);
-                (uint256 reserve0, uint256 reserve1) = status.getReserves();
-                (uint256 reserveBorrow, uint256 reserveMargin) =
-                    params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
-                uint256 borrowMaxAmount = Math.mulDiv(actualAmount, reserveBorrow, reserveMargin);
+                uint256 borrowMaxAmount = marginFees.getBorrowMaxAmount(
+                    status, params.marginAmount, params.marginForOne, paramsVo.minMarginLevel
+                );
                 if (params.borrowAmount > 0) {
                     borrowAmount = Math.min(borrowMaxAmount, params.borrowAmount);
                 } else {

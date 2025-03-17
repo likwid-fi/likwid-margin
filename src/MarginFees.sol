@@ -16,6 +16,7 @@ import {TruncatedOracle, PriceMath} from "./libraries/TruncatedOracle.sol";
 import {RateStatus} from "./types/RateStatus.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
+import {MarginParams} from "./types/MarginParams.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
@@ -124,7 +125,7 @@ contract MarginFees is IMarginFees, Owned {
 
     // given an output amount of an asset and pair reserve, returns a required input amount of the other asset
     function getAmountIn(address _poolManager, PoolStatus memory status, bool zeroForOne, uint256 amountOut)
-        external
+        public
         view
         returns (uint256 amountIn, uint24 fee, uint256 feeAmount)
     {
@@ -143,6 +144,47 @@ contract MarginFees is IMarginFees, Owned {
     function _getReserves(PoolStatus memory status) internal pure returns (uint256 _reserve0, uint256 _reserve1) {
         _reserve0 = status.realReserve0 + status.mirrorReserve0;
         _reserve1 = status.realReserve1 + status.mirrorReserve1;
+    }
+
+    function getMarginBorrow(PoolStatus memory status, MarginParams memory params)
+        external
+        view
+        returns (uint256 marginWithoutFee, uint256 marginFeeAmount, uint256 borrowAmount)
+    {
+        uint256 marginReserves;
+        uint256 incrementMaxMirror;
+        {
+            (uint256 marginReserve0, uint256 marginReserve1, uint256 incrementMaxMirror0, uint256 incrementMaxMirror1) =
+                IPairPoolManager(msg.sender).marginLiquidity().getMarginReserves(msg.sender, params.poolId, status);
+            marginReserves = params.marginForOne ? marginReserve1 : marginReserve0;
+            incrementMaxMirror = params.marginForOne ? incrementMaxMirror0 : incrementMaxMirror1;
+        }
+        {
+            uint256 marginTotal = params.marginAmount * params.leverage;
+            require(marginReserves >= marginTotal, "MARGIN_NOT_ENOUGH");
+            (borrowAmount,,) = getAmountIn(msg.sender, status, params.marginForOne, marginTotal);
+            require(incrementMaxMirror >= borrowAmount, "MIRROR_TOO_MUCH");
+            uint24 _marginFeeRate = status.marginFee == 0 ? marginFee : status.marginFee;
+            (marginWithoutFee, marginFeeAmount) = _marginFeeRate.deduct(marginTotal);
+        }
+    }
+
+    function getBorrowMaxAmount(
+        PoolStatus memory status,
+        uint256 marginAmount,
+        bool marginForOne,
+        uint256 minMarginLevel
+    ) external view returns (uint256 borrowMaxAmount) {
+        uint256 actualAmount = marginAmount.mulMillionDiv(minMarginLevel);
+        (uint256 reserve0, uint256 reserve1) = status.getReserves();
+        (uint256 reserveBorrow, uint256 reserveMargin) = marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+        borrowMaxAmount = Math.mulDiv(actualAmount, reserveBorrow, reserveMargin);
+        {
+            (uint256 interestReserve0, uint256 interestReserve1) = IPairPoolManager(msg.sender).marginLiquidity()
+                .getInterestReserves(msg.sender, status.key.toId(), status);
+            uint256 borrowReserves = marginForOne ? interestReserve0 : interestReserve1;
+            require(borrowReserves >= borrowMaxAmount, "MIRROR_TOO_MUCH");
+        }
     }
 
     /// @inheritdoc IMarginFees

@@ -33,7 +33,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     using PoolStatusLibrary for *;
 
     error UpdateBalanceGuardErrorCall();
-    error NotPairPoolManager();
+    error NotPoolManager();
     error PairAlreadyExists();
     error PairNotExists();
 
@@ -63,12 +63,6 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     bytes32 constant UPDATE_BALANCE_GUARD_SLOT = 0x885c9ad615c28a45189565668235695fb42940589d40d91c5c875c16cdc1bd4c;
     bytes32 constant BALANCE_0_SLOT = 0x608a02038d3023ed7e79ffc2a87ce7ad8c0bc0c5b839ddbe438db934c7b5e0e2;
     bytes32 constant BALANCE_1_SLOT = 0xba598ef587ec4c4cf493fe15321596d40159e5c3c0cbf449810c8c6894b2e5e1;
-    bytes32 constant MIRROR_BALANCE_0_SLOT = 0x63450183817719ccac1ebea450ccc19412314611d078d8a8cb3ac9a1ef4de386;
-    bytes32 constant MIRROR_BALANCE_1_SLOT = 0xbdb25f21ec501c2e41736c4e3dd44c1c3781af532b6899c36b3f72d4e003b0ab;
-    bytes32 constant LENDING_BALANCE_0_SLOT = 0xa186fed6f032437b8a48cdc0974abb68692f2e91b72fc868edc12eb4858e3bb1;
-    bytes32 constant LENDING_BALANCE_1_SLOT = 0x73c0bdc07d4c1d10eb4a663f9c8e3bcc3df61d0f218e56d20ecb859d66dcfdf4;
-    bytes32 constant LENDING_MIRROR_BALANCE_0_SLOT = 0x4f1feacba32475151e92cfda35651960c8fc483e4629e3379ec7cc99f6d6f5f8;
-    bytes32 constant LENDING_MIRROR_BALANCE_1_SLOT = 0xd8208f88c7357fd3d32bb5f64c2ff7bb8aacb281f65c6cf8506ca21370c89aae;
 
     constructor(
         address initialOwner,
@@ -87,8 +81,13 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         marginFees = _marginFees;
     }
 
-    modifier onlyPairPoolManager() {
-        if (msg.sender != pairPoolManager || msg.sender == address(this)) revert NotPairPoolManager();
+    modifier onlyPoolManager() {
+        if (msg.sender != pairPoolManager) revert NotPoolManager();
+        _;
+    }
+
+    modifier onlyLendingManager() {
+        if (msg.sender != address(lendingPoolManager)) revert NotPoolManager();
         _;
     }
 
@@ -143,22 +142,38 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     function _getBalances() internal view returns (BalanceStatus memory) {
         uint256 balance0 = BALANCE_0_SLOT.asUint256().tload();
         uint256 balance1 = BALANCE_1_SLOT.asUint256().tload();
-        uint256 mirrorBalance0 = MIRROR_BALANCE_0_SLOT.asUint256().tload();
-        uint256 mirrorBalance1 = MIRROR_BALANCE_1_SLOT.asUint256().tload();
-        uint256 lendingBalance0 = LENDING_BALANCE_0_SLOT.asUint256().tload();
-        uint256 lendingBalance1 = LENDING_BALANCE_1_SLOT.asUint256().tload();
-        uint256 lendingMirrorBalance0 = LENDING_MIRROR_BALANCE_0_SLOT.asUint256().tload();
-        uint256 lendingMirrorBalance1 = LENDING_MIRROR_BALANCE_1_SLOT.asUint256().tload();
-        return BalanceStatus(
-            balance0,
-            balance1,
-            mirrorBalance0,
-            mirrorBalance1,
-            lendingBalance0,
-            lendingBalance1,
-            lendingMirrorBalance0,
-            lendingMirrorBalance1
-        );
+
+        return BalanceStatus(balance0, balance1, 0, 0, 0, 0, 0, 0);
+    }
+
+    function _getBalances(PoolKey memory key) internal view returns (BalanceStatus memory balanceStatus) {
+        uint256 protocolFees0 = protocolFeesAccrued[key.currency0];
+        uint256 protocolFees1 = protocolFeesAccrued[key.currency1];
+        balanceStatus.balance0 = poolManager.balanceOf(pairPoolManager, key.currency0.toId());
+        if (balanceStatus.balance0 > protocolFees0) {
+            balanceStatus.balance0 -= protocolFees0;
+        } else {
+            balanceStatus.balance0 = 0;
+        }
+        balanceStatus.balance1 = poolManager.balanceOf(pairPoolManager, key.currency1.toId());
+        if (balanceStatus.balance1 > protocolFees1) {
+            balanceStatus.balance1 -= protocolFees1;
+        } else {
+            balanceStatus.balance1 = 0;
+        }
+    }
+
+    function _getAllBalances(PoolKey memory key) internal view returns (BalanceStatus memory balanceStatus) {
+        balanceStatus = _getBalances(key);
+        uint256 id0 = key.currency0.toTokenId(key);
+        uint256 id1 = key.currency1.toTokenId(key);
+        balanceStatus.mirrorBalance0 = mirrorTokenManager.balanceOf(pairPoolManager, id0);
+        balanceStatus.mirrorBalance1 = mirrorTokenManager.balanceOf(pairPoolManager, id1);
+
+        balanceStatus.lendingBalance0 = lendingPoolManager.balanceOf(address(lendingPoolManager), id0);
+        balanceStatus.lendingBalance1 = lendingPoolManager.balanceOf(address(lendingPoolManager), id1);
+        balanceStatus.lendingMirrorBalance0 = mirrorTokenManager.balanceOf(address(lendingPoolManager), id0);
+        balanceStatus.lendingMirrorBalance1 = mirrorTokenManager.balanceOf(address(lendingPoolManager), id1);
     }
 
     function _updateInterest0(
@@ -262,7 +277,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
 
     // ******************** PAIR_POOL_MANAGER CALL ********************
 
-    function initialize(PoolKey calldata key) external onlyPairPoolManager {
+    function initialize(PoolKey calldata key) external onlyPoolManager {
         PoolId id = key.toId();
         if (statusStore[id].key.currency1 > CurrencyLibrary.ADDRESS_ZERO) revert PairAlreadyExists();
         PoolStatus memory status;
@@ -273,55 +288,14 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         statusStore[id] = status;
     }
 
-    function getBalances(PoolKey memory key)
-        public
-        view
-        onlyPairPoolManager
-        returns (BalanceStatus memory balanceStatus)
-    {
-        uint256 protocolFees0 = protocolFeesAccrued[key.currency0];
-        uint256 protocolFees1 = protocolFeesAccrued[key.currency1];
-        balanceStatus.balance0 = poolManager.balanceOf(pairPoolManager, key.currency0.toId());
-        if (balanceStatus.balance0 > protocolFees0) {
-            balanceStatus.balance0 -= protocolFees0;
-        } else {
-            balanceStatus.balance0 = 0;
-        }
-        balanceStatus.balance1 = poolManager.balanceOf(pairPoolManager, key.currency1.toId());
-        if (balanceStatus.balance1 > protocolFees1) {
-            balanceStatus.balance1 -= protocolFees1;
-        } else {
-            balanceStatus.balance1 = 0;
-        }
-        uint256 id0 = key.currency0.toTokenId(key);
-        uint256 id1 = key.currency1.toTokenId(key);
-        balanceStatus.mirrorBalance0 = mirrorTokenManager.balanceOf(pairPoolManager, id0);
-        balanceStatus.mirrorBalance1 = mirrorTokenManager.balanceOf(pairPoolManager, id1);
-
-        balanceStatus.lendingBalance0 = lendingPoolManager.balanceOf(address(lendingPoolManager), id0);
-        balanceStatus.lendingBalance1 = lendingPoolManager.balanceOf(address(lendingPoolManager), id1);
-        balanceStatus.lendingMirrorBalance0 = mirrorTokenManager.balanceOf(address(lendingPoolManager), id0);
-        balanceStatus.lendingMirrorBalance1 = mirrorTokenManager.balanceOf(address(lendingPoolManager), id1);
-    }
-
-    function setBalances(PoolKey memory key)
-        external
-        onlyPairPoolManager
-        returns (BalanceStatus memory balanceStatus)
-    {
+    function setBalances(PoolKey memory key) external onlyPoolManager returns (BalanceStatus memory balanceStatus) {
         _callSet();
-        balanceStatus = getBalances(key);
+        balanceStatus = _getBalances(key);
         BALANCE_0_SLOT.asUint256().tstore(balanceStatus.balance0);
         BALANCE_1_SLOT.asUint256().tstore(balanceStatus.balance1);
-        MIRROR_BALANCE_0_SLOT.asUint256().tstore(balanceStatus.mirrorBalance0);
-        MIRROR_BALANCE_1_SLOT.asUint256().tstore(balanceStatus.mirrorBalance1);
-        LENDING_BALANCE_0_SLOT.asUint256().tstore(balanceStatus.lendingBalance0);
-        LENDING_BALANCE_1_SLOT.asUint256().tstore(balanceStatus.lendingBalance1);
-        LENDING_MIRROR_BALANCE_0_SLOT.asUint256().tstore(balanceStatus.lendingMirrorBalance0);
-        LENDING_MIRROR_BALANCE_1_SLOT.asUint256().tstore(balanceStatus.lendingMirrorBalance1);
     }
 
-    function updateInterests(PoolKey memory key) external onlyPairPoolManager {
+    function updateInterests(PoolKey memory key) external onlyPoolManager {
         PoolId pooId = key.toId();
         PoolStatus storage status = statusStore[pooId];
         _updateInterests(status, false);
@@ -329,11 +303,11 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
 
     function update(PoolKey memory key, bool fromMargin)
         public
-        onlyPairPoolManager
+        onlyPoolManager
         returns (BalanceStatus memory afterStatus)
     {
-        PoolId pooId = key.toId();
-        PoolStatus storage status = statusStore[pooId];
+        PoolId poolId = key.toId();
+        PoolStatus storage status = statusStore[poolId];
         // save margin price before changed
         if (fromMargin) {
             uint32 blockTS = uint32(block.timestamp % 2 ** 32);
@@ -344,19 +318,16 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
 
         BalanceStatus memory beforeStatus = _getBalances();
         _updateInterests(status, true);
-        afterStatus = getBalances(key);
+        afterStatus = _getAllBalances(key);
+
         status.realReserve0 = status.realReserve0.add(afterStatus.balance0).sub(beforeStatus.balance0);
         status.realReserve1 = status.realReserve1.add(afterStatus.balance1).sub(beforeStatus.balance1);
-        status.mirrorReserve0 = status.mirrorReserve0.add(afterStatus.mirrorBalance0).sub(beforeStatus.mirrorBalance0);
-        status.mirrorReserve1 = status.mirrorReserve1.add(afterStatus.mirrorBalance1).sub(beforeStatus.mirrorBalance1);
-        status.lendingRealReserve0 =
-            status.lendingRealReserve0.add(afterStatus.lendingBalance0).sub(beforeStatus.lendingBalance0);
-        status.lendingRealReserve1 =
-            status.lendingRealReserve1.add(afterStatus.lendingBalance1).sub(beforeStatus.lendingBalance1);
-        status.lendingMirrorReserve0 =
-            status.lendingMirrorReserve0.add(afterStatus.lendingMirrorBalance0).sub(beforeStatus.lendingMirrorBalance0);
-        status.lendingMirrorReserve1 =
-            status.lendingMirrorReserve1.add(afterStatus.lendingMirrorBalance1).sub(beforeStatus.lendingMirrorBalance1);
+        status.mirrorReserve0 = afterStatus.mirrorBalance0.toUint112();
+        status.mirrorReserve1 = afterStatus.mirrorBalance1.toUint112();
+        status.lendingRealReserve0 = afterStatus.lendingBalance0.toUint112();
+        status.lendingRealReserve1 = afterStatus.lendingBalance1.toUint112();
+        status.lendingMirrorReserve0 = afterStatus.lendingMirrorBalance0.toUint112();
+        status.lendingMirrorReserve1 = afterStatus.lendingMirrorBalance1.toUint112();
 
         uint112 _reserve0 = status.reserve0();
         uint112 _reserve1 = status.reserve1();
@@ -365,7 +336,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         }
 
         emit Sync(
-            pooId,
+            poolId,
             status.realReserve0,
             status.realReserve1,
             status.mirrorReserve0,
@@ -378,13 +349,36 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         _callUpdate();
     }
 
-    function update(PoolKey memory key) external onlyPairPoolManager returns (BalanceStatus memory afterStatus) {
+    function update(PoolKey memory key) external onlyPoolManager returns (BalanceStatus memory afterStatus) {
         afterStatus = update(key, false);
+    }
+
+    function updateLendingPoolStatus(PoolId poolId) external onlyLendingManager {
+        PoolStatus storage status = statusStore[poolId];
+        _updateInterests(status, true);
+        BalanceStatus memory afterStatus = _getAllBalances(status.key);
+        status.mirrorReserve0 = afterStatus.mirrorBalance0.toUint112();
+        status.mirrorReserve1 = afterStatus.mirrorBalance1.toUint112();
+        status.lendingRealReserve0 = afterStatus.lendingBalance0.toUint112();
+        status.lendingRealReserve1 = afterStatus.lendingBalance1.toUint112();
+        status.lendingMirrorReserve0 = afterStatus.lendingMirrorBalance0.toUint112();
+        status.lendingMirrorReserve1 = afterStatus.lendingMirrorBalance1.toUint112();
+        emit Sync(
+            poolId,
+            status.realReserve0,
+            status.realReserve1,
+            status.mirrorReserve0,
+            status.mirrorReserve1,
+            status.lendingRealReserve0,
+            status.lendingRealReserve1,
+            status.lendingMirrorReserve0,
+            status.lendingMirrorReserve1
+        );
     }
 
     function updateProtocolFees(Currency currency, uint256 amount)
         external
-        onlyPairPoolManager
+        onlyPoolManager
         returns (uint256 restAmount)
     {
         unchecked {
@@ -396,7 +390,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
 
     function collectProtocolFees(Currency currency, uint256 amount)
         external
-        onlyPairPoolManager
+        onlyPoolManager
         returns (uint256 amountCollected)
     {
         amountCollected = (amount == 0) ? protocolFeesAccrued[currency] : amount;
