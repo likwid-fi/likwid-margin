@@ -77,30 +77,28 @@ contract MarginOracle {
     }
 
     /// @notice Observe the given pool for the timestamps
-    function observe(PoolKey calldata key, uint32[] calldata secondsAgos)
+    function observe(IPairPoolManager poolManager, PoolId id, uint32[] calldata secondsAgos)
         external
         view
         returns (uint224[] memory reserves, uint256[] memory price1CumulativeLast)
     {
-        PoolId id = key.toId();
-        address sender = address(key.hooks);
-        ObservationState memory state = states[sender][id];
-        IPairPoolManager hook = IPairPoolManager(sender);
-        (uint256 reserve0, uint256 reserve1) = hook.getReserves(id);
+        address hook = address(poolManager.hooks());
+        ObservationState memory state = states[hook][id];
+        (uint256 reserve0, uint256 reserve1) = poolManager.getReserves(id);
         if (reserve0 > 0 && reserve1 > 0) {
-            return observations[sender][id].observe(
+            TruncatedOracle.Observation[65535] storage ob = observations[hook][id];
+            (reserves, price1CumulativeLast) = ob.observe(
                 _blockTimestamp(), secondsAgos, uint112(reserve0), uint112(reserve1), state.index, state.cardinality
             );
         }
     }
 
     /// @notice Increase the cardinality target for the given pool
-    function increaseCardinalityNext(PoolKey calldata key, uint16 cardinalityNext)
+    function increaseCardinalityNext(IPairPoolManager poolManager, PoolId id, uint16 cardinalityNext)
         external
         returns (uint16 cardinalityNextOld, uint16 cardinalityNextNew)
     {
-        PoolId id = key.toId();
-        address hook = address(key.hooks);
+        address hook = address(poolManager.hooks());
         ObservationState storage state = states[hook][id];
 
         cardinalityNextOld = state.cardinalityNext;

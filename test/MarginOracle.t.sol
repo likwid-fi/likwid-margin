@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 // Local
 import {PairPoolManager} from "../src/PairPoolManager.sol";
+import {CurrencyPoolLibrary} from "../src/libraries/CurrencyPoolLibrary.sol";
+import {TruncatedOracle} from "../src/libraries/TruncatedOracle.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
@@ -27,6 +29,20 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol";
 
 import {HookMiner} from "./utils/HookMiner.sol";
-import {EIP20NonStandardThrowHarness} from "./mocks/EIP20NonStandardThrowHarness.sol";
+import {DeployHelper} from "./utils/DeployHelper.sol";
 
-contract MarginOracleTest is Test {}
+contract MarginOracleTest is DeployHelper {
+    using CurrencyPoolLibrary for *;
+
+    function setUp() public {
+        deployHookAndRouter();
+        initPoolLiquidity();
+    }
+
+    function testObserve() public {
+        uint32[] memory secondsAgos = new uint32[](1);
+        secondsAgos[0] = 1000;
+        vm.expectPartialRevert(TruncatedOracle.TargetPredatesOldestObservation.selector);
+        marginOracle.observe(pairPoolManager, nativeKey.toId(), secondsAgos);
+    }
+}
