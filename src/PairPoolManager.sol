@@ -30,14 +30,12 @@ import {BalanceStatus} from "./types/BalanceStatus.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams.sol";
 
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
-import {IPoolStatusManager} from "./interfaces/IPoolStatusManager.sol";
+import {IPoolStatusManager, InterestStatus} from "./interfaces/IPoolStatusManager.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
-
-import {console} from "forge-std/console.sol";
 
 contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     using UQ112x112 for *;
@@ -79,10 +77,10 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     event Release(
         PoolId indexed poolId,
         Currency indexed borrowCurrency,
-        address indexed sender,
         uint256 debtAmount,
         uint256 repayAmount,
-        uint256 burnAmount
+        uint256 burnAmount,
+        uint256 interest
     );
 
     IMirrorTokenManager public immutable mirrorTokenManager;
@@ -425,16 +423,9 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
                     marginFees.getAmountOut(address(this), status, params.marginForOne, params.releaseAmount);
             }
             if (repayAmount < params.debtAmount) {
-                uint256 funds = lendingPoolManager.getAvailableReserveFunds(params.poolId, borrowCurrency);
-                if (funds > 0) {
-                    funds = Math.min(funds, params.debtAmount - repayAmount);
-                    lendingPoolManager.decreaseReserveFunds(params.poolId, borrowCurrency, funds);
-                    repayAmount += funds;
-                }
-            } else if (repayAmount > params.debtAmount) {
-                poolManager.approve(address(lendingPoolManager), borrowCurrency.toId(), repayAmount - params.debtAmount);
-                lendingPoolManager.increaseReserveFunds(params.poolId, borrowCurrency, repayAmount - params.debtAmount);
+                repayAmount = params.debtAmount;
             }
+
             // release margin
             lendingPoolManager.realOut(params.payer, params.poolId, marginCurrency, params.releaseAmount);
         } else if (repayAmount > 0) {
@@ -442,20 +433,36 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             borrowCurrency.settle(poolManager, params.payer, repayAmount, false);
             borrowCurrency.take(poolManager, address(this), repayAmount, true);
         }
-        if (repayAmount > params.rawBorrowAmount) {
-            uint256 interest = repayAmount - params.rawBorrowAmount;
-            console.log("release interest:%s", interest);
-        }
+
         // burn mirror token
         (uint256 pairAmount, uint256 lendingAmount) =
             mirrorTokenManager.burn(address(lendingPoolManager), borrowCurrency.toTokenId(params.poolId), repayAmount);
-        if (repayAmount > pairAmount) {
-            poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), repayAmount - pairAmount);
+        uint256 interest;
+        uint256 burnAmount = pairAmount + lendingAmount;
+        if (repayAmount > params.rawBorrowAmount) {
+            interest = repayAmount - params.rawBorrowAmount;
+            InterestStatus memory interestStatus = statusManager.getInterestStore(params.poolId);
+            if (status.key.currency0 == borrowCurrency) {
+                lendingAmount += Math.mulDiv(
+                    interest,
+                    interestStatus.lendingCumulativeInterest0,
+                    interestStatus.pairCumulativeInterest0 + interestStatus.lendingCumulativeInterest0,
+                    Math.Rounding.Ceil
+                );
+            } else {
+                lendingAmount += Math.mulDiv(
+                    interest,
+                    interestStatus.lendingCumulativeInterest1,
+                    interestStatus.pairCumulativeInterest1 + interestStatus.lendingCumulativeInterest1,
+                    Math.Rounding.Ceil
+                );
+            }
+        }
+        if (lendingAmount > 0) {
+            poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), lendingAmount);
         }
         statusManager.update(params.poolId, true);
-        emit Release(
-            params.poolId, borrowCurrency, params.payer, params.debtAmount, repayAmount, pairAmount + lendingAmount
-        );
+        emit Release(params.poolId, borrowCurrency, params.debtAmount, repayAmount, burnAmount, interest);
         return params.repayAmount;
     }
 

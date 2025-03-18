@@ -175,14 +175,17 @@ contract MarginFees is IMarginFees, Owned {
         bool marginForOne,
         uint256 minMarginLevel
     ) external view returns (uint256 borrowMaxAmount) {
-        uint256 actualAmount = marginAmount.mulMillionDiv(minMarginLevel);
-        (uint256 reserve0, uint256 reserve1) = status.getReserves();
-        (uint256 reserveBorrow, uint256 reserveMargin) = marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
-        borrowMaxAmount = Math.mulDiv(actualAmount, reserveBorrow, reserveMargin);
+        uint256 lendingBorrow = marginForOne ? status.lendingRealReserve0 : status.lendingRealReserve1;
+        {
+            uint256 actualAmount = marginAmount.mulMillionDiv(minMarginLevel);
+            (uint256 reserve0, uint256 reserve1) = status.getReserves();
+            (uint256 reserveBorrow, uint256 reserveMargin) = marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+            borrowMaxAmount = Math.mulDiv(actualAmount, reserveBorrow, reserveMargin);
+        }
         {
             (uint256 interestReserve0, uint256 interestReserve1) = IPairPoolManager(msg.sender).marginLiquidity()
                 .getInterestReserves(msg.sender, status.key.toId(), status);
-            uint256 borrowReserves = marginForOne ? interestReserve0 : interestReserve1;
+            uint256 borrowReserves = (marginForOne ? interestReserve0 : interestReserve1) + lendingBorrow;
             require(borrowReserves >= borrowMaxAmount, "MIRROR_TOO_MUCH");
         }
     }

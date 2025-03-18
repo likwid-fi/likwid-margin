@@ -53,7 +53,6 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     IMirrorTokenManager public immutable mirrorTokenManager;
     IPairPoolManager public pairPoolManager;
     mapping(uint256 => uint256) public incrementRatioX112Of;
-    mapping(uint256 => uint256) public reserveFundOf;
 
     constructor(address initialOwner, IPoolManager _manager, IMirrorTokenManager _mirrorTokenManager)
         BasePoolManager(initialOwner, _manager)
@@ -172,15 +171,6 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         }
     }
 
-    function getAvailableReserveFunds(PoolId poolId, Currency currency) external view returns (uint256 availAmount) {
-        uint256 tokenId = currency.toTokenId(poolId);
-        uint256 reserveFund = reserveFundOf[tokenId];
-        uint256 mirrorBalance = mirrorTokenManager.balanceOf(address(this), tokenId);
-        if (reserveFund > mirrorBalance) {
-            availAmount = reserveFund - mirrorBalance;
-        }
-    }
-
     // ******************** POOL CALL ********************
 
     function updateInterests(uint256 id, uint256 interest) external onlyStatusManager {
@@ -231,18 +221,6 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         poolManager.transfer(msg.sender, currency.toId(), amount);
         uint256 originalAmount = _burnReturn(sender, tokenId, amount);
         emit Withdraw(poolId, currency, msg.sender, sender, amount, originalAmount, incrementRatioX112Of[tokenId]);
-    }
-
-    function increaseReserveFunds(PoolId poolId, Currency currency, uint256 amount) external onlyPairManager {
-        uint256 tokenId = currency.toTokenId(poolId);
-        poolManager.transferFrom(msg.sender, address(this), currency.toId(), amount);
-        reserveFundOf[tokenId] += amount;
-    }
-
-    function decreaseReserveFunds(PoolId poolId, Currency currency, uint256 amount) external onlyPairManager {
-        uint256 tokenId = currency.toTokenId(poolId);
-        poolManager.transfer(msg.sender, tokenId, amount);
-        reserveFundOf[tokenId] -= amount;
     }
 
     // ******************** USER CALL ********************
@@ -303,6 +281,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
 
     function balanceMirror(PoolId poolId, Currency currency, uint256 amount) external payable {
         poolManager.unlock(abi.encodeCall(this.handleBalanceMirror, (msg.sender, poolId, currency, amount)));
+        pairPoolManager.statusManager().updateLendingPoolStatus(poolId);
     }
 
     function handleBalanceMirror(address sender, PoolId poolId, Currency currency, uint256 amount) external selfOnly {

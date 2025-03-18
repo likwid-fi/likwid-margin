@@ -8,8 +8,6 @@ import {IERC6909Accrues} from "../interfaces/external/IERC6909Accrues.sol";
 
 interface ILendingPoolManager is IERC6909Accrues {
     // ******************** EXTERNAL CALL ********************
-    function getAvailableReserveFunds(PoolId poolId, Currency currency) external view returns (uint256 availAmount);
-
     function computeRealAmount(PoolId poolId, Currency currency, uint256 originalAmount)
         external
         view
@@ -31,10 +29,6 @@ interface ILendingPoolManager is IERC6909Accrues {
         returns (uint256 originalAmount);
 
     function realOut(address sender, PoolId poolId, Currency currency, uint256 amount) external;
-
-    function increaseReserveFunds(PoolId poolId, Currency currency, uint256 amount) external;
-
-    function decreaseReserveFunds(PoolId poolId, Currency currency, uint256 amount) external;
 
     // ******************** USER CALL ********************
     function deposit(address sender, address recipient, PoolId poolId, Currency currency, uint256 amount)

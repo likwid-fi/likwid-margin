@@ -2,9 +2,12 @@
 pragma solidity ^0.8.26;
 
 struct InterestStatus {
-    uint256 allInterest;
-    uint256 swapInterest;
-    uint256 lendingInterest;
-    uint256 lendingRealInterest;
-    uint256 lendingMirrorInterest;
+    /// @notice The pair cumulative interest of the first currency in the pool.
+    uint256 pairCumulativeInterest0;
+    /// @notice The lending cumulative interest of the first currency in the pool.
+    uint256 lendingCumulativeInterest0;
+    /// @notice The pair cumulative interest of the second currency in the pool.
+    uint256 pairCumulativeInterest1;
+    /// @notice The lending cumulative interest of the second currency in the pool.
+    uint256 lendingCumulativeInterest1;
 }
