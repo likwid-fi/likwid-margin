@@ -21,8 +21,6 @@ import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 
-import {console} from "forge-std/console.sol";
-
 contract MarginFees is IMarginFees, Owned {
     using UQ112x112 for *;
     using PriceMath for uint224;
