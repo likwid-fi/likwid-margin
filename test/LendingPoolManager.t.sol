@@ -13,6 +13,8 @@ import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {PerLibrary} from "../src/libraries/PerLibrary.sol";
 import {CurrencyPoolLibrary} from "../src/libraries/CurrencyPoolLibrary.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
+import {LiquidityLevel} from "../src/libraries/LiquidityLevel.sol";
+import {MarginParams} from "../src/types/MarginParams.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
@@ -37,6 +39,7 @@ import {DeployHelper} from "./utils/DeployHelper.sol";
 contract LendingPoolManagerTest is DeployHelper {
     using CurrencyPoolLibrary for Currency;
     using PoolStatusLibrary for *;
+    using LiquidityLevel for uint8;
 
     function setUp() public {
         deployHookAndRouter();
@@ -136,5 +139,106 @@ contract LendingPoolManagerTest is DeployHelper {
         assertEq(
             borrowRate * status.totalMirrorReserve1() / (status.totalMirrorReserve1() + status.totalRealReserve1()), apr
         );
+    }
+
+    function testWithdrawInterests() public {
+        PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
+        printPoolStatus(status);
+        address user = vm.addr(1);
+        uint256 depositAmount = 0.1 ether;
+        (bool success,) = user.call{value: 1 ether}("");
+        require(success, "TRANSFER_FAILED");
+        console.log("balance:%s", user.balance);
+        Currency eth = CurrencyLibrary.ADDRESS_ZERO;
+        PoolId nativeId = nativeKey.toId();
+        uint256 id = eth.toTokenId(nativeId);
+        vm.startPrank(user);
+        uint256 lb = lendingPoolManager.balanceOf(user, id);
+        assertEq(lb, 0);
+        lendingPoolManager.deposit{value: depositAmount}(user, nativeId, eth, depositAmount);
+        uint256 ethAmount = manager.balanceOf(address(lendingPoolManager), eth.toId());
+        lb = lendingPoolManager.balanceOf(user, id);
+        console.log("lending.balance:%s,ethAmount:%s", lb, ethAmount);
+        vm.stopPrank();
+        uint256 positionId;
+        uint256 borrowAmount;
+        uint256 payValue = 0.001 ether;
+        address user0 = address(this);
+        MarginParams memory params = MarginParams({
+            poolId: nativeKey.toId(),
+            marginForOne: true,
+            leverage: 3,
+            marginAmount: payValue,
+            borrowAmount: 0,
+            borrowMaxAmount: 0,
+            recipient: user0,
+            deadline: block.timestamp + 1000
+        });
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        vm.warp(3600 * 10);
+        marginPositionManager.close(positionId, 1000000, 0, block.timestamp + 1000);
+        vm.startPrank(user);
+        lb = lendingPoolManager.balanceOf(user, id);
+        assertGt(lb, depositAmount);
+        console.log("withdraw:%d", lb);
+        lendingPoolManager.withdraw(user, nativeId, eth, lb);
+        status = pairPoolManager.getStatus(nativeKey.toId());
+        printPoolStatus(status);
+        vm.stopPrank();
+    }
+
+    function testBalanceMirror() public {
+        PoolId poolId = nativeKey.toId();
+        PoolStatus memory status = pairPoolManager.getStatus(poolId);
+        printPoolStatus(status);
+        uint256 uPoolId = marginLiquidity.getPoolId(poolId);
+        uint256 liquidity = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
+        assertGt(liquidity, 0);
+        RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
+            poolId: poolId,
+            level: LiquidityLevel.BOTH_MARGIN,
+            liquidity: liquidity,
+            deadline: type(uint256).max
+        });
+        vm.roll(100);
+        vm.warp(3600 * 2);
+        pairPoolManager.removeLiquidity(removeParams);
+        status = pairPoolManager.getStatus(nativeKey.toId());
+        printPoolStatus(status);
+        uint256 amount0 = 0.1 ether;
+        uint256 amount1 = 1 ether;
+        AddLiquidityParams memory params = AddLiquidityParams({
+            poolId: poolId,
+            amount0: amount0,
+            amount1: amount1,
+            to: address(this),
+            level: LiquidityLevel.NO_MARGIN,
+            deadline: type(uint256).max
+        });
+        pairPoolManager.addLiquidity{value: amount0}(params);
+        status = pairPoolManager.getStatus(nativeKey.toId());
+        printPoolStatus(status);
+        address user = vm.addr(1);
+        uint256 payValue = 0.1 ether;
+        (bool success,) = user.call{value: amount0}("");
+        assertTrue(success);
+        vm.startPrank(user);
+        MarginParams memory borrowParams = MarginParams({
+            poolId: poolId,
+            marginForOne: false,
+            leverage: 0,
+            marginAmount: payValue,
+            borrowAmount: 0,
+            borrowMaxAmount: 0,
+            recipient: user,
+            deadline: block.timestamp + 1000
+        });
+        uint256 beforeBalance = tokenB.balanceOf(user);
+        assertEq(beforeBalance, 0);
+        (uint256 positionId, uint256 borrowAmount) = marginPositionManager.margin{value: payValue}(borrowParams);
+        uint256 afterBalance = tokenB.balanceOf(user);
+        assertEq(positionId, 1);
+        console.log(positionId, borrowAmount, afterBalance);
+        vm.stopPrank();
     }
 }

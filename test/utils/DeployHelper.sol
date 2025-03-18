@@ -190,5 +190,17 @@ contract DeployHelper is Test {
         pairPoolManager.addLiquidity{value: 1 ether}(params);
     }
 
+    function printPoolStatus(PoolStatus memory status) internal pure {
+        console.logBytes32(PoolId.unwrap(status.key.toId()));
+        console.log("status.realReserve0:", status.realReserve0);
+        console.log("status.realReserve1:", status.realReserve1);
+        console.log("status.mirrorReserve0:", status.mirrorReserve0);
+        console.log("status.mirrorReserve1:", status.mirrorReserve1);
+        console.log("status.lendingRealReserve0:", status.lendingRealReserve0);
+        console.log("status.lendingRealReserve1:", status.lendingRealReserve1);
+        console.log("status.lendingMirrorReserve0:", status.lendingMirrorReserve0);
+        console.log("status.lendingMirrorReserve1:", status.lendingMirrorReserve1);
+    }
+
     receive() external payable {}
 }

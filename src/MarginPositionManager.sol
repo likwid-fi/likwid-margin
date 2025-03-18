@@ -292,9 +292,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             poolId: _position.poolId,
             marginForOne: _position.marginForOne,
             payer: msg.sender,
-            rawBorrowAmount: 0,
+            debtAmount: repayAmount,
             repayAmount: repayAmount,
             releaseAmount: 0,
+            rawBorrowAmount: 0,
             deadline: deadline
         });
         params.rawBorrowAmount = uint256(_position.rawBorrowAmount) * repayAmount / _position.borrowAmount;
@@ -321,11 +322,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         uint256 releaseMargin = uint256(_position.marginAmount).mulDivMillion(closeMillionth);
         uint256 releaseTotal = uint256(_position.marginTotal).mulDivMillion(closeMillionth);
         int256 pnlAmount;
+        uint256 releaseMarginReal =
+            lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, releaseMargin);
+        uint256 releaseTotalReal = lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, releaseTotal);
         {
-            uint256 releaseMarginReal =
-                lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, releaseMargin);
-            uint256 releaseTotalReal =
-                lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, releaseTotal);
             pnlAmount = int256(releaseTotalReal) - int256(params.releaseAmount);
             require(pnlMinAmount == 0 || pnlMinAmount <= pnlAmount, "InsufficientOutputReceived");
             if (pnlAmount >= 0) {
@@ -359,8 +359,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             poolId,
             msg.sender,
             positionId,
-            lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, releaseMargin),
-            lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, releaseTotal),
+            releaseMarginReal,
+            releaseTotalReal,
             params.repayAmount,
             params.rawBorrowAmount,
             pnlAmount
@@ -388,14 +388,16 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             poolId: _position.poolId,
             marginForOne: _position.marginForOne,
             payer: address(this),
-            rawBorrowAmount: 0,
+            debtAmount: 0,
             repayAmount: 0,
             releaseAmount: 0,
+            rawBorrowAmount: 0,
             deadline: deadline
         });
-        params.repayAmount = uint256(_position.borrowAmount).mulDivMillion(closeMillionth);
-        params.releaseAmount =
-            pairPoolManager.getAmountIn(_position.poolId, !_position.marginForOne, params.repayAmount);
+        params.repayAmount = params.debtAmount = uint256(_position.borrowAmount).mulDivMillion(closeMillionth);
+        (params.releaseAmount,,) = pairPoolManager.marginFees().getAmountIn(
+            address(pairPoolManager), _status, !_position.marginForOne, params.repayAmount
+        );
 
         params.rawBorrowAmount = Math.mulDiv(_position.rawBorrowAmount, params.repayAmount, _position.borrowAmount);
 
@@ -445,6 +447,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             rawBorrowAmount: 0,
             releaseAmount: 0,
             repayAmount: 0,
+            debtAmount: 0,
             deadline: block.timestamp + 1000
         });
         {
@@ -455,7 +458,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             for (uint256 i = 0; i < params.positionIds.length; i++) {
                 if (liquidatedList[i]) {
                     MarginPosition memory _position = inPositions[i];
-                    releaseParams.repayAmount += borrowAmountList[i];
+                    releaseParams.debtAmount += borrowAmountList[i];
                     releaseParams.rawBorrowAmount += _position.rawBorrowAmount;
                     {
                         uint256 realMarginAmount = lendingPoolManager.computeRealAmount(
@@ -510,9 +513,10 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             poolId: _position.poolId,
             marginForOne: _position.marginForOne,
             payer: msg.sender,
-            rawBorrowAmount: _position.rawBorrowAmount,
+            debtAmount: borrowAmount,
             repayAmount: borrowAmount,
             releaseAmount: 0,
+            rawBorrowAmount: _position.rawBorrowAmount,
             deadline: block.timestamp + 1000
         });
         pairPoolManager.release{value: sendValue}(params);

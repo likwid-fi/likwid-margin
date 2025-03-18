@@ -22,13 +22,13 @@ interface IPoolStatusManager is IStatusBase {
 
     function protocolFeesAccrued(Currency currency) external view returns (uint256);
 
-    function setBalances(PoolKey memory key) external returns (BalanceStatus memory balanceStatus);
+    function setBalances(PoolId poolId) external returns (PoolStatus memory _status);
 
-    function updateInterests(PoolKey memory key) external;
+    function updateInterests(PoolId poolId) external returns (PoolStatus memory _status);
 
-    function update(PoolKey memory key, bool fromMargin) external returns (BalanceStatus memory afterStatus);
+    function update(PoolId poolId, bool fromMargin) external returns (BalanceStatus memory afterStatus);
 
-    function update(PoolKey memory key) external returns (BalanceStatus memory afterStatus);
+    function update(PoolId poolId) external returns (BalanceStatus memory afterStatus);
 
     function updateLendingPoolStatus(PoolId poolId) external;
 

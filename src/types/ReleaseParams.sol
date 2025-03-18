@@ -11,6 +11,8 @@ struct ReleaseParams {
     bool marginForOne;
     /// @notice Payment address.
     address payer;
+    /// @notice Debt amount.
+    uint256 debtAmount;
     /// @notice Repay amount.
     uint256 repayAmount;
     /// @notice Release amount.
