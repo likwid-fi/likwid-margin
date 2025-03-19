@@ -3,6 +3,9 @@ pragma solidity ^0.8.19;
 
 import "forge-std/Script.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
+import {CurrencyExtLibrary} from "../src/libraries/CurrencyExtLibrary.sol";
+import {CurrencyPoolLibrary} from "../src/libraries/CurrencyPoolLibrary.sol";
 import {PriceMath} from "../src/libraries/PriceMath.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
@@ -29,6 +32,8 @@ interface IMarginChecker {
 
 interface IPoolStatusManager {
     function setMarginOracle(address _oracle) external;
+    function balanceOf(address owner, uint256 id) external view returns (uint256 amount);
+    function balanceOriginal(address owner, uint256 id) external view returns (uint256 amount);
 }
 
 interface IMarginLiquidity {
@@ -50,6 +55,8 @@ interface IMarginLiquidity {
 
 contract TestsScript is Script {
     using PriceMath for uint224;
+    using CurrencyExtLibrary for Currency;
+    using CurrencyPoolLibrary for Currency;
     // address marginLiquidity = 0xDD0AebD45cd5c339e366fB7DEF71143C78585a6f;
     // address hookAddress = 0x41e1C0cd59d538893dF9960373330585Dc3e8888;
     // address pepe = 0x692CA9D3078Aa6b54F2F0e33Ed20D30489854A21;
@@ -102,16 +109,45 @@ contract TestsScript is Script {
         // MarginOracle marginOracle = new MarginOracle();
         // IPoolStatusManager(0x91885403Db4cf2A8b82b46B36905Ba2C11043d1c).setMarginOracle(address(marginOracle));
         // vm.stopBroadcast();
-        PoolId poolId = PoolId.wrap(0xf4d244f3cdff6f9364dfeb1e157f9688df9fc6d22cc0eccd4f9bc9e60766f96d);
-        (,, uint256 incrementMaxMirror0, uint256 incrementMaxMirror1) = IMarginLiquidity(
-            0x5a3C43798c7D2082a95d8190F4239EC51d90444f
-        ).getMarginReserves(0x79cd92ce0Af4f0b383163D4D8B1B74Ad3444cdEC, poolId);
-        console.log(incrementMaxMirror0, incrementMaxMirror1);
+        PoolId poolId = PoolId.wrap(0xaf8d51d259e5aa3f8898acbe5b21ce929b3007167209c8ae5b08f31e7f12d5ef);
+        // (,, uint256 incrementMaxMirror0, uint256 incrementMaxMirror1) = IMarginLiquidity(
+        //     0x5a3C43798c7D2082a95d8190F4239EC51d90444f
+        // ).getMarginReserves(0x79cd92ce0Af4f0b383163D4D8B1B74Ad3444cdEC, poolId);
+        // console.log(incrementMaxMirror0, incrementMaxMirror1);
 
-        (uint256 marginMax, uint256 borrowAmount) = IMarginLiquidity(0x13a1d5822A945A4022b1Bd160daa7E497F26ba3A)
-            .getMarginMax(0x79cd92ce0Af4f0b383163D4D8B1B74Ad3444cdEC, poolId, true, 0);
-        console.log(marginMax, borrowAmount);
+        // (uint256 marginMax, uint256 borrowAmount) = IMarginLiquidity(0x13a1d5822A945A4022b1Bd160daa7E497F26ba3A)
+        //     .getMarginMax(0x79cd92ce0Af4f0b383163D4D8B1B74Ad3444cdEC, poolId, true, 0);
+        // console.log(marginMax, borrowAmount);
+        Currency usdt = Currency.wrap(0x089f50aC197C68E1bab2782435ce50f1aFc8C656);
 
+        uint256 amount = IPoolStatusManager(0xFb3006590FCCCa9f39958cf042EaF9cff06aAead).balanceOf(
+            0x79347d7207C5c99445E6E386f1CCcbB31bfe3b1B, usdt.toTokenId(poolId)
+        );
+        console.log(amount);
+        amount = IPoolStatusManager(0xFb3006590FCCCa9f39958cf042EaF9cff06aAead).balanceOf(
+            0x331E162Fb8bfd397B7B38e3a6cd4601A3ecD46Fe, usdt.toTokenId(poolId)
+        );
+        console.log(amount);
+        amount = IPoolStatusManager(0xFb3006590FCCCa9f39958cf042EaF9cff06aAead).balanceOriginal(
+            0x331E162Fb8bfd397B7B38e3a6cd4601A3ecD46Fe, usdt.toTokenId(poolId)
+        );
+        console.log("balanceOriginal:", amount);
+        amount = IPoolStatusManager(0xFb3006590FCCCa9f39958cf042EaF9cff06aAead).balanceOriginal(
+            0x79347d7207C5c99445E6E386f1CCcbB31bfe3b1B, usdt.toTokenId(poolId)
+        );
+        console.log("balanceOriginal:", amount);
+        amount = IPoolStatusManager(0xFb3006590FCCCa9f39958cf042EaF9cff06aAead).balanceOf(
+            0xFb3006590FCCCa9f39958cf042EaF9cff06aAead, usdt.toTokenId(poolId)
+        );
+        console.log(amount);
+        amount = IPoolStatusManager(0xFb3006590FCCCa9f39958cf042EaF9cff06aAead).balanceOriginal(
+            0xFb3006590FCCCa9f39958cf042EaF9cff06aAead, usdt.toTokenId(poolId)
+        );
+        console.log("balanceOriginal:", amount);
+        amount = IPoolStatusManager(0x7cAf3F63D481555361Ad3b17703Ac95f7a320D0c).balanceOf(
+            0xFb3006590FCCCa9f39958cf042EaF9cff06aAead, usdt.toId()
+        );
+        console.log(amount);
         // MarginChecker marginChecker = new MarginChecker(user);
         // IMarginPositionManager(0x576f1E914b2b0266C66551a8e6934393D160A4fE).setMarginChecker(address(marginChecker));
     }

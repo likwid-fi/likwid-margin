@@ -15,6 +15,8 @@ import {CurrencyPoolLibrary} from "../src/libraries/CurrencyPoolLibrary.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
 import {LiquidityLevel} from "../src/libraries/LiquidityLevel.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
+import {BurnParams} from "../src/types/BurnParams.sol";
+import {MarginPosition, MarginPositionVo} from "../src/types/MarginPosition.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
@@ -187,10 +189,13 @@ contract LendingPoolManagerTest is DeployHelper {
         vm.stopPrank();
     }
 
-    function testWithdrawInterests100() public {
+    function testWithdrawInterest100() public {
         for (uint256 i = 0; i < 100; i++) {
             testWithdrawInterests();
         }
+        uint256 balance0 = manager.balanceOf(address(lendingPoolManager), nativeKey.currency0.toId());
+        uint256 balance1 = manager.balanceOf(address(lendingPoolManager), nativeKey.currency1.toId());
+        console.log(balance0, balance1);
     }
 
     function testBorrowLevelOne() public {
@@ -309,5 +314,35 @@ contract LendingPoolManagerTest is DeployHelper {
         lendingPoolManager.balanceMirror(poolId, nativeKey.currency1, 0.1 ether);
         status = pairPoolManager.getStatus(nativeKey.toId());
         printPoolStatus(status);
+    }
+
+    function testBurnBorrow() public {
+        testBorrowLevelOneAndLending();
+        uint256 positionId = 1;
+        (bool liquidated,) = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
+        uint256 amountIn = 0.1 ether;
+        uint256 swapIndex = 0;
+        while (!liquidated) {
+            MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+                poolId: nativeKey.toId(),
+                zeroForOne: true,
+                to: address(this),
+                amountIn: amountIn,
+                amountOut: 0,
+                amountOutMin: 0,
+                deadline: type(uint256).max
+            });
+            swapRouter.exactInput{value: amountIn}(swapParams);
+            (liquidated,) = marginChecker.checkLiquidate(address(marginPositionManager), positionId);
+            swapIndex++;
+            skip(30);
+            console.log("swapIndex:%s", swapIndex);
+        }
+        BurnParams memory liquidateParams =
+            BurnParams({poolId: nativeKey.toId(), marginForOne: false, positionIds: new uint256[](1)});
+        liquidateParams.positionIds[0] = positionId;
+        marginPositionManager.liquidateBurn(liquidateParams);
+        MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        console.log("position.borrowAmount:%s", position.borrowAmount);
     }
 }

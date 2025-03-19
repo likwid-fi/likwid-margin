@@ -37,6 +37,11 @@ interface IMarginFees {
     /// @return _marginFee The fee of margin transaction
     function getPoolFees(address _poolManager, PoolId poolId) external view returns (uint24 _fee, uint24 _marginFee);
 
+    function computeDiff(PoolStatus memory status, bool marginForOne, int256 diff)
+        external
+        view
+        returns (int256 interest0, int256 interest1, int256 lendingInterest);
+
     function getMarginBorrow(PoolStatus memory status, MarginParams memory params)
         external
         view

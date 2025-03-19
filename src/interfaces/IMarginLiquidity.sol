@@ -15,6 +15,10 @@ interface IMarginLiquidity is IERC6909Accrues {
         external
         returns (uint256 liquidity);
 
+    function changeLiquidity(PoolId poolId, uint256 _reserve0, uint256 _reserve1, int256 interest0, int256 interest1)
+        external
+        returns (uint256 liquidity);
+
     function addInterests(PoolId poolId, uint256 _reserve0, uint256 _reserve1, uint256 interest0, uint256 interest1)
         external
         returns (uint256 liquidity);

@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
+import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 // Local
 import {ERC6909Accrues} from "./base/ERC6909Accrues.sol";
 import {LiquidityLevel} from "./libraries/LiquidityLevel.sol";
@@ -15,6 +16,7 @@ import {IStatusBase} from "./interfaces/IStatusBase.sol";
 import {IPoolBase} from "./interfaces/IPoolBase.sol";
 
 contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
+    using SafeCast for uint256;
     using LiquidityLevel for *;
     using UQ112x112 for *;
     using PerLibrary for *;
@@ -62,7 +64,13 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         retainSupply1 += balanceOf(pool, lPoolId);
     }
 
-    function _updateLevelRatio(address pairPoolManager, uint256 id, uint256 liquidity0, uint256 liquidity1) internal {
+    function _updateLevelRatio(
+        address pairPoolManager,
+        uint256 id,
+        uint256 liquidity0,
+        uint256 liquidity1,
+        bool addFlag
+    ) internal {
         uint256 level4Id = LiquidityLevel.BOTH_MARGIN.getLevelId(id);
         uint256 total4Liquidity = balanceOf(pairPoolManager, level4Id);
         uint256 level4Liquidity;
@@ -72,7 +80,11 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
             uint256 level2Liquidity = Math.mulDiv(liquidity0, total2Liquidity, total2Liquidity + total4Liquidity);
             level4Liquidity = level4Liquidity + liquidity0 - level2Liquidity;
             level2InterestRatioX112 = level2InterestRatioX112.growRatioX112(level2Liquidity, total2Liquidity);
-            _mint(pairPoolManager, level2Id, level2Liquidity);
+            if (addFlag) {
+                _mint(pairPoolManager, level2Id, level2Liquidity);
+            } else {
+                _burn(pairPoolManager, level2Id, level2Liquidity);
+            }
         }
         if (liquidity1 > 0) {
             uint256 level3Id = LiquidityLevel.ZERO_MARGIN.getLevelId(id);
@@ -80,10 +92,70 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
             uint256 level3Liquidity = Math.mulDiv(liquidity0, total3Liquidity, total3Liquidity + total4Liquidity);
             level4Liquidity = level4Liquidity + liquidity0 - level3Liquidity;
             level3InterestRatioX112 = level3InterestRatioX112.growRatioX112(level3Liquidity, total3Liquidity);
-            _mint(pairPoolManager, level3Id, level3Liquidity);
+            if (addFlag) {
+                _mint(pairPoolManager, level3Id, level3Liquidity);
+            } else {
+                _burn(pairPoolManager, level3Id, level3Liquidity);
+            }
         }
         level4InterestRatioX112 = level4InterestRatioX112.growRatioX112(level4Liquidity, total4Liquidity);
-        _mint(pairPoolManager, level4Id, level4Liquidity);
+        if (addFlag) {
+            _mint(pairPoolManager, level4Id, level4Liquidity);
+        } else {
+            _burn(pairPoolManager, level4Id, level4Liquidity);
+        }
+    }
+
+    function _addInterests(
+        address pairPoolManager,
+        PoolId poolId,
+        uint256 _reserve0,
+        uint256 _reserve1,
+        uint256 interest0,
+        uint256 interest1
+    ) internal returns (uint256 liquidity) {
+        uint256 rootK = Math.sqrt(_reserve0 * _reserve1);
+        uint256 rootKLast = Math.sqrt((_reserve0 + interest0) * (_reserve1 + interest1));
+        if (rootK > rootKLast) {
+            uint256 uPoolId = _getPoolId(poolId);
+            uint256 _totalSupply = balanceOf(pairPoolManager, uPoolId);
+            uint256 numerator = _totalSupply * (rootK - rootKLast);
+            uint256 denominator = rootK + rootKLast;
+            liquidity = numerator / denominator;
+            if (liquidity > 0) {
+                _mint(pairPoolManager, uPoolId, liquidity);
+                denominator = interest0 + Math.mulDiv(interest1, _reserve0, _reserve1);
+                uint256 liquidity0 = Math.mulDiv(liquidity, interest0, denominator);
+                uint256 liquidity1 = liquidity - liquidity0;
+                _updateLevelRatio(pairPoolManager, uPoolId, liquidity0, liquidity1, true);
+            }
+        }
+    }
+
+    function _deductInterests(
+        address pairPoolManager,
+        PoolId poolId,
+        uint256 _reserve0,
+        uint256 _reserve1,
+        uint256 interest0,
+        uint256 interest1
+    ) internal returns (uint256 liquidity) {
+        uint256 rootK = Math.sqrt(_reserve0 * _reserve1);
+        uint256 rootKLast = Math.sqrt((_reserve0 - interest0) * (_reserve1 - interest1));
+        if (rootKLast > rootK) {
+            uint256 uPoolId = _getPoolId(poolId);
+            uint256 _totalSupply = balanceOf(pairPoolManager, uPoolId);
+            uint256 numerator = _totalSupply * (rootKLast - rootK);
+            uint256 denominator = rootK + rootKLast;
+            liquidity = numerator / denominator;
+            if (liquidity > 0) {
+                _burn(pairPoolManager, uPoolId, liquidity);
+                denominator = interest0 + Math.mulDiv(interest1, _reserve0, _reserve1);
+                uint256 liquidity0 = Math.mulDiv(liquidity, interest0, denominator);
+                uint256 liquidity1 = liquidity - liquidity0;
+                _updateLevelRatio(pairPoolManager, uPoolId, liquidity0, liquidity1, false);
+            }
+        }
     }
 
     // ******************** OWNER CALL ********************
@@ -103,22 +175,20 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         returns (uint256 liquidity)
     {
         address pairPoolManager = IStatusBase(msg.sender).pairPoolManager();
-        uint256 rootK = Math.sqrt(uint256(_reserve0) * _reserve1);
-        uint256 rootKLast = Math.sqrt(uint256(_reserve0 + interest0) * uint256(_reserve1 + interest1));
-        if (rootK > rootKLast) {
-            uint256 id = _getPoolId(poolId);
-            uint256 uPoolId = id.getPoolId();
-            uint256 _totalSupply = balanceOf(pairPoolManager, uPoolId);
-            uint256 numerator = _totalSupply * (rootK - rootKLast);
-            uint256 denominator = rootK + rootKLast;
-            liquidity = numerator / denominator;
-            if (liquidity > 0) {
-                _mint(pairPoolManager, uPoolId, liquidity);
-                denominator = interest0 + Math.mulDiv(interest1, _reserve0, _reserve1);
-                uint256 liquidity0 = Math.mulDiv(liquidity, interest0, denominator);
-                uint256 liquidity1 = liquidity - liquidity0;
-                _updateLevelRatio(pairPoolManager, id, liquidity0, liquidity1);
-            }
+        liquidity = _addInterests(pairPoolManager, poolId, _reserve0, _reserve1, interest0, interest1);
+    }
+
+    function changeLiquidity(PoolId poolId, uint256 _reserve0, uint256 _reserve1, int256 interest0, int256 interest1)
+        external
+        onlyPoolManager
+        returns (uint256 liquidity)
+    {
+        if (interest0 >= 0 && interest1 >= 0) {
+            liquidity = _addInterests(msg.sender, poolId, _reserve0, _reserve1, uint256(interest0), uint256(interest1));
+        }
+        if (interest0 <= 0 && interest1 <= 0) {
+            liquidity =
+                _deductInterests(msg.sender, poolId, _reserve0, _reserve1, uint256(-interest0), uint256(-interest1));
         }
     }
 

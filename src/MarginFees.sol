@@ -5,6 +5,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
+import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
@@ -22,6 +23,7 @@ import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 
 contract MarginFees is IMarginFees, Owned {
+    using SafeCast for uint256;
     using UQ112x112 for *;
     using PriceMath for uint224;
     using PoolIdLibrary for PoolKey;
@@ -142,6 +144,35 @@ contract MarginFees is IMarginFees, Owned {
     function _getReserves(PoolStatus memory status) internal pure returns (uint256 _reserve0, uint256 _reserve1) {
         _reserve0 = status.realReserve0 + status.mirrorReserve0;
         _reserve1 = status.realReserve1 + status.mirrorReserve1;
+    }
+
+    function computeDiff(PoolStatus memory status, bool marginForOne, int256 diff)
+        external
+        view
+        returns (int256 interest0, int256 interest1, int256 lendingInterest)
+    {
+        uint256 diffUint = diff > 0 ? uint256(diff) : uint256(-diff);
+        (uint256 interestReserve0, uint256 interestReserve1) =
+            IPairPoolManager(msg.sender).marginLiquidity().getInterestReserves(msg.sender, status.key.toId(), status);
+        uint256 pairBorrow = marginForOne ? interestReserve0 : interestReserve1;
+        uint256 lendingReserve = marginForOne ? status.lendingReserve0() : status.lendingReserve1();
+        uint256 lendingDiff = Math.mulDiv(lendingReserve, diffUint, pairBorrow + lendingReserve);
+        uint256 pairDiff = diffUint - lendingDiff;
+        if (diff > 0) {
+            if (marginForOne) {
+                interest0 = pairDiff.toInt256();
+            } else {
+                interest1 = pairDiff.toInt256();
+            }
+            lendingInterest = lendingDiff.toInt256();
+        } else {
+            if (marginForOne) {
+                interest0 = -(pairDiff.toInt256());
+            } else {
+                interest1 = -(pairDiff.toInt256());
+            }
+            lendingInterest = -(lendingDiff.toInt256());
+        }
     }
 
     function getMarginBorrow(PoolStatus memory status, MarginParams memory params)

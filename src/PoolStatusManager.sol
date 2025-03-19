@@ -7,6 +7,7 @@ import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
+import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
@@ -29,6 +30,7 @@ import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 import {IPoolStatusManager} from "./interfaces/IPoolStatusManager.sol";
 
 contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
+    using SafeCast for uint256;
     using UQ112x112 for *;
     using TransientSlot for *;
     using CurrencyPoolLibrary for *;
@@ -113,8 +115,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                     _status.mirrorReserve0 += interestStatus0.pairInterest.toUint112();
                 }
                 if (interestStatus0.lendingInterest > 0) {
-                    _status.lendingRealReserve0 += interestStatus0.lendingRealInterest.toUint112();
-                    _status.lendingMirrorReserve0 += interestStatus0.lendingMirrorInterest.toUint112();
+                    _status.lendingMirrorReserve0 += interestStatus0.lendingInterest.toUint112();
                 }
             }
 
@@ -123,8 +124,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                     _status.mirrorReserve1 += interestStatus1.pairInterest.toUint112();
                 }
                 if (interestStatus1.lendingInterest > 0) {
-                    _status.lendingRealReserve1 += interestStatus1.lendingRealInterest.toUint112();
-                    _status.lendingMirrorReserve1 += interestStatus1.lendingMirrorInterest.toUint112();
+                    _status.lendingMirrorReserve1 += interestStatus1.lendingInterest.toUint112();
                 }
             }
 
@@ -219,14 +219,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
             interestStatus.allInterest = allInterest0;
             interestStatus.pairInterest = interest0;
             if (allInterest0 > interest0) {
-                uint256 lendingInterest0 = allInterest0 - interest0;
-                uint256 lendingRealInterest0 =
-                    Math.mulDiv(lendingInterest0, status.lendingRealReserve0, status.lendingReserve0());
-                uint256 lendingMirrorInterest0 = lendingInterest0 - lendingRealInterest0;
-
-                interestStatus.lendingInterest = lendingInterest0;
-                interestStatus.lendingRealInterest = lendingRealInterest0;
-                interestStatus.lendingMirrorInterest = lendingMirrorInterest0;
+                interestStatus.lendingInterest = allInterest0 - interest0;
             }
         }
     }
@@ -245,14 +238,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
             interestStatus.allInterest = allInterest1;
             interestStatus.pairInterest = interest1;
             if (allInterest1 > interest1) {
-                uint256 lendingInterest1 = allInterest1 - interest1;
-                uint256 lendingRealInterest1 =
-                    Math.mulDiv(lendingInterest1, status.lendingRealReserve1, status.lendingReserve1());
-                uint256 lendingMirrorInterest1 = lendingInterest1 - lendingRealInterest1;
-
-                interestStatus.lendingInterest = lendingInterest1;
-                interestStatus.lendingRealInterest = lendingRealInterest1;
-                interestStatus.lendingMirrorInterest = lendingMirrorInterest1;
+                interestStatus.lendingInterest = allInterest1 - interest1;
             }
         }
     }
@@ -282,11 +268,10 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                         );
                     }
                     if (interestStatus0.lendingInterest > 0) {
-                        status.lendingRealReserve0 += interestStatus0.lendingRealInterest.toUint112();
-                        status.lendingMirrorReserve0 += interestStatus0.lendingMirrorInterest.toUint112();
-                        lendingPoolManager.updateInterests(cPoolId0, interestStatus0.lendingRealInterest);
+                        status.lendingMirrorReserve0 += interestStatus0.lendingInterest.toUint112();
+                        lendingPoolManager.updateInterests(cPoolId0, interestStatus0.lendingInterest.toInt256());
                         mirrorTokenManager.mintInStatus(
-                            address(lendingPoolManager), cPoolId0, interestStatus0.lendingMirrorInterest
+                            address(lendingPoolManager), cPoolId0, interestStatus0.lendingInterest
                         );
                     }
                 }
@@ -302,11 +287,10 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                         );
                     }
                     if (interestStatus1.lendingInterest > 0) {
-                        status.lendingRealReserve1 += interestStatus1.lendingRealInterest.toUint112();
-                        status.lendingMirrorReserve1 += interestStatus1.lendingMirrorInterest.toUint112();
-                        lendingPoolManager.updateInterests(cPoolId1, interestStatus1.lendingRealInterest);
+                        status.lendingMirrorReserve1 += interestStatus1.lendingInterest.toUint112();
+                        lendingPoolManager.updateInterests(cPoolId1, interestStatus1.lendingInterest.toInt256());
                         mirrorTokenManager.mintInStatus(
-                            address(lendingPoolManager), cPoolId1, interestStatus1.lendingMirrorInterest
+                            address(lendingPoolManager), cPoolId1, interestStatus1.lendingInterest
                         );
                     }
                 }
@@ -392,7 +376,6 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
 
         BalanceStatus memory beforeStatus = _getBalances();
         afterStatus = _getAllBalances(status.key);
-
         status.realReserve0 = status.realReserve0.add(afterStatus.balance0).sub(beforeStatus.balance0);
         status.realReserve1 = status.realReserve1.add(afterStatus.balance1).sub(beforeStatus.balance1);
         status.mirrorReserve0 = afterStatus.mirrorBalance0.toUint112();

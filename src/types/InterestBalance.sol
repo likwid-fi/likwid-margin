@@ -5,6 +5,4 @@ struct InterestBalance {
     uint256 allInterest;
     uint256 pairInterest;
     uint256 lendingInterest;
-    uint256 lendingRealInterest;
-    uint256 lendingMirrorInterest;
 }

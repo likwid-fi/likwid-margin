@@ -28,7 +28,13 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     using UQ112x112 for *;
     using PoolStatusLibrary for PoolStatus;
 
-    event UpdateInterestRatio(uint256 indexed id, uint256 incrementRatioX112Old, uint256 incrementRatioX112New);
+    event UpdateInterestRatio(
+        uint256 indexed id,
+        uint256 totalSupply,
+        int256 interest,
+        uint256 incrementRatioX112Old,
+        uint256 incrementRatioX112New
+    );
 
     event Deposit(
         PoolId indexed poolId,
@@ -61,7 +67,10 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     }
 
     modifier onlyStatusManager() {
-        require(address(pairPoolManager.statusManager()) == msg.sender, "UNAUTHORIZED");
+        require(
+            address(pairPoolManager.statusManager()) == msg.sender || address(pairPoolManager) == msg.sender,
+            "UNAUTHORIZED"
+        );
         _;
     }
 
@@ -131,15 +140,12 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
 
     function _mintReturn(address receiver, uint256 id, uint256 amount) internal returns (uint256 originalAmount) {
         _mint(receiver, id, amount);
-        uint256 incrementRatioX112 = incrementRatioX112Of[id];
-        originalAmount = amount.divRatioX112(incrementRatioX112);
+        originalAmount = amount.divRatioX112(incrementRatioX112Of[id]);
     }
 
     function _burnReturn(address sender, uint256 id, uint256 amount) internal returns (uint256 originalAmount) {
+        _burn(sender, id, amount);
         originalAmount = amount.divRatioX112(incrementRatioX112Of[id]);
-
-        super._burn(address(this), id, originalAmount);
-        super._burn(sender, id, originalAmount);
     }
 
     // ******************** EXTERNAL CALL ********************
@@ -173,11 +179,18 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
 
     // ******************** POOL CALL ********************
 
-    function updateInterests(uint256 id, uint256 interest) external onlyStatusManager {
+    function updateInterests(uint256 id, int256 interest) external onlyStatusManager {
+        if (interest == 0) {
+            return;
+        }
         uint256 totalSupply = balanceOf(address(this), id);
         uint256 incrementRatioX112Old = incrementRatioX112Of[id];
-        incrementRatioX112Of[id] = incrementRatioX112Old.growRatioX112(interest, totalSupply);
-        emit UpdateInterestRatio(id, incrementRatioX112Old, incrementRatioX112Of[id]);
+        if (interest > 0) {
+            incrementRatioX112Of[id] = incrementRatioX112Old.growRatioX112(uint256(interest), totalSupply);
+        } else {
+            incrementRatioX112Of[id] = incrementRatioX112Old.reduceRatioX112(uint256(-interest), totalSupply);
+        }
+        emit UpdateInterestRatio(id, totalSupply, interest, incrementRatioX112Old, incrementRatioX112Of[id]);
     }
 
     function mirrorIn(address receiver, PoolId poolId, Currency currency, uint256 amount)
