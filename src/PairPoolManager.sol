@@ -30,7 +30,7 @@ import {BalanceStatus} from "./types/BalanceStatus.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "./types/LiquidityParams.sol";
 
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
-import {IPoolStatusManager, InterestStatus} from "./interfaces/IPoolStatusManager.sol";
+import {IPoolStatusManager} from "./interfaces/IPoolStatusManager.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
@@ -439,10 +439,16 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         if (diff != 0) {
             (int256 interest0, int256 interest1, int256 lendingInterest) =
                 marginFees.computeDiff(status, params.marginForOne, diff);
-            marginLiquidity.changeLiquidity(params.poolId, status.reserve0(), status.reserve1(), interest0, interest1);
-            lendingPoolManager.updateInterests(borrowTokenId, lendingInterest);
-            if (diff > 0) {
-                poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), uint256(lendingInterest));
+            if (interest0 != 0 || interest1 != 0) {
+                marginLiquidity.changeLiquidity(
+                    params.poolId, status.reserve0(), status.reserve1(), interest0, interest1
+                );
+            }
+            if (lendingInterest != 0) {
+                lendingPoolManager.updateInterests(borrowTokenId, lendingInterest);
+                if (lendingInterest > 0) {
+                    poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), uint256(lendingInterest));
+                }
             }
         }
     }

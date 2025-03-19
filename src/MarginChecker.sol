@@ -223,8 +223,9 @@ contract MarginChecker is IMarginChecker, Owned {
         } else {
             (uint256 interestReserve0, uint256 interestReserve1) =
                 poolManager.marginLiquidity().getInterestReserves(address(poolManager), poolId, status);
-            uint256 lendingBorrow = marginForOne ? status.lendingRealReserve0 : status.lendingRealReserve1;
-            uint256 borrowMaxAmount = (marginForOne ? interestReserve0 : interestReserve1) + lendingBorrow;
+            uint256 borrowMaxAmount = (marginForOne ? interestReserve0 : interestReserve1);
+            uint256 flowMaxAmount = (marginForOne ? status.realReserve0 : status.realReserve1) * 20 / 100;
+            borrowMaxAmount = Math.min(borrowMaxAmount, flowMaxAmount);
             if (borrowMaxAmount > 1000) {
                 borrowAmount = borrowMaxAmount - 1000;
             } else {

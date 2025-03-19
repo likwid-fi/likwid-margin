@@ -9,12 +9,9 @@ import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {IStatusBase} from "./IStatusBase.sol";
 import {BalanceStatus} from "../types/BalanceStatus.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
-import {InterestStatus} from "../types/InterestStatus.sol";
 
 interface IPoolStatusManager is IStatusBase {
     function hooks() external view returns (IHooks hook);
-
-    function getInterestStore(PoolId poolId) external view returns (InterestStatus memory);
 
     /// @notice Get current margin oracle address
     function marginOracle() external view returns (address);

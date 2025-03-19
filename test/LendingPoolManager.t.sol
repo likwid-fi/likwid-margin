@@ -279,8 +279,17 @@ contract LendingPoolManagerTest is DeployHelper {
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: amount0}(params);
+        params = AddLiquidityParams({
+            poolId: poolId,
+            amount0: amount0,
+            amount1: amount1,
+            to: address(this),
+            level: LiquidityLevel.BOTH_MARGIN,
+            deadline: type(uint256).max
+        });
+        pairPoolManager.addLiquidity{value: amount0}(params);
         address user = vm.addr(1);
-        uint256 payValue = 0.1 ether;
+        uint256 payValue = 0.001 ether;
         (bool success,) = user.call{value: amount0}("");
         assertTrue(success);
         tokenB.approve(address(lendingPoolManager), 11 ether);
@@ -311,7 +320,7 @@ contract LendingPoolManagerTest is DeployHelper {
         testBorrowLevelOneAndLending();
         PoolId poolId = nativeKey.toId();
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
-        lendingPoolManager.balanceMirror(poolId, nativeKey.currency1, 0.1 ether);
+        lendingPoolManager.balanceMirror(poolId, nativeKey.currency1, 0.001 ether);
         status = pairPoolManager.getStatus(nativeKey.toId());
         printPoolStatus(status);
     }
@@ -344,5 +353,14 @@ contract LendingPoolManagerTest is DeployHelper {
         marginPositionManager.liquidateBurn(liquidateParams);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
         console.log("position.borrowAmount:%s", position.borrowAmount);
+    }
+
+    function testModifyBorrow() public {
+        testBorrowLevelOneAndLending();
+        uint256 positionId = 1;
+        uint256 maxAmount = marginChecker.getMaxDecrease(address(marginPositionManager), positionId);
+        MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        assertEq(position.marginTotal, 0);
+        console.log("maxAmount:%s", maxAmount);
     }
 }

@@ -15,7 +15,6 @@ import {BaseFees} from "./base/BaseFees.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {BalanceStatus} from "./types/BalanceStatus.sol";
-import {InterestStatus} from "./types/InterestStatus.sol";
 import {InterestBalance} from "./types/InterestBalance.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
@@ -62,7 +61,6 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     address public marginOracle;
 
     mapping(PoolId => PoolStatus) private statusStore;
-    mapping(PoolId => InterestStatus) private interestStore;
     mapping(Currency currency => uint256 amount) public protocolFeesAccrued;
 
     bytes32 constant UPDATE_BALANCE_GUARD_SLOT = 0x885c9ad615c28a45189565668235695fb42940589d40d91c5c875c16cdc1bd4c;
@@ -132,10 +130,6 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
             _status.rate0CumulativeLast = rate0CumulativeLast;
             _status.rate1CumulativeLast = rate1CumulativeLast;
         }
-    }
-
-    function getInterestStore(PoolId poolId) external view returns (InterestStatus memory) {
-        return interestStore[poolId];
     }
 
     function getReserves(PoolId poolId) external view returns (uint256 _reserve0, uint256 _reserve1) {
@@ -298,22 +292,6 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                 status.blockTimestampLast = blockTS;
                 status.rate0CumulativeLast = rate0CumulativeLast;
                 status.rate1CumulativeLast = rate1CumulativeLast;
-
-                if (interestStatus0.allInterest > 0 || interestStatus1.allInterest > 0) {
-                    InterestStatus storage interestStatus = interestStore[poolId];
-                    if (interestStatus0.pairInterest > 0) {
-                        interestStatus.pairCumulativeInterest0 += interestStatus0.pairInterest;
-                    }
-                    if (interestStatus0.lendingInterest > 0) {
-                        interestStatus.lendingCumulativeInterest0 += interestStatus0.lendingInterest;
-                    }
-                    if (interestStatus1.pairInterest > 0) {
-                        interestStatus.pairCumulativeInterest1 += interestStatus1.pairInterest;
-                    }
-                    if (interestStatus1.lendingInterest > 0) {
-                        interestStatus.lendingCumulativeInterest1 += interestStatus1.lendingInterest;
-                    }
-                }
             }
             if (interest0 + interest1 > 0) {
                 marginLiquidity.addInterests(poolId, status.reserve0(), status.reserve1(), interest0, interest1);
