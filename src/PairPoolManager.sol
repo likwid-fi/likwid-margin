@@ -36,8 +36,6 @@ import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 
-import {console} from "forge-std/console.sol";
-
 contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     using UQ112x112 for *;
     using SafeCast for uint256;
@@ -82,7 +80,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         uint256 debtAmount,
         uint256 repayAmount,
         uint256 burnAmount,
-        uint256 interest
+        uint256 rawBorrowAmount
     );
 
     IMirrorTokenManager public immutable mirrorTokenManager;
@@ -409,54 +407,34 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         uint256 repayAmount
     ) internal {
         uint256 borrowTokenId = borrowCurrency.toTokenId(params.poolId);
-        uint256 interest = params.debtAmount - params.rawBorrowAmount;
-        console.log("repayAmount:%s,interest:%s", repayAmount, interest);
         // burn mirror token
         (uint256 pairAmount, uint256 lendingAmount) = mirrorTokenManager.burn(
             address(lendingPoolManager), borrowCurrency.toTokenId(params.poolId), params.debtAmount
         );
-        console.log("params.debtAmount:%s,lendingAmount:%s,pairAmount:%s", params.debtAmount, lendingAmount, pairAmount);
-        if (repayAmount > 0) {
-            uint256 burnAmount = pairAmount + lendingAmount;
-            if (repayAmount < params.debtAmount) {
-                pairAmount = Math.mulDiv(repayAmount, pairAmount, burnAmount);
-                lendingAmount = Math.mulDiv(repayAmount, lendingAmount, burnAmount, Math.Rounding.Ceil);
-            }
-            if (lendingAmount > pairAmount) {
-                poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), lendingAmount);
-            }
-            emit Release(params.poolId, borrowCurrency, params.debtAmount, repayAmount, burnAmount, interest);
-        }
+        uint256 burnAmount = pairAmount + lendingAmount;
         int256 diff = repayAmount.toInt256() - params.debtAmount.toInt256();
-        console.log("diff:%s", diff);
-
         if (diff != 0) {
             (int256 interest0, int256 interest1, int256 lendingInterest) =
                 marginFees.computeDiff(address(this), status, params.marginForOne, diff);
             if (interest0 != 0 || interest1 != 0) {
-                console.log("interest0:%s", interest0);
-                console.log("interest1:%s", interest1);
-
                 marginLiquidity.changeLiquidity(
                     params.poolId, status.reserve0(), status.reserve1(), interest0, interest1
                 );
-                if (diff < 0) {
-                    uint256 changeAmount = interest0 < 0 ? uint256(-interest0) : uint256(-interest1);
-                    poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), changeAmount);
-                }
             }
             if (lendingInterest != 0) {
-                console.log("lendingInterest:%s", lendingInterest);
-                uint256 after2 = lendingPoolManager.balanceOf(address(lendingPoolManager), borrowTokenId);
                 lendingPoolManager.updateInterests(borrowTokenId, lendingInterest);
-                uint256 after1 = lendingPoolManager.balanceOf(address(lendingPoolManager), borrowTokenId);
-                // uint256 after2 = poolManager.balanceOf(address(lendingPoolManager), borrowCurrency.toId());
-                console.log("after balance after1:%s,after2:%s", after1, after2);
+                lendingInterest += lendingAmount.toInt256();
                 if (lendingInterest > 0) {
                     poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), uint256(lendingInterest));
+                } else {
+                    lendingPoolManager.balanceAccounts(borrowCurrency, uint256(-lendingInterest));
                 }
             }
+        } else {
+            poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), lendingAmount);
         }
+
+        emit Release(params.poolId, borrowCurrency, params.debtAmount, repayAmount, burnAmount, params.rawBorrowAmount);
     }
 
     function release(PoolStatus memory status, ReleaseParams memory params)

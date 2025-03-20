@@ -16,6 +16,8 @@ interface ILendingPoolManager is IERC6909Accrues {
     // ******************** POOL CALL ********************
     function updateInterests(uint256 id, int256 interest) external;
 
+    function balanceAccounts(Currency currency, uint256 amount) external;
+
     function mirrorIn(address receiver, PoolId poolId, Currency currency, uint256 amount)
         external
         returns (uint256 originalAmount);

@@ -28,8 +28,6 @@ import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 import {IPoolStatusManager} from "./interfaces/IPoolStatusManager.sol";
 
-import {console} from "forge-std/console.sol";
-
 contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     using SafeCast for uint256;
     using UQ112x112 for *;
@@ -262,12 +260,6 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                     marginLiquidity.getInterestReserves(pairPoolManager, poolId, status);
                 InterestBalance memory interestStatus0 = _updateInterest0(status, interestReserve0, rate0CumulativeLast);
                 if (interestStatus0.allInterest > 0) {
-                    console.log(
-                        "allInterest:%s,pairInterest:%s,lendingInterest:%s",
-                        interestStatus0.allInterest,
-                        interestStatus0.pairInterest,
-                        interestStatus0.lendingInterest
-                    );
                     if (interestStatus0.pairInterest > 0) {
                         interest0 = _updateProtocolFees(status.key.currency0, interestStatus0.pairInterest);
                         status.mirrorReserve0 += interestStatus0.pairInterest.toUint112();

@@ -20,8 +20,6 @@ import {IERC6909Accrues} from "./interfaces/external/IERC6909Accrues.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 
-import {console} from "forge-std/console.sol";
-
 contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolManager {
     using PoolIdLibrary for PoolId;
     using CurrencyExtLibrary for Currency;
@@ -192,12 +190,14 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         } else {
             incrementRatioX112Of[id] = incrementRatioX112Old.reduceRatioX112(uint256(-interest), totalSupply);
         }
-        if (interest < 0) {
-            uint256 totalSupplyAfter = balanceOf(address(this), id);
-            console.log("totalSupply:%s,diff:%s", totalSupply, totalSupplyAfter);
-            console.log("interest:%s,diff:%s", uint256(-interest), totalSupply - totalSupplyAfter);
-        }
         emit UpdateInterestRatio(id, totalSupply, interest, incrementRatioX112Old, incrementRatioX112Of[id]);
+    }
+
+    function balanceAccounts(Currency currency, uint256 amount) external onlyPairManager {
+        if (amount == 0) {
+            return;
+        }
+        poolManager.transfer(msg.sender, currency.toId(), amount);
     }
 
     function mirrorIn(address receiver, PoolId poolId, Currency currency, uint256 amount)

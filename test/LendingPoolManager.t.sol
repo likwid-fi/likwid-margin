@@ -248,7 +248,7 @@ contract LendingPoolManagerTest is DeployHelper {
         marginPositionManager.margin{value: payValue}(borrowParams);
     }
 
-    function testBorrowLevelOneAndLending() public {
+    function testBorrowAndLending() public {
         uint256 liquidity;
         PoolId poolId = nativeKey.toId();
         {
@@ -353,7 +353,7 @@ contract LendingPoolManagerTest is DeployHelper {
     }
 
     function testBalanceMirror() public {
-        testBorrowLevelOneAndLending();
+        testBorrowAndLending();
         PoolId poolId = nativeKey.toId();
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         tokenB.approve(address(lendingPoolManager), 0.001 ether);
@@ -363,7 +363,7 @@ contract LendingPoolManagerTest is DeployHelper {
     }
 
     function testBurnOneBorrow() public {
-        testBorrowLevelOneAndLending();
+        testBorrowAndLending();
         PoolId poolId = nativeKey.toId();
         uint256[4] memory beforeLiquidities = marginLiquidity.getPoolLiquidities(poolId, address(this));
         uint256 positionId = 1;
@@ -413,7 +413,7 @@ contract LendingPoolManagerTest is DeployHelper {
     }
 
     function testEarnedBurnOneBorrow() public {
-        testBorrowLevelOneAndLending();
+        testBorrowAndLending();
         PoolId poolId = nativeKey.toId();
         uint256[4] memory beforeLiquidities = marginLiquidity.getPoolLiquidities(poolId, address(this));
         uint256 positionId = 1;
@@ -463,7 +463,7 @@ contract LendingPoolManagerTest is DeployHelper {
     }
 
     function testBurnTwoBorrow() public {
-        testBorrowLevelOneAndLending();
+        testBorrowAndLending();
         PoolId poolId = nativeKey.toId();
         uint256[4] memory beforeLiquidities = marginLiquidity.getPoolLiquidities(poolId, address(this));
         uint256 positionId = 2;
@@ -538,7 +538,7 @@ contract LendingPoolManagerTest is DeployHelper {
     }
 
     function testEarnedBurnTwoBorrow() public {
-        testBorrowLevelOneAndLending();
+        testBorrowAndLending();
         PoolId poolId = nativeKey.toId();
         uint256[4] memory beforeLiquidities = marginLiquidity.getPoolLiquidities(poolId, address(this));
         uint256 positionId = 2;
@@ -590,7 +590,7 @@ contract LendingPoolManagerTest is DeployHelper {
     }
 
     function testModifyBorrow() public {
-        testBorrowLevelOneAndLending();
+        testBorrowAndLending();
         uint256 positionId = 1;
         uint256 maxAmount = marginChecker.getMaxDecrease(address(marginPositionManager), positionId);
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
