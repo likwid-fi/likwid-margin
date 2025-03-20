@@ -37,7 +37,7 @@ import {EIP20NonStandardThrowHarness} from "./mocks/EIP20NonStandardThrowHarness
 
 import {DeployHelper} from "./utils/DeployHelper.sol";
 
-contract LendingPoolManagerTest is DeployHelper {
+contract ForkTests is DeployHelper {
     using CurrencyPoolLibrary for Currency;
     using PoolStatusLibrary for *;
     using LiquidityLevel for uint8;
@@ -47,7 +47,7 @@ contract LendingPoolManagerTest is DeployHelper {
         initPoolLiquidity();
     }
 
-    function testDepositAndWithdraw() public {
+    function testForkDepositAndWithdraw() public {
         address user = vm.addr(1);
         (bool success,) = user.call{value: 1 ether}("");
         require(success, "TRANSFER_FAILED");

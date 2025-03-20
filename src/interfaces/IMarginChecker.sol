@@ -9,7 +9,6 @@ import {MarginPosition, MarginPositionVo} from "../types/MarginPosition.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
 import {MarginParams, MarginParamsVo} from "../types/MarginParams.sol";
 import {LiquidateStatus} from "../types/LiquidateStatus.sol";
-import {BurnParams} from "../types/BurnParams.sol";
 
 interface IMarginChecker {
     /// @notice Get the liquidation margin level

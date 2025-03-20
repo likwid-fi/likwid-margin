@@ -373,10 +373,8 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
             status.lendingRealReserve1 = 0;
         }
 
-        uint112 _reserve0 = status.reserve0();
-        uint112 _reserve1 = status.reserve1();
         if (marginOracle != address(0)) {
-            IMarginOracleWriter(marginOracle).write(status.key, _reserve0, _reserve1);
+            IMarginOracleWriter(marginOracle).write(status.key, status.reserve0(), status.reserve1());
         }
 
         emit Sync(

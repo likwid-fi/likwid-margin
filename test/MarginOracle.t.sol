@@ -36,7 +36,7 @@ contract MarginOracleTest is DeployHelper {
 
     function setUp() public {
         deployHookAndRouter();
-        initPoolLiquidity();
+        // initPoolLiquidity();
     }
 
     function testObserve() public {
@@ -44,5 +44,81 @@ contract MarginOracleTest is DeployHelper {
         secondsAgos[0] = 1000;
         vm.expectPartialRevert(TruncatedOracle.TargetPredatesOldestObservation.selector);
         marginOracle.observe(pairPoolManager, nativeKey.toId(), secondsAgos);
+    }
+
+    function testGetReserves() public {
+        console.log(block.number);
+        AddLiquidityParams memory params = AddLiquidityParams({
+            poolId: nativeKey.toId(),
+            level: 4,
+            amount0: 10000 * 10 ** 6,
+            amount1: 0.1 * 10 ** 8,
+            to: address(this),
+            deadline: type(uint256).max
+        });
+        pairPoolManager.addLiquidity{value: 10000 * 10 ** 6}(params);
+        (uint256 reserveBorrow, uint256 reserveMargin) =
+            marginChecker.getReserves(address(pairPoolManager), nativeKey.toId(), true);
+        console.log(reserveBorrow, reserveMargin);
+        uint256 amountIn = 10000 * 10 ** 6;
+        MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+            poolId: nativeKey.toId(),
+            zeroForOne: true,
+            to: address(this),
+            amountIn: amountIn,
+            amountOut: 0,
+            amountOutMin: 0,
+            deadline: type(uint256).max
+        });
+        swapRouter.exactInput{value: amountIn}(swapParams);
+        (reserveBorrow, reserveMargin) = marginChecker.getReserves(address(pairPoolManager), nativeKey.toId(), true);
+        console.log("%s/%s", reserveBorrow, reserveMargin);
+        skip(10);
+        (reserveBorrow, reserveMargin) = marginChecker.getReserves(address(pairPoolManager), nativeKey.toId(), true);
+        console.log("%s/%s", reserveBorrow, reserveMargin);
+        skip(1);
+        (reserveBorrow, reserveMargin) = marginChecker.getReserves(address(pairPoolManager), nativeKey.toId(), true);
+        console.log("%s/%s", reserveBorrow, reserveMargin);
+        skip(10);
+        (reserveBorrow, reserveMargin) = marginChecker.getReserves(address(pairPoolManager), nativeKey.toId(), true);
+        console.log("%s/%s", reserveBorrow, reserveMargin);
+    }
+
+    function testZeroGetReserves() public {
+        console.log(block.number);
+        AddLiquidityParams memory params = AddLiquidityParams({
+            poolId: nativeKey.toId(),
+            level: 4,
+            amount0: 10000 * 10 ** 6,
+            amount1: 0.1 * 10 ** 8,
+            to: address(this),
+            deadline: type(uint256).max
+        });
+        pairPoolManager.addLiquidity{value: 10000 * 10 ** 6}(params);
+        (uint256 reserveBorrow, uint256 reserveMargin) =
+            marginChecker.getReserves(address(pairPoolManager), nativeKey.toId(), true);
+        console.log(reserveBorrow, reserveMargin);
+        uint256 amountIn = 0.2 * 10 ** 8;
+        MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+            poolId: nativeKey.toId(),
+            zeroForOne: false,
+            to: address(this),
+            amountIn: amountIn,
+            amountOut: 0,
+            amountOutMin: 0,
+            deadline: type(uint256).max
+        });
+        swapRouter.exactInput(swapParams);
+        (reserveBorrow, reserveMargin) = marginChecker.getReserves(address(pairPoolManager), nativeKey.toId(), true);
+        console.log("%s/%s", reserveBorrow, reserveMargin);
+        skip(10);
+        (reserveBorrow, reserveMargin) = marginChecker.getReserves(address(pairPoolManager), nativeKey.toId(), true);
+        console.log("%s/%s", reserveBorrow, reserveMargin);
+        skip(1);
+        (reserveBorrow, reserveMargin) = marginChecker.getReserves(address(pairPoolManager), nativeKey.toId(), true);
+        console.log("%s/%s", reserveBorrow, reserveMargin);
+        skip(10);
+        (reserveBorrow, reserveMargin) = marginChecker.getReserves(address(pairPoolManager), nativeKey.toId(), true);
+        console.log("%s/%s", reserveBorrow, reserveMargin);
     }
 }

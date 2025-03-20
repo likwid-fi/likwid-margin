@@ -14,7 +14,6 @@ import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
 import {IPairMarginManager} from "./interfaces/IPairMarginManager.sol";
 import {IMarginChecker} from "./interfaces/IMarginChecker.sol";
 import {MarginPosition, MarginPositionVo} from "./types/MarginPosition.sol";
-import {BurnParams} from "./types/BurnParams.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {LiquidateStatus} from "./types/LiquidateStatus.sol";
 import {ReleaseParams} from "./types/ReleaseParams.sol";
@@ -425,78 +424,47 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
 
     function liquidateBurn(uint256 positionId) external returns (uint256 profit) {
         require(checker.checkValidity(msg.sender, positionId), "AUTH_ERROR");
-        MarginPosition memory _position = _positions[positionId];
-        BurnParams memory params =
-            BurnParams({poolId: _position.poolId, marginForOne: _position.marginForOne, positionIds: new uint256[](1)});
-        params.positionIds[0] = positionId;
-        return liquidateBurn(params);
-    }
-
-    function liquidateBurn(BurnParams memory params) public returns (uint256 profit) {
-        MarginPosition[] memory inPositions = new MarginPosition[](params.positionIds.length);
-        for (uint256 i = 0; i < params.positionIds.length; i++) {
-            require(checker.checkValidity(msg.sender, params.positionIds[i]), "AUTH_ERROR");
-            inPositions[i] = _positions[params.positionIds[i]];
+        (bool liquidated, uint256 borrowAmount) = checker.checkLiquidate(address(this), positionId);
+        if (!liquidated) {
+            return profit;
         }
+        MarginPosition memory _position = _positions[positionId];
         LiquidateStatus memory liquidateStatus =
-            checker.getLiquidateStatus(address(pairPoolManager), params.poolId, params.marginForOne);
-        ReleaseParams memory releaseParams = ReleaseParams({
-            poolId: params.poolId,
-            marginForOne: params.marginForOne,
+            checker.getLiquidateStatus(address(pairPoolManager), _position.poolId, _position.marginForOne);
+        ReleaseParams memory params = ReleaseParams({
+            poolId: _position.poolId,
+            marginForOne: _position.marginForOne,
             payer: address(this),
-            rawBorrowAmount: 0,
-            releaseAmount: 0,
+            debtAmount: borrowAmount,
             repayAmount: 0,
-            debtAmount: 0,
+            releaseAmount: 0,
+            rawBorrowAmount: _position.rawBorrowAmount,
             deadline: block.timestamp + 1000
         });
+
         {
-            (bool[] memory liquidatedList, uint256[] memory borrowAmountList) =
-                checker.checkLiquidate(pairPoolManager, liquidateStatus, inPositions);
-            uint256 assetAmount;
-            uint256 marginAmount;
-            for (uint256 i = 0; i < params.positionIds.length; i++) {
-                if (liquidatedList[i]) {
-                    MarginPosition memory _position = inPositions[i];
-                    releaseParams.debtAmount += borrowAmountList[i];
-                    releaseParams.rawBorrowAmount += _position.rawBorrowAmount;
-                    {
-                        uint256 realMarginAmount = lendingPoolManager.computeRealAmount(
-                            params.poolId, liquidateStatus.marginCurrency, _position.marginAmount
-                        );
-                        marginAmount += realMarginAmount;
-                        uint256 realMarginTotal = lendingPoolManager.computeRealAmount(
-                            params.poolId, liquidateStatus.marginCurrency, _position.marginTotal
-                        );
-                        assetAmount += realMarginAmount + realMarginTotal;
-                        uint256 positionId = params.positionIds[i];
-                        uint256 borrowAmount = borrowAmountList[i];
-                        uint256 oracleReserves = liquidateStatus.oracleReserves;
-                        uint256 statusReserves = liquidateStatus.statusReserves;
-                        emit Liquidate(
-                            releaseParams.poolId,
-                            msg.sender,
-                            positionId,
-                            realMarginAmount,
-                            realMarginTotal,
-                            borrowAmount,
-                            oracleReserves,
-                            statusReserves
-                        );
-                    }
-                    _burnPosition(params.positionIds[i], BurnType.LIQUIDATE);
-                }
-            }
-            if (marginAmount == 0) {
-                return profit;
-            }
+            uint256 realMarginAmount = lendingPoolManager.computeRealAmount(
+                _position.poolId, liquidateStatus.marginCurrency, _position.marginAmount
+            );
+            uint256 realMarginTotal = lendingPoolManager.computeRealAmount(
+                _position.poolId, liquidateStatus.marginCurrency, _position.marginTotal
+            );
             uint256 protocolProfit;
-            (profit, protocolProfit) = _liquidateProfit(params.poolId, liquidateStatus.marginCurrency, marginAmount);
-            releaseParams.releaseAmount = assetAmount - profit - protocolProfit;
+            (profit, protocolProfit) = _liquidateProfit(params.poolId, liquidateStatus.marginCurrency, realMarginAmount);
+            params.releaseAmount = realMarginAmount + realMarginTotal - profit - protocolProfit;
+            pairPoolManager.release(params);
+            emit Liquidate(
+                _position.poolId,
+                msg.sender,
+                positionId,
+                realMarginAmount,
+                realMarginTotal,
+                borrowAmount,
+                liquidateStatus.oracleReserves,
+                liquidateStatus.statusReserves
+            );
         }
-        if (releaseParams.releaseAmount > 0) {
-            pairPoolManager.release(releaseParams);
-        }
+        _burnPosition(positionId, BurnType.LIQUIDATE);
     }
 
     function liquidateCall(uint256 positionId) external payable returns (uint256 profit) {

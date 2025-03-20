@@ -15,7 +15,6 @@ import {PriceMath} from "./libraries/PriceMath.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {MarginPosition, MarginPositionVo} from "./types/MarginPosition.sol";
-import {BurnParams} from "./types/BurnParams.sol";
 import {IStatusBase} from "./interfaces/IStatusBase.sol";
 import {IPairMarginManager} from "./interfaces/IPairMarginManager.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";

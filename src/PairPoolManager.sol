@@ -416,7 +416,6 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         Currency borrowCurrency,
         uint256 repayAmount
     ) internal {
-        int256 diff;
         uint256 borrowTokenId = borrowCurrency.toTokenId(params.poolId);
         uint256 interest = params.debtAmount - params.rawBorrowAmount;
         if (repayAmount > interest) {
@@ -431,11 +430,9 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             if (lendingAmount > 0) {
                 poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), lendingAmount);
             }
-            diff = repayAmount.toInt256() - params.debtAmount.toInt256();
             emit Release(params.poolId, borrowCurrency, params.debtAmount, repayAmount, burnAmount, interest);
-        } else {
-            revert InsufficientLiquidityBurnt();
         }
+        int256 diff = repayAmount.toInt256() - params.debtAmount.toInt256();
         if (diff != 0) {
             (int256 interest0, int256 interest1, int256 lendingInterest) =
                 marginFees.computeDiff(status, params.marginForOne, diff);
