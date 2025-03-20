@@ -19,3 +19,4 @@ docs/
 # Certora
 .certora_internal/
 emv*
+script/LocalTests.s.sol

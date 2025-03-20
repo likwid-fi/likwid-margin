@@ -9,7 +9,6 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
 
 import {AddLiquidityParams, RemoveLiquidityParams} from "../types/LiquidityParams.sol";
-import {MarginParamsVo} from "../types/MarginParams.sol";
 import {ReleaseParams} from "../types/ReleaseParams.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
 import {IPairMarginManager} from "./IPairMarginManager.sol";
@@ -60,9 +59,6 @@ interface IPairPoolManager is IPairMarginManager {
     function getAmountOut(PoolId poolId, bool zeroForOne, uint256 amountIn) external view returns (uint256 amountOut);
 
     // ******************** HOOK CALL ********************
-    function setBalances(PoolKey calldata key) external;
-
-    function updateBalances(PoolKey calldata key) external;
 
     function initialize(PoolKey calldata key) external;
 

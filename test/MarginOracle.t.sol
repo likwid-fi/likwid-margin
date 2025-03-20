@@ -25,6 +25,7 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 
 import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol";
 
@@ -33,6 +34,7 @@ import {DeployHelper} from "./utils/DeployHelper.sol";
 
 contract MarginOracleTest is DeployHelper {
     using CurrencyPoolLibrary for *;
+    using SafeCast for uint256;
 
     function setUp() public {
         deployHookAndRouter();
@@ -40,6 +42,11 @@ contract MarginOracleTest is DeployHelper {
     }
 
     function testObserve() public {
+        int256 i = 0;
+        uint256 j = uint256(-i);
+        assertEq(j, 0);
+        int256 k = -(j.toInt256());
+        assertEq(k, 0);
         uint32[] memory secondsAgos = new uint32[](1);
         secondsAgos[0] = 1000;
         skip(10000);

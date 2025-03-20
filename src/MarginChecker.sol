@@ -82,7 +82,7 @@ contract MarginChecker is IMarginChecker, Owned {
         MarginPosition memory _position,
         uint256 closeMillionth
     ) public view returns (int256 pnlAmount) {
-        if (_position.borrowAmount == 0) {
+        if (_position.borrowAmount == 0 || closeMillionth == 0) {
             return 0;
         }
         Currency marginCurrency = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;

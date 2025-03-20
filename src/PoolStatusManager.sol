@@ -28,6 +28,8 @@ import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 import {IPoolStatusManager} from "./interfaces/IPoolStatusManager.sol";
 
+import {console} from "forge-std/console.sol";
+
 contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     using SafeCast for uint256;
     using UQ112x112 for *;
@@ -85,12 +87,19 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     }
 
     modifier onlyPoolManager() {
-        if (msg.sender != pairPoolManager) revert NotPoolManager();
+        if (!(msg.sender == pairPoolManager || msg.sender == address(IPairPoolManager(pairPoolManager).hooks()))) {
+            revert NotPoolManager();
+        }
         _;
     }
 
     modifier onlyLendingManager() {
         if (msg.sender != address(lendingPoolManager)) revert NotPoolManager();
+        _;
+    }
+
+    modifier onlyHooks() {
+        require(msg.sender == address(IPairPoolManager(pairPoolManager).hooks()), "UNAUTHORIZED");
         _;
     }
 
@@ -253,6 +262,12 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                     marginLiquidity.getInterestReserves(pairPoolManager, poolId, status);
                 InterestBalance memory interestStatus0 = _updateInterest0(status, interestReserve0, rate0CumulativeLast);
                 if (interestStatus0.allInterest > 0) {
+                    console.log(
+                        "allInterest:%s,pairInterest:%s,lendingInterest:%s",
+                        interestStatus0.allInterest,
+                        interestStatus0.pairInterest,
+                        interestStatus0.lendingInterest
+                    );
                     if (interestStatus0.pairInterest > 0) {
                         interest0 = _updateProtocolFees(status.key.currency0, interestStatus0.pairInterest);
                         status.mirrorReserve0 += interestStatus0.pairInterest.toUint112();
@@ -313,6 +328,16 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         marginOracle = _oracle;
     }
 
+    // ******************** HOOK CALL ********************
+
+    function setBalances(PoolKey calldata key) external onlyHooks {
+        setBalances(key.toId());
+    }
+
+    function updateBalances(PoolKey calldata key) external onlyHooks {
+        update(key.toId());
+    }
+
     // ******************** PAIR_POOL_MANAGER CALL ********************
 
     function initialize(PoolKey calldata key) external onlyPoolManager {
@@ -326,7 +351,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         statusStore[id] = status;
     }
 
-    function setBalances(PoolId poolId) external onlyPoolManager returns (PoolStatus memory) {
+    function setBalances(PoolId poolId) public onlyPoolManager returns (PoolStatus memory) {
         _callSet();
         PoolStatus storage status = statusStore[poolId];
         _updateInterests(status);
@@ -398,7 +423,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         _callUpdate();
     }
 
-    function update(PoolId poolId) external onlyPoolManager returns (BalanceStatus memory afterStatus) {
+    function update(PoolId poolId) public onlyPoolManager returns (BalanceStatus memory afterStatus) {
         afterStatus = update(poolId, false);
     }
 

@@ -32,9 +32,9 @@ contract MarginHook is BaseHook, Owned {
     }
 
     modifier updatePoolStatus(PoolKey calldata key) {
-        pairPoolManager.setBalances(key);
+        pairPoolManager.statusManager().setBalances(key);
         _;
-        pairPoolManager.updateBalances(key);
+        pairPoolManager.statusManager().updateBalances(key);
     }
 
     // ******************** HOOK FUNCTIONS ********************

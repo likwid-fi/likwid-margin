@@ -23,7 +23,6 @@ import {TimeLibrary} from "./libraries/TimeLibrary.sol";
 import {LiquidityLevel} from "./libraries/LiquidityLevel.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
-import {MarginPosition} from "./types/MarginPosition.sol";
 import {MarginParams, MarginParamsVo} from "./types/MarginParams.sol";
 import {ReleaseParams} from "./types/ReleaseParams.sol";
 import {BalanceStatus} from "./types/BalanceStatus.sol";
@@ -54,6 +53,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     error InsufficientLiquidityMinted();
     error InsufficientLiquidityBurnt();
     error NotPositionManager();
+    error NotAllowed();
 
     event Initialize(
         PoolId indexed id,
@@ -159,14 +159,6 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         emit Initialize(key.toId(), key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks);
     }
 
-    function setBalances(PoolKey calldata key) external onlyHooks {
-        statusManager.setBalances(key.toId());
-    }
-
-    function updateBalances(PoolKey calldata key) external onlyHooks {
-        statusManager.update(key.toId());
-    }
-
     function swap(address sender, PoolKey calldata key, IPoolManager.SwapParams calldata params)
         external
         onlyHooks
@@ -209,7 +201,6 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         ensure(params.deadline)
         returns (uint256 liquidity)
     {
-        require(params.amount0 > 0 && params.amount1 > 0, "AMOUNT_ERR");
         PoolStatus memory status = statusManager.setBalances(params.poolId);
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
         uint256 amount0In;
@@ -253,14 +244,14 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         ensure(params.deadline)
         returns (uint256 amount0, uint256 amount1)
     {
-        require(params.liquidity > 0 && params.level > 0, "LIQUIDITY_ERR");
         PoolStatus memory status = statusManager.setBalances(params.poolId);
-        require(status.blockTimestampLast.getTimeElapsed() > 0, "NOT_ALLOWED");
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
         {
             (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
             (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) = marginLiquidity.getSupplies(uPoolId);
-            params.liquidity = marginLiquidity.removeLiquidity(msg.sender, uPoolId, params.level, params.liquidity);
+            params.liquidity = marginLiquidity.removeLiquidity(
+                msg.sender, uPoolId, params.level, params.liquidity, status.blockTimestampLast
+            );
             uint256 maxReserve0 = status.realReserve0;
             uint256 maxReserve1 = status.realReserve1;
             amount0 = Math.mulDiv(params.liquidity, _reserve0, _totalSupply);
@@ -419,31 +410,48 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     ) internal {
         uint256 borrowTokenId = borrowCurrency.toTokenId(params.poolId);
         uint256 interest = params.debtAmount - params.rawBorrowAmount;
-        if (repayAmount > interest) {
-            // burn mirror token
-            (uint256 pairAmount, uint256 lendingAmount) = mirrorTokenManager.burn(
-                address(lendingPoolManager), borrowCurrency.toTokenId(params.poolId), params.debtAmount
-            );
+        console.log("repayAmount:%s,interest:%s", repayAmount, interest);
+        // burn mirror token
+        (uint256 pairAmount, uint256 lendingAmount) = mirrorTokenManager.burn(
+            address(lendingPoolManager), borrowCurrency.toTokenId(params.poolId), params.debtAmount
+        );
+        console.log("params.debtAmount:%s,lendingAmount:%s,pairAmount:%s", params.debtAmount, lendingAmount, pairAmount);
+        if (repayAmount > 0) {
             uint256 burnAmount = pairAmount + lendingAmount;
             if (repayAmount < params.debtAmount) {
-                lendingAmount = Math.mulDiv(repayAmount - interest, lendingAmount, burnAmount, Math.Rounding.Ceil);
+                pairAmount = Math.mulDiv(repayAmount, pairAmount, burnAmount);
+                lendingAmount = Math.mulDiv(repayAmount, lendingAmount, burnAmount, Math.Rounding.Ceil);
             }
-            if (lendingAmount > 0) {
+            if (lendingAmount > pairAmount) {
                 poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), lendingAmount);
             }
             emit Release(params.poolId, borrowCurrency, params.debtAmount, repayAmount, burnAmount, interest);
         }
         int256 diff = repayAmount.toInt256() - params.debtAmount.toInt256();
+        console.log("diff:%s", diff);
+
         if (diff != 0) {
             (int256 interest0, int256 interest1, int256 lendingInterest) =
-                marginFees.computeDiff(status, params.marginForOne, diff);
+                marginFees.computeDiff(address(this), status, params.marginForOne, diff);
             if (interest0 != 0 || interest1 != 0) {
+                console.log("interest0:%s", interest0);
+                console.log("interest1:%s", interest1);
+
                 marginLiquidity.changeLiquidity(
                     params.poolId, status.reserve0(), status.reserve1(), interest0, interest1
                 );
+                if (diff < 0) {
+                    uint256 changeAmount = interest0 < 0 ? uint256(-interest0) : uint256(-interest1);
+                    poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), changeAmount);
+                }
             }
             if (lendingInterest != 0) {
+                console.log("lendingInterest:%s", lendingInterest);
+                uint256 after2 = lendingPoolManager.balanceOf(address(lendingPoolManager), borrowTokenId);
                 lendingPoolManager.updateInterests(borrowTokenId, lendingInterest);
+                uint256 after1 = lendingPoolManager.balanceOf(address(lendingPoolManager), borrowTokenId);
+                // uint256 after2 = poolManager.balanceOf(address(lendingPoolManager), borrowCurrency.toId());
+                console.log("after balance after1:%s,after2:%s", after1, after2);
                 if (lendingInterest > 0) {
                     poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), uint256(lendingInterest));
                 }
@@ -474,7 +482,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         if (params.releaseAmount > 0) {
             if (repayAmount == 0) {
                 (repayAmount,,) =
-                    marginFees.getAmountOut(address(this), status, params.marginForOne, params.releaseAmount);
+                    marginFees.getAmountOut(address(this), status, !params.marginForOne, params.releaseAmount);
             }
 
             // release margin

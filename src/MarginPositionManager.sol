@@ -293,7 +293,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             rawBorrowAmount: 0,
             deadline: deadline
         });
-        params.rawBorrowAmount = uint256(_position.rawBorrowAmount) * repayAmount / _position.borrowAmount;
+        params.rawBorrowAmount = Math.mulDiv(_position.rawBorrowAmount, repayAmount, _position.borrowAmount);
         uint256 sendValue = borrowCurrency.checkAmount(repayAmount);
         pairPoolManager.release{value: sendValue}(_status, params);
         if (msg.value > sendValue) {

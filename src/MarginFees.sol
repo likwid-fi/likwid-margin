@@ -146,17 +146,20 @@ contract MarginFees is IMarginFees, Owned {
         _reserve1 = status.realReserve1 + status.mirrorReserve1;
     }
 
-    function computeDiff(PoolStatus memory status, bool marginForOne, int256 diff)
+    function computeDiff(address pairPoolManager, PoolStatus memory status, bool marginForOne, int256 diff)
         external
         view
         returns (int256 interest0, int256 interest1, int256 lendingInterest)
     {
+        if (diff == 0) {
+            return (interest0, interest1, lendingInterest);
+        }
         uint256 diffUint = diff > 0 ? uint256(diff) : uint256(-diff);
-        (uint256 interestReserve0, uint256 interestReserve1) =
-            IPairPoolManager(msg.sender).marginLiquidity().getInterestReserves(msg.sender, status.key.toId(), status);
-        uint256 pairBorrow = marginForOne ? interestReserve0 : interestReserve1;
+        (uint256 interestReserve0, uint256 interestReserve1) = IPairPoolManager(pairPoolManager).marginLiquidity()
+            .getInterestReserves(pairPoolManager, status.key.toId(), status);
+        uint256 pairReserve = marginForOne ? interestReserve0 : interestReserve1;
         uint256 lendingReserve = marginForOne ? status.lendingReserve0() : status.lendingReserve1();
-        uint256 lendingDiff = Math.mulDiv(lendingReserve, diffUint, pairBorrow + lendingReserve);
+        uint256 lendingDiff = Math.mulDiv(diffUint, lendingReserve, pairReserve + lendingReserve);
         uint256 pairDiff = diffUint - lendingDiff;
         if (diff > 0) {
             if (marginForOne) {
