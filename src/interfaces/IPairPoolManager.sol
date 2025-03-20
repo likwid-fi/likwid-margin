@@ -75,7 +75,7 @@ interface IPairPoolManager is IPairMarginManager {
             uint256 unspecifiedAmount,
             uint24 swapFee
         );
-    // ******************** EXTERNAL CALL ********************
+    // ******************** USER CALL ********************
 
     /// @notice Add liquidity to a pool
     /// @param params The parameters for the add liquidity hook
@@ -90,16 +90,7 @@ interface IPairPoolManager is IPairMarginManager {
         external
         returns (uint256 amount0, uint256 amount1);
 
-    /// @notice Margin
-    /// @param sender The address of sender
-    /// @param params The parameters for the margin hook
-    /// @return The updated parameters for the margin hook
-    function margin(address sender, MarginParamsVo memory params) external payable returns (MarginParamsVo memory);
-
-    /// @notice Release
-    /// @param params The parameters for the release hook
-    /// @return The amount of tokens repaid
-    function release(ReleaseParams memory params) external payable returns (uint256);
+    // ******************** EXTERNAL FUNCTIONS ********************
 
     function mirrorInRealOut(PoolId poolId, Currency currency, uint256 amount) external returns (bool success);
 

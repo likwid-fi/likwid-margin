@@ -84,7 +84,7 @@ contract MarginFees is IMarginFees, Owned {
         _fee = status.key.fee;
         IMarginOracleReader oracleReader = IPairPoolManager(_poolManager).marginOracleReader();
         if (address(oracleReader) != address(0)) {
-            (uint224 oracleReserves,) = oracleReader.observeNow(IPairPoolManager(_poolManager), status.key.toId());
+            (uint224 oracleReserves,) = oracleReader.observeNow(IPairPoolManager(_poolManager), status);
             if (oracleReserves > 0) {
                 uint256 degree = _getPriceDegree(oracleReserves, status);
                 if (degree > dynamicFeeMinDegree) {
@@ -239,7 +239,7 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     function getBorrowRateCumulativeLast(PoolStatus memory status)
-        external
+        public
         view
         returns (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast)
     {
@@ -252,7 +252,6 @@ contract MarginFees is IMarginFees, Owned {
         rate1CumulativeLast = Math.mulDiv(status.rate1CumulativeLast, rate1LastYear, PerLibrary.TRILLION_YEAR_SECONDS);
     }
 
-    /// @inheritdoc IMarginFees
     function getBorrowRateCumulativeLast(address pool, PoolId poolId, bool marginForOne)
         external
         view

@@ -107,7 +107,7 @@ contract LendingPoolManagerTest is DeployHelper {
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
-        vm.warp(3600 * 10);
+        skip(3600 * 10);
         borrowAmount = marginPositionManager.getPosition(positionId).borrowAmount;
         console.log("borrowAmount:%s", borrowAmount);
         marginPositionManager.close(positionId, PerLibrary.ONE_MILLION, 0, block.timestamp + 1000);
@@ -132,7 +132,7 @@ contract LendingPoolManagerTest is DeployHelper {
             deadline: block.timestamp + 1000
         });
         marginPositionManager.margin{value: payValue}(params);
-        vm.warp(3600 * 10);
+        skip(3600 * 10);
         uint256 borrowRate = marginFees.getBorrowRate(address(pairPoolManager), nativeKey.toId(), false);
         apr = lendingPoolManager.getLendingAPR(nativeKey.toId(), nativeKey.currency1, 0);
         PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
@@ -211,7 +211,7 @@ contract LendingPoolManagerTest is DeployHelper {
             deadline: type(uint256).max
         });
         vm.roll(100);
-        vm.warp(3600 * 2);
+        skip(3600 * 2);
         pairPoolManager.removeLiquidity(removeParams);
         status = pairPoolManager.getStatus(nativeKey.toId());
         printPoolStatus(status);
@@ -262,9 +262,7 @@ contract LendingPoolManagerTest is DeployHelper {
             liquidity: liquidity,
             deadline: type(uint256).max
         });
-        vm.roll(100);
-        // vm.rollFork(block.number + 1);
-        vm.warp(3600 * 2);
+        skip(3600 * 2);
         pairPoolManager.removeLiquidity(removeParams);
         status = pairPoolManager.getStatus(nativeKey.toId());
         printPoolStatus(status);
@@ -360,5 +358,26 @@ contract LendingPoolManagerTest is DeployHelper {
         MarginPosition memory position = marginPositionManager.getPosition(positionId);
         assertEq(position.marginTotal, 0);
         console.log("maxAmount:%s", maxAmount);
+    }
+
+    function testOnlyBorrow() public {
+        uint256 positionId;
+        uint256 borrowAmount;
+        uint256 payValue = 0.001 ether;
+        address user0 = address(this);
+        MarginParams memory params = MarginParams({
+            poolId: nativeKey.toId(),
+            marginForOne: false,
+            leverage: 3,
+            marginAmount: payValue,
+            borrowAmount: 0,
+            borrowMaxAmount: 0,
+            recipient: user0,
+            deadline: block.timestamp + 1000
+        });
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        skip(3600 * 10);
+        borrowAmount = marginPositionManager.getPosition(positionId).borrowAmount;
+        console.log("borrowAmount:%s", borrowAmount);
     }
 }

@@ -117,7 +117,7 @@ interface IMarginChecker {
         view
         returns (uint256 reserveBorrow, uint256 reserveMargin);
 
-    function getLiquidateStatus(address pairPoolManager, PoolId poolId, bool marginForOne)
+    function getLiquidateStatus(address pairPoolManager, PoolStatus memory _status, bool marginForOne)
         external
         view
         returns (LiquidateStatus memory liquidateStatus);

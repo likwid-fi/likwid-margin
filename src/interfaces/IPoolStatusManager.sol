@@ -26,6 +26,8 @@ interface IPoolStatusManager is IStatusBase {
 
     function updateInterests(PoolId poolId) external returns (PoolStatus memory _status);
 
+    function storeBalances(PoolKey memory key) external;
+
     function update(PoolId poolId, bool fromMargin) external returns (BalanceStatus memory afterStatus);
 
     function update(PoolId poolId) external returns (BalanceStatus memory afterStatus);

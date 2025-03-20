@@ -23,7 +23,6 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
     using PoolStatusLibrary for PoolStatus;
 
     mapping(address => bool) public poolManagers;
-    mapping(uint256 => uint256) private liquidityBlockStore;
     uint24 private maxSliding = 5000; // 0.5%
     uint256 public level2InterestRatioX112 = UQ112x112.Q112;
     uint256 public level3InterestRatioX112 = UQ112x112.Q112;
@@ -197,7 +196,6 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         onlyPoolManager
         returns (uint256 liquidity)
     {
-        liquidityBlockStore[id] = block.number;
         uint256 uPoolId = id.getPoolId();
         uint256 levelId = level.getLevelId(id);
         address pool = msg.sender;
@@ -222,7 +220,6 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         onlyPoolManager
         returns (uint256 liquidity)
     {
-        require(liquidityBlockStore[id] < block.number, "NOT_ALLOWED");
         uint256 uPoolId = id.getPoolId();
         uint256 levelId = level.getLevelId(id);
         address pool = msg.sender;

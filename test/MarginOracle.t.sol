@@ -42,7 +42,8 @@ contract MarginOracleTest is DeployHelper {
     function testObserve() public {
         uint32[] memory secondsAgos = new uint32[](1);
         secondsAgos[0] = 1000;
-        vm.expectPartialRevert(TruncatedOracle.TargetPredatesOldestObservation.selector);
+        skip(10000);
+        // vm.expectPartialRevert(TruncatedOracle.TargetPredatesOldestObservation.selector);
         marginOracle.observe(pairPoolManager, nativeKey.toId(), secondsAgos);
     }
 

@@ -6,6 +6,8 @@ import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 
 import {TruncatedOracle} from "./libraries/TruncatedOracle.sol";
+import {PoolStatus} from "./types/PoolStatus.sol";
+import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
@@ -13,6 +15,7 @@ import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
 contract MarginOracle {
     using PoolIdLibrary for PoolKey;
     using TruncatedOracle for TruncatedOracle.Observation[65535];
+    using PoolStatusLibrary for PoolStatus;
 
     struct ObservationState {
         uint16 index;
@@ -72,6 +75,21 @@ contract MarginOracle {
                 uint112(reserve1),
                 states[hook][id].index,
                 states[hook][id].cardinality
+            );
+        }
+    }
+
+    function observeNow(IPairPoolManager poolManager, PoolStatus memory status)
+        external
+        view
+        returns (uint224 reserves, uint256 price1CumulativeLast)
+    {
+        address hook = address(poolManager.hooks());
+        PoolId id = status.key.toId();
+        (uint112 reserve0, uint112 reserve1) = (status.reserve0(), status.reserve1());
+        if (reserve0 > 0 && reserve1 > 0) {
+            return observations[hook][id].observeSingle(
+                _blockTimestamp(), 0, reserve0, reserve1, states[hook][id].index, states[hook][id].cardinality
             );
         }
     }

@@ -342,6 +342,13 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         return status;
     }
 
+    function storeBalances(PoolKey memory key) external onlyPoolManager {
+        _callSet();
+        BalanceStatus memory balanceStatus = _getBalances(key);
+        BALANCE_0_SLOT.asUint256().tstore(balanceStatus.balance0);
+        BALANCE_1_SLOT.asUint256().tstore(balanceStatus.balance1);
+    }
+
     function update(PoolId poolId, bool fromMargin) public onlyPoolManager returns (BalanceStatus memory afterStatus) {
         PoolStatus storage status = statusStore[poolId];
         // save margin price before changed

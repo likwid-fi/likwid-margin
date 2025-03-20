@@ -37,6 +37,8 @@ import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 
+import {console} from "forge-std/console.sol";
+
 contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     using UQ112x112 for *;
     using SafeCast for uint256;
@@ -253,6 +255,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     {
         require(params.liquidity > 0 && params.level > 0, "LIQUIDITY_ERR");
         PoolStatus memory status = statusManager.setBalances(params.poolId);
+        require(status.blockTimestampLast.getTimeElapsed() > 0, "NOT_ALLOWED");
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
         {
             (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
@@ -320,26 +323,30 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
 
     // ******************** MARGIN FUNCTIONS ********************
 
-    /// @inheritdoc IPairPoolManager
-    function margin(address sender, MarginParamsVo memory paramsVo)
+    function setBalances(PoolId poolId) external onlyPosition returns (PoolStatus memory _status) {
+        _status = statusManager.setBalances(poolId);
+    }
+
+    function margin(address sender, PoolStatus memory status, MarginParamsVo memory paramsVo)
         external
         payable
         onlyPosition
         returns (MarginParamsVo memory)
     {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleMargin, (msg.sender, sender, paramsVo)));
+        bytes memory result =
+            poolManager.unlock(abi.encodeCall(this.handleMargin, (msg.sender, sender, status, paramsVo)));
         (paramsVo.params.marginAmount, paramsVo.marginTotal, paramsVo.params.borrowAmount) =
             abi.decode(result, (uint256, uint256, uint256));
         return paramsVo;
     }
 
-    function handleMargin(address _positionManager, address sender, MarginParamsVo calldata paramsVo)
-        external
-        selfOnly
-        returns (uint256 marginAmount, uint256 marginWithoutFee, uint256 borrowAmount)
-    {
+    function handleMargin(
+        address _positionManager,
+        address sender,
+        PoolStatus memory status,
+        MarginParamsVo calldata paramsVo
+    ) external selfOnly returns (uint256 marginAmount, uint256 marginWithoutFee, uint256 borrowAmount) {
         MarginParams memory params = paramsVo.params;
-        PoolStatus memory status = statusManager.setBalances(params.poolId);
         (Currency borrowCurrency, Currency marginCurrency) = params.marginForOne
             ? (status.key.currency0, status.key.currency1)
             : (status.key.currency1, status.key.currency0);
@@ -388,7 +395,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             bool exchangeBalance1 = balanceStatus.mirrorBalance1 > 0
                 && balanceStatus.lendingTotalBalance1 > balanceStatus.lendingMirrorBalance0;
             if (exchangeBalance0 || exchangeBalance1) {
-                statusManager.setBalances(params.poolId);
+                statusManager.storeBalances(status.key);
                 if (exchangeBalance0) {
                     lendingPoolManager.mirrorInRealOut(
                         params.poolId, status.key.currency0, balanceStatus.mirrorBalance0
@@ -402,12 +409,6 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
                 statusManager.update(params.poolId, false);
             }
         }
-    }
-
-    /// @inheritdoc IPairPoolManager
-    function release(ReleaseParams memory params) external payable onlyPosition returns (uint256) {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRelease, (params)));
-        return abi.decode(result, (uint256));
     }
 
     function _releaseToPool(
@@ -450,8 +451,21 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         }
     }
 
-    function handleRelease(ReleaseParams calldata params) external selfOnly returns (uint256) {
-        PoolStatus memory status = statusManager.setBalances(params.poolId);
+    function release(PoolStatus memory status, ReleaseParams memory params)
+        external
+        payable
+        onlyPosition
+        returns (uint256)
+    {
+        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRelease, (status, params)));
+        return abi.decode(result, (uint256));
+    }
+
+    function handleRelease(PoolStatus memory status, ReleaseParams calldata params)
+        external
+        selfOnly
+        returns (uint256)
+    {
         (Currency borrowCurrency, Currency marginCurrency) = params.marginForOne
             ? (status.key.currency0, status.key.currency1)
             : (status.key.currency1, status.key.currency0);
@@ -474,6 +488,8 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         statusManager.update(params.poolId, true);
         return params.repayAmount;
     }
+
+    // ******************** EXTERNAL FUNCTIONS ********************
 
     function mirrorInRealOut(PoolId poolId, Currency currency, uint256 amount)
         external

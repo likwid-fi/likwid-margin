@@ -5,9 +5,15 @@ import {PoolId} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 import {IPairPoolManager} from "./IPairPoolManager.sol";
+import {PoolStatus} from "../types/PoolStatus.sol";
 
 interface IMarginOracleReader {
     function observeNow(IPairPoolManager poolManager, PoolId id)
+        external
+        view
+        returns (uint224 reserves, uint256 price1CumulativeLast);
+
+    function observeNow(IPairPoolManager poolManager, PoolStatus memory status)
         external
         view
         returns (uint224 reserves, uint256 price1CumulativeLast);

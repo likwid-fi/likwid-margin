@@ -164,6 +164,7 @@ contract PairPoolManagerTest is DeployHelper {
         RemoveLiquidityParams memory removeParams =
             RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
         vm.roll(100);
+        skip(100);
         pairPoolManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
@@ -191,6 +192,7 @@ contract PairPoolManagerTest is DeployHelper {
         RemoveLiquidityParams memory removeParams =
             RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
         vm.roll(100);
+        skip(100);
         pairPoolManager.removeLiquidity(removeParams);
         uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BOTH_MARGIN.getLevelId(uPoolId));
         assertEq(liquidityHalf, liquidity - liquidity / 2);
@@ -241,6 +243,7 @@ contract PairPoolManagerTest is DeployHelper {
             RemoveLiquidityParams memory params =
                 RemoveLiquidityParams({poolId: poolId, liquidity: liquidity, level: 4, deadline: type(uint256).max});
             vm.roll(100);
+            skip(100);
             pairPoolManager.removeLiquidity(params);
             vm.stopPrank();
         }
