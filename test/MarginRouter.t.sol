@@ -125,7 +125,7 @@ contract MarginRouterTest is DeployHelper {
         uint256 balanceA = tokenA.balanceOf(user);
         uint256 balanceB = tokenB.balanceOf(user);
         MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
-            poolId: key.toId(),
+            poolId: tokensKey.toId(),
             zeroForOne: true,
             to: user,
             amountIn: amountIn,
@@ -182,6 +182,20 @@ contract MarginRouterTest is DeployHelper {
         assertEq(amountIn, _balance0 - balance0);
         assertEq(amountOut, _balanceUSDT - balanceUSDT);
         assertEq(amountOut, balance1 - _balance1);
+    }
+
+    function testSwapBalance() public {
+        uint256 currencyId = Currency.wrap(address(tokenUSDT)).toId();
+        PoolId poolId = usdtKey.toId();
+        uint256 balanceUSDT = manager.balanceOf(address(pairPoolManager), currencyId);
+        PoolStatus memory status = poolStatusManager.getStatus(poolId);
+        assertEq(balanceUSDT, status.realReserve1);
+        for (uint256 i = 0; i < 100; i++) {
+            test_hook_swap_usdts();
+            balanceUSDT = manager.balanceOf(address(pairPoolManager), currencyId);
+            status = poolStatusManager.getStatus(poolId);
+            assertEq(balanceUSDT, status.realReserve1);
+        }
     }
 
     function testSwapMirror() public {

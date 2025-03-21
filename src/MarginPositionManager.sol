@@ -418,11 +418,11 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         }
     }
 
-    function liquidateBurn(uint256 positionId) external returns (uint256 profit) {
+    function liquidateBurn(uint256 positionId) external returns (uint256 profit, uint256 repayAmount) {
         require(checker.checkValidity(msg.sender, positionId), "AUTH_ERROR");
         (bool liquidated, uint256 borrowAmount) = checker.checkLiquidate(address(this), positionId);
         if (!liquidated) {
-            return profit;
+            return (profit, repayAmount);
         }
         MarginPosition memory _position = _positions[positionId];
         PoolStatus memory _status = pairPoolManager.setBalances(_position.poolId);
@@ -449,7 +449,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             uint256 protocolProfit;
             (profit, protocolProfit) = _liquidateProfit(params.poolId, liquidateStatus.marginCurrency, realMarginAmount);
             params.releaseAmount = realMarginAmount + realMarginTotal - profit - protocolProfit;
-            pairPoolManager.release(_status, params);
+            repayAmount = pairPoolManager.release(_status, params);
             emit Liquidate(
                 _position.poolId,
                 msg.sender,

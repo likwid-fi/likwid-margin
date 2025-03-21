@@ -8,6 +8,7 @@ import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 // Local
 import {ERC6909Accrues} from "./base/ERC6909Accrues.sol";
 import {LiquidityLevel} from "./libraries/LiquidityLevel.sol";
+import {TimeLibrary} from "./libraries/TimeLibrary.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {PoolStatus, PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
@@ -20,6 +21,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
     using LiquidityLevel for *;
     using UQ112x112 for *;
     using PerLibrary for *;
+    using TimeLibrary for uint32;
     using PoolStatusLibrary for PoolStatus;
 
     error NotAllowed();
@@ -29,6 +31,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
     uint256 public level2InterestRatioX112 = UQ112x112.Q112;
     uint256 public level3InterestRatioX112 = UQ112x112.Q112;
     uint256 public level4InterestRatioX112 = UQ112x112.Q112;
+    mapping(uint256 => uint32) public datetimeStore;
 
     constructor(address initialOwner) Owned(initialOwner) {}
 
@@ -209,6 +212,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         onlyPoolManager
         returns (uint256 liquidity)
     {
+        datetimeStore[id] = uint32(block.timestamp % 2 ** 32);
         uint256 uPoolId = id.getPoolId();
         uint256 levelId = level.getLevelId(id);
         address pool = msg.sender;
@@ -228,13 +232,12 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         }
     }
 
-    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount, uint32 statusLastUpdated)
+    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount)
         external
         onlyPoolManager
         returns (uint256 liquidity)
     {
-        uint32 blockTS = uint32(block.timestamp % 2 ** 32);
-        if (statusLastUpdated == blockTS) {
+        if (datetimeStore[id].getTimeElapsed() < 30) {
             revert NotAllowed();
         }
         uint256 uPoolId = id.getPoolId();

@@ -193,6 +193,20 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         emit UpdateInterestRatio(id, totalSupply, interest, incrementRatioX112Old, incrementRatioX112Of[id]);
     }
 
+    function updateProtocolInterests(PoolId poolId, Currency currency, uint256 interest)
+        external
+        onlyStatusManager
+        returns (uint256 originalAmount)
+    {
+        if (interest == 0) {
+            return originalAmount;
+        }
+        uint256 id = currency.toTokenId(poolId);
+        mirrorTokenManager.mintInStatus(address(this), id, interest);
+        originalAmount = _mintReturn(owner, id, interest);
+        emit Deposit(poolId, currency, msg.sender, owner, interest, originalAmount, incrementRatioX112Of[id]);
+    }
+
     function balanceAccounts(Currency currency, uint256 amount) external onlyPairManager {
         if (amount == 0) {
             return;
@@ -289,12 +303,16 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     {
         uint256 id = currency.toTokenId(poolId);
         uint256 balance = poolManager.balanceOf(address(this), currency.toId());
+        uint256 realAmount = amount;
         if (balance < amount) {
-            bool success = pairPoolManager.mirrorInRealOut(poolId, currency, amount - balance);
+            uint256 mirrorBalance = mirrorTokenManager.balanceOf(address(this), id);
+            uint256 exchangeAmount = Math.min(amount - balance, mirrorBalance);
+            bool success = pairPoolManager.mirrorInRealOut(poolId, currency, exchangeAmount);
             require(success, "NOT_ENOUGH_RESERVE");
+            realAmount = balance + exchangeAmount;
         }
-        currency.settle(poolManager, address(this), amount, true);
-        currency.take(poolManager, recipient, amount, false);
+        currency.settle(poolManager, address(this), realAmount, true);
+        currency.take(poolManager, recipient, realAmount, false);
         uint256 originalAmount = _burnReturn(sender, id, amount);
         emit Withdraw(poolId, currency, msg.sender, recipient, amount, originalAmount, incrementRatioX112Of[id]);
     }

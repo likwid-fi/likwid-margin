@@ -104,6 +104,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         lendingPoolManager = _lendingPoolManager;
         marginLiquidity = _marginLiquidity;
         marginFees = _marginFees;
+        poolManager.setOperator(address(lendingPoolManager), true);
         mirrorTokenManager.setOperator(address(lendingPoolManager), true);
     }
 
@@ -247,9 +248,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         {
             (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
             (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) = marginLiquidity.getSupplies(uPoolId);
-            params.liquidity = marginLiquidity.removeLiquidity(
-                msg.sender, uPoolId, params.level, params.liquidity, status.blockTimestampLast
-            );
+            params.liquidity = marginLiquidity.removeLiquidity(msg.sender, uPoolId, params.level, params.liquidity);
             uint256 maxReserve0 = status.realReserve0;
             uint256 maxReserve1 = status.realReserve1;
             amount0 = Math.mulDiv(params.liquidity, _reserve0, _totalSupply);
@@ -343,12 +342,10 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         // transfer marginAmount to lendingPoolManager
         marginCurrency.settle(poolManager, sender, params.marginAmount, false);
         marginCurrency.take(poolManager, address(this), params.marginAmount, true);
-        poolManager.approve(address(lendingPoolManager), marginCurrency.toId(), params.marginAmount);
         marginAmount = lendingPoolManager.realIn(_positionManager, params.poolId, marginCurrency, params.marginAmount);
         if (params.leverage > 0) {
             (marginWithoutFee, marginFeeAmount, borrowAmount) = marginFees.getMarginBorrow(status, params);
             // transfer marginTotal to lendingPoolManager
-            poolManager.approve(address(lendingPoolManager), marginCurrency.toId(), marginWithoutFee);
             marginWithoutFee =
                 lendingPoolManager.realIn(_positionManager, params.poolId, marginCurrency, marginWithoutFee);
         } else {
@@ -472,7 +469,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         }
         _releaseToPool(params, status, borrowCurrency, repayAmount);
         statusManager.update(params.poolId, true);
-        return params.repayAmount;
+        return repayAmount;
     }
 
     // ******************** EXTERNAL FUNCTIONS ********************

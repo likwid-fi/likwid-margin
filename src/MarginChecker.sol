@@ -31,7 +31,6 @@ contract MarginChecker is IMarginChecker, Owned {
 
     uint24 public liquidationMarginLevel = 1100000; // 110%
     uint24 public minMarginLevel = 1170000; // 117%
-    uint256 public constant ONE_MILLION = 10 ** 6;
     uint24 callerProfit = 10 ** 4;
     uint24 protocolProfit = 0;
     uint24[] leverageThousandths = [380, 200, 100, 40, 9];

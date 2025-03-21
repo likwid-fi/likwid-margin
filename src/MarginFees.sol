@@ -305,11 +305,11 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     /// @inheritdoc IMarginFees
-    function collectProtocolFees(address pool, address recipient, Currency currency, uint256 amount)
+    function collectProtocolFees(address poolManager, address recipient, Currency currency, uint256 amount)
         external
         onlyOwner
         returns (uint256)
     {
-        return IPairPoolManager(pool).collectProtocolFees(recipient, currency, amount);
+        return IPairPoolManager(poolManager).collectProtocolFees(recipient, currency, amount);
     }
 }

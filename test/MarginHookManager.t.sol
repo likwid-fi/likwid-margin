@@ -145,9 +145,9 @@ contract PairPoolManagerTest is DeployHelper {
     function test_hook_liquidity_tokens() public {
         uint256 amount0 = 1 ether;
         uint256 amount1 = 1 ether;
-        PoolId poolId = key.toId();
+        PoolId poolId = tokensKey.toId();
         AddLiquidityParams memory params = AddLiquidityParams({
-            poolId: key.toId(),
+            poolId: tokensKey.toId(),
             amount0: amount0,
             amount1: amount1,
             to: address(this),

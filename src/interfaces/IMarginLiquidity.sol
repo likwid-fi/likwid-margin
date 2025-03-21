@@ -11,7 +11,7 @@ interface IMarginLiquidity is IERC6909Accrues {
         external
         returns (uint256 liquidity);
 
-    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount, uint32 statusLastUpdated)
+    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount)
         external
         returns (uint256 liquidity);
 
