@@ -33,12 +33,12 @@ interface IMarginLiquidity is IERC6909Accrues {
         returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1);
 
     /// Get the supplies of pool status
-    /// @param pool The address of pool manager
+    /// @param poolManager The address of pool manager
     /// @param poolId The pool id
     /// @return totalSupply The total supply
     /// @return retainSupply0 The level1+level3 supply(can't mirror x)
     /// @return retainSupply1 The level1+level2 supply(can't mirror y)
-    function getPoolSupplies(address pool, PoolId poolId)
+    function getPoolSupplies(address poolManager, PoolId poolId)
         external
         view
         returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1);

@@ -58,7 +58,6 @@ contract DeployHelper is Test {
 
     MockERC20 tokenA;
     MockERC20 tokenB;
-    MockERC20 token;
     EIP20NonStandardThrowHarness tokenUSDT;
 
     PoolManager manager;
@@ -168,6 +167,18 @@ contract DeployHelper is Test {
             poolId: nativeKey.toId(),
             level: 4,
             amount0: 1 ether,
+            amount1: 10 ether,
+            to: address(this),
+            deadline: type(uint256).max
+        });
+        pairPoolManager.addLiquidity{value: 1 ether}(params);
+    }
+
+    function initTokensKey() internal {
+        AddLiquidityParams memory params = AddLiquidityParams({
+            poolId: tokensKey.toId(),
+            level: 4,
+            amount0: 10 ether,
             amount1: 10 ether,
             to: address(this),
             deadline: type(uint256).max
