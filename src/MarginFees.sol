@@ -105,42 +105,6 @@ contract MarginFees is IMarginFees, Owned {
         }
     }
 
-    // given an input amount of an asset and pair reserve, returns the maximum output amount of the other asset
-    function getAmountOut(address _poolManager, PoolStatus memory status, bool zeroForOne, uint256 amountIn)
-        external
-        view
-        returns (uint256 amountOut, uint24 fee, uint256 feeAmount)
-    {
-        require(amountIn > 0, "INSUFFICIENT_INPUT_AMOUNT");
-        (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
-        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
-        require(reserveIn > 0 && reserveOut > 0, " INSUFFICIENT_LIQUIDITY");
-        fee = dynamicFee(_poolManager, status);
-        uint256 amountInWithoutFee;
-        (amountInWithoutFee, feeAmount) = fee.deduct(amountIn);
-        uint256 numerator = amountInWithoutFee * reserveOut;
-        uint256 denominator = reserveIn + amountInWithoutFee;
-        amountOut = numerator / denominator;
-    }
-
-    // given an output amount of an asset and pair reserve, returns a required input amount of the other asset
-    function getAmountIn(address _poolManager, PoolStatus memory status, bool zeroForOne, uint256 amountOut)
-        public
-        view
-        returns (uint256 amountIn, uint24 fee, uint256 feeAmount)
-    {
-        require(amountOut > 0, "INSUFFICIENT_OUTPUT_AMOUNT");
-        (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
-        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
-        require(reserveIn > 0 && reserveOut > 0, "INSUFFICIENT_LIQUIDITY");
-        require(amountOut < reserveOut, "OUTPUT_AMOUNT_OVERFLOW");
-        fee = dynamicFee(_poolManager, status);
-        uint256 numerator = reserveIn * amountOut;
-        uint256 denominator = (reserveOut - amountOut);
-        uint256 amountInWithoutFee = (numerator / denominator) + 1;
-        (amountIn, feeAmount) = fee.attach(amountInWithoutFee);
-    }
-
     function _getReserves(PoolStatus memory status) internal pure returns (uint256 _reserve0, uint256 _reserve1) {
         _reserve0 = status.realReserve0 + status.mirrorReserve0;
         _reserve1 = status.realReserve1 + status.mirrorReserve1;
@@ -194,7 +158,8 @@ contract MarginFees is IMarginFees, Owned {
         {
             uint256 marginTotal = params.marginAmount * params.leverage;
             require(marginReserves >= marginTotal, "MARGIN_NOT_ENOUGH");
-            (borrowAmount,,) = getAmountIn(msg.sender, status, params.marginForOne, marginTotal);
+            (borrowAmount,,) =
+                IPairPoolManager(msg.sender).statusManager().getAmountIn(status, params.marginForOne, marginTotal);
             require(incrementMaxMirror >= borrowAmount, "MIRROR_TOO_MUCH");
             uint24 _marginFeeRate = status.marginFee == 0 ? marginFee : status.marginFee;
             (marginWithoutFee, marginFeeAmount) = _marginFeeRate.deduct(marginTotal);
@@ -208,11 +173,10 @@ contract MarginFees is IMarginFees, Owned {
         uint256 minMarginLevel
     ) external view returns (uint256 borrowMaxAmount) {
         {
-            uint256 actualAmount = marginAmount.mulMillionDiv(minMarginLevel);
-            (uint256 reserve0, uint256 reserve1) = status.getReserves();
-            (uint256 reserveBorrow, uint256 reserveMargin) = marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
-            borrowMaxAmount = Math.mulDiv(actualAmount, reserveBorrow, reserveMargin);
+            (borrowMaxAmount,,) =
+                IPairPoolManager(msg.sender).statusManager().getAmountOut(status, !marginForOne, marginAmount);
             uint256 flowMaxAmount = (marginForOne ? status.realReserve0 : status.realReserve1) * 20 / 100;
+            borrowMaxAmount = borrowMaxAmount.mulMillionDiv(minMarginLevel);
             borrowMaxAmount = Math.min(borrowMaxAmount, flowMaxAmount);
         }
         {

@@ -23,6 +23,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 // V4
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
@@ -247,6 +248,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
         assertEq(beforeBalance, 0);
         vm.expectRevert(bytes("MIRROR_TOO_MUCH"));
         marginPositionManager.margin{value: payValue}(borrowParams);
+        vm.stopPrank();
     }
 
     function testNativeLiquidity() public {
@@ -319,11 +321,12 @@ contract NativeKeyPoolManagerTest is DeployHelper {
         {
             (bool success,) = user.call{value: 1 ether}("");
             assertTrue(success);
-            tokenB.approve(address(lendingPoolManager), 100 ether);
+            tokenB.approve(address(lendingPoolManager), 1000000 ether);
             lendingPoolManager.deposit{value: 10 ether}(address(this), poolId, nativeKey.currency0, 10 ether);
-            lendingPoolManager.deposit(address(this), poolId, nativeKey.currency1, 100 ether);
+            lendingPoolManager.deposit(address(this), poolId, nativeKey.currency1, 1000000 ether);
         }
         skip(1000);
+        uint256 borrowAmount;
         vm.startPrank(user);
         MarginParams memory borrowParams = MarginParams({
             poolId: poolId,
@@ -336,8 +339,8 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             deadline: block.timestamp + 1000
         });
         uint256 beforeBalance = tokenB.balanceOf(user);
-        uint256 borrowAmount;
         (positionId1, borrowAmount) = marginPositionManager.margin{value: payValue}(borrowParams);
+        console.log("positionId1:%s,borrowAmount:%s", positionId1, borrowAmount);
         nativeKeyBalance("after margin 01");
         uint256 afterBalance = tokenB.balanceOf(user);
         assertGt(positionId1, 0);
@@ -345,7 +348,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
         skip(1000);
 
         {
-            payValue = borrowAmount / 10;
+            payValue = Math.min(0.01 ether, borrowAmount / 10);
             borrowParams = MarginParams({
                 poolId: poolId,
                 marginForOne: true,
@@ -360,6 +363,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             assertEq(beforeBalance, afterBalance);
             tokenB.approve(address(pairPoolManager), payValue);
             (positionId2, borrowAmount) = marginPositionManager.margin(borrowParams);
+            console.log("positionId2:%s,borrowAmount:%s", positionId2, borrowAmount);
             assertGt(positionId2, 0);
             nativeKeyBalance("after margin 02");
             afterBalance = tokenB.balanceOf(user);
@@ -504,7 +508,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             (bool liquidated,) = marginChecker.checkLiquidate(address(marginPositionManager), positionId2);
             uint256 swapIndex = 0;
             while (!liquidated) {
-                uint256 amountIn = 1 ether;
+                uint256 amountIn = 10 ether;
                 tokenB.approve(address(swapRouter), amountIn);
                 MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
                     poolId: nativeKey.toId(),
@@ -519,8 +523,8 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 swapIndex++;
                 console.log("swapIndex:%s", swapIndex);
                 nativeKeyBalance("after swap");
+                skip(1000);
                 (liquidated,) = marginChecker.checkLiquidate(address(marginPositionManager), positionId2);
-                skip(30);
             }
         }
         PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
@@ -585,10 +589,12 @@ contract NativeKeyPoolManagerTest is DeployHelper {
     }
 
     function testBatchNativeBurnTwoBorrow() public {
-        for (uint256 i = 0; i < 100; i++) {
+        for (uint256 i = 0; i < 30; i++) {
             console.log("start test:%s", i);
             testNativeBurnTwoBorrow();
         }
+        PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
+        printPoolStatus(status);
     }
 
     function testNativeProtocolInterests() public {

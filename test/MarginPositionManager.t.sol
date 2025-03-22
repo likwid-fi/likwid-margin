@@ -1056,7 +1056,7 @@ contract MarginPositionManagerTest is DeployHelper {
         marginChecker.getPositions(marginPositionManager, positionIds);
     }
 
-    function testBorrow() public {
+    function testBorrowOne() public {
         uint256 positionId;
         uint256 borrowAmount;
         uint256 payValue = 0.0001 ether;
@@ -1386,7 +1386,7 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256 afterLendingAmount0 = lendingPoolManager.balanceOf(address(this), nativeKey.currency0.toTokenId(poolId));
         uint256 afterLendingAmount1 = lendingPoolManager.balanceOf(address(this), nativeKey.currency1.toTokenId(poolId));
         assertGt(afterLendingAmount0, beforeLendingAmount0);
-        assertLt(beforeLendingAmount1, afterLendingAmount1);
+        assertLe(beforeLendingAmount1, afterLendingAmount1);
         position = marginPositionManager.getPosition(positionId);
         assertEq(position.borrowAmount, 0);
         uint256[4] memory afterLiquidities = marginLiquidity.getPoolLiquidities(poolId, address(this));

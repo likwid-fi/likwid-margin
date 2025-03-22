@@ -14,6 +14,7 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {BaseFees} from "./base/BaseFees.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
+import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {BalanceStatus} from "./types/BalanceStatus.sol";
 import {InterestBalance} from "./types/InterestBalance.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
@@ -34,6 +35,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     using TransientSlot for *;
     using CurrencyPoolLibrary for *;
     using PoolStatusLibrary for *;
+    using FeeLibrary for *;
 
     error UpdateBalanceGuardErrorCall();
     error NotPoolManager();
@@ -144,14 +146,40 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         (_reserve0, _reserve1) = status.getReserves();
     }
 
-    function getAmountIn(PoolId poolId, bool zeroForOne, uint256 amountOut) external view returns (uint256 amountIn) {
-        PoolStatus memory status = getStatus(poolId);
-        (amountIn,,) = marginFees.getAmountIn(address(this), status, zeroForOne, amountOut);
+    // given an input amount of an asset and pair reserve, returns the maximum output amount of the other asset
+    function getAmountOut(PoolStatus memory status, bool zeroForOne, uint256 amountIn)
+        public
+        view
+        returns (uint256 amountOut, uint24 fee, uint256 feeAmount)
+    {
+        require(amountIn > 0, "INSUFFICIENT_INPUT_AMOUNT");
+        (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
+        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
+        require(reserveIn > 0 && reserveOut > 0, " INSUFFICIENT_LIQUIDITY");
+        fee = marginFees.dynamicFee(pairPoolManager, status);
+        uint256 amountInWithoutFee;
+        (amountInWithoutFee, feeAmount) = fee.deduct(amountIn);
+        uint256 numerator = amountInWithoutFee * reserveOut;
+        uint256 denominator = reserveIn + amountInWithoutFee;
+        amountOut = numerator / denominator;
     }
 
-    function getAmountOut(PoolId poolId, bool zeroForOne, uint256 amountIn) external view returns (uint256 amountOut) {
-        PoolStatus memory status = getStatus(poolId);
-        (amountOut,,) = marginFees.getAmountOut(address(this), status, zeroForOne, amountIn);
+    // given an output amount of an asset and pair reserve, returns a required input amount of the other asset
+    function getAmountIn(PoolStatus memory status, bool zeroForOne, uint256 amountOut)
+        public
+        view
+        returns (uint256 amountIn, uint24 fee, uint256 feeAmount)
+    {
+        require(amountOut > 0, "INSUFFICIENT_OUTPUT_AMOUNT");
+        (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
+        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
+        require(reserveIn > 0 && reserveOut > 0, "INSUFFICIENT_LIQUIDITY");
+        require(amountOut < reserveOut, "OUTPUT_AMOUNT_OVERFLOW");
+        fee = marginFees.dynamicFee(pairPoolManager, status);
+        uint256 numerator = reserveIn * amountOut;
+        uint256 denominator = (reserveOut - amountOut);
+        uint256 amountInWithoutFee = (numerator / denominator) + 1;
+        (amountIn, feeAmount) = fee.attach(amountInWithoutFee);
     }
 
     function _callSet() internal {
@@ -382,14 +410,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         return status;
     }
 
-    function storeBalances(PoolKey memory key) external onlyPoolManager {
-        _callSet();
-        BalanceStatus memory balanceStatus = _getBalances(key);
-        BALANCE_0_SLOT.asUint256().tstore(balanceStatus.balance0);
-        BALANCE_1_SLOT.asUint256().tstore(balanceStatus.balance1);
-    }
-
-    function update(PoolId poolId, bool fromMargin) public onlyPoolManager returns (BalanceStatus memory afterStatus) {
+    function update(PoolId poolId, bool fromMargin) public onlyPoolManager {
         PoolStatus storage status = statusStore[poolId];
         // save margin price before changed
         if (fromMargin) {
@@ -400,7 +421,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         }
 
         BalanceStatus memory beforeStatus = _getBalances();
-        afterStatus = _getAllBalances(status.key);
+        BalanceStatus memory afterStatus = _getAllBalances(status.key);
         status.realReserve0 = status.realReserve0.add(afterStatus.balance0).sub(beforeStatus.balance0);
         status.realReserve1 = status.realReserve1.add(afterStatus.balance1).sub(beforeStatus.balance1);
         status.mirrorReserve0 = afterStatus.mirrorBalance0.toUint112();
@@ -438,8 +459,8 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         _callUpdate();
     }
 
-    function update(PoolId poolId) public onlyPoolManager returns (BalanceStatus memory afterStatus) {
-        afterStatus = update(poolId, false);
+    function update(PoolId poolId) public onlyPoolManager {
+        update(poolId, false);
     }
 
     function updateLendingPoolStatus(PoolId poolId) external onlyLendingManager {

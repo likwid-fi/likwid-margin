@@ -143,12 +143,12 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
 
     function getAmountIn(PoolId poolId, bool zeroForOne, uint256 amountOut) external view returns (uint256 amountIn) {
         PoolStatus memory status = statusManager.getStatus(poolId);
-        (amountIn,,) = marginFees.getAmountIn(address(this), status, zeroForOne, amountOut);
+        (amountIn,,) = statusManager.getAmountIn(status, zeroForOne, amountOut);
     }
 
     function getAmountOut(PoolId poolId, bool zeroForOne, uint256 amountIn) external view returns (uint256 amountOut) {
         PoolStatus memory status = statusManager.getStatus(poolId);
-        (amountOut,,) = marginFees.getAmountOut(address(this), status, zeroForOne, amountIn);
+        (amountOut,,) = statusManager.getAmountOut(status, zeroForOne, amountIn);
     }
 
     // ******************** HOOK CALL ********************
@@ -178,11 +178,11 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         uint256 feeAmount;
         if (exactInput) {
             (unspecifiedAmount, swapFee, feeAmount) =
-                marginFees.getAmountOut(address(this), _status, params.zeroForOne, specifiedAmount);
+                statusManager.getAmountOut(_status, params.zeroForOne, specifiedAmount);
             poolManager.approve(address(hooks), unspecified.toId(), unspecifiedAmount);
         } else {
             (unspecifiedAmount, swapFee, feeAmount) =
-                marginFees.getAmountIn(address(this), _status, params.zeroForOne, specifiedAmount);
+                statusManager.getAmountIn(_status, params.zeroForOne, specifiedAmount);
             poolManager.approve(address(hooks), specified.toId(), specifiedAmount);
         }
         if (feeAmount > 0) {
@@ -298,7 +298,9 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     }
 
     function setStatusManager(IPoolStatusManager _poolStatusManager) external onlyOwner {
-        statusManager = _poolStatusManager;
+        if (address(statusManager) == address(0)) {
+            statusManager = _poolStatusManager;
+        }
     }
 
     function addPositionManager(address _marginPositionManager) external onlyOwner {
@@ -374,27 +376,16 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
 
         // mint mirror token
         mirrorTokenManager.mint(borrowCurrency.toTokenId(params.poolId), borrowAmount);
-        BalanceStatus memory balanceStatus = statusManager.update(params.poolId, true);
-        {
-            bool exchangeBalance0 = balanceStatus.mirrorBalance0 > 0
-                && balanceStatus.lendingTotalBalance0 > balanceStatus.lendingMirrorBalance0;
-            bool exchangeBalance1 = balanceStatus.mirrorBalance1 > 0
-                && balanceStatus.lendingTotalBalance1 > balanceStatus.lendingMirrorBalance0;
-            if (exchangeBalance0 || exchangeBalance1) {
-                statusManager.storeBalances(status.key);
-                if (exchangeBalance0) {
-                    lendingPoolManager.mirrorInRealOut(
-                        params.poolId, status.key.currency0, balanceStatus.mirrorBalance0
-                    );
-                }
-                if (exchangeBalance1) {
-                    lendingPoolManager.mirrorInRealOut(
-                        params.poolId, status.key.currency1, balanceStatus.mirrorBalance1
-                    );
-                }
-                statusManager.update(params.poolId, false);
-            }
+        (uint256 mirrorBalance0, uint256 mirrorBalance1) = borrowCurrency == status.key.currency0
+            ? (borrowAmount + status.mirrorReserve0, uint256(status.mirrorReserve1))
+            : (uint256(status.mirrorReserve0), borrowAmount + status.mirrorReserve1);
+        if (mirrorBalance0 > 0) {
+            lendingPoolManager.mirrorInRealOut(params.poolId, status.key.currency0, mirrorBalance0);
         }
+        if (mirrorBalance1 > 0) {
+            lendingPoolManager.mirrorInRealOut(params.poolId, status.key.currency1, mirrorBalance1);
+        }
+        statusManager.update(params.poolId, true);
     }
 
     function _releaseToPool(
@@ -456,8 +447,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         uint256 repayAmount = params.repayAmount;
         if (params.releaseAmount > 0) {
             if (repayAmount == 0) {
-                (repayAmount,,) =
-                    marginFees.getAmountOut(address(this), status, !params.marginForOne, params.releaseAmount);
+                (repayAmount,,) = statusManager.getAmountOut(status, !params.marginForOne, params.releaseAmount);
             }
 
             // release margin
@@ -502,7 +492,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     {
         PoolStatus memory status = statusManager.setBalances(poolId);
         uint256 feeAmount;
-        (amountOut,, feeAmount) = marginFees.getAmountOut(address(this), status, zeroForOne, amountIn);
+        (amountOut,, feeAmount) = statusManager.getAmountOut(status, zeroForOne, amountIn);
         uint256 mirrorOut = zeroForOne ? status.mirrorReserve1 : status.mirrorReserve0;
         require(amountOut <= mirrorOut, "NOT_ENOUGH_RESERVE");
         (Currency inputCurrency, Currency outputCurrency) =

@@ -19,6 +19,10 @@ interface IMarginChecker {
     /// @return minMarginLevel The min margin level
     function minMarginLevel() external view returns (uint24);
 
+    /// @notice Get the min borrow level
+    /// @return minMarginLevel The min margin level
+    function minBorrowLevel() external view returns (uint24);
+
     /// @notice Get the profit millionth of the caller and the protocol
     /// @return callerProfitMillion The profit of the caller in millions
     /// @return protocolProfitMillion The profit of the protocol in millions
@@ -56,11 +60,10 @@ interface IMarginChecker {
         view
         returns (MarginPosition memory);
 
-    function checkMinMarginLevel(
-        IPairMarginManager poolManager,
-        MarginParamsVo memory paramsVo,
-        PoolStatus memory _status
-    ) external view returns (bool valid);
+    function checkMinMarginLevel(MarginParamsVo memory paramsVo, PoolStatus memory _status)
+        external
+        view
+        returns (bool valid);
 
     /// @notice Get the marginTotal amount and borrow amount for the given pool, leverage, and marginAmount
     /// @param poolManager The manager of the pool
@@ -152,16 +155,4 @@ interface IMarginChecker {
         external
         view
         returns (bool[] memory liquidatedList, uint256[] memory borrowAmountList);
-
-    /// @notice Check if the position is liquidated
-    /// @param poolManager The manager of the pool
-    /// @param _liqStatus The status of Liquidate
-    /// @param inPositions The input positions
-    /// @return liquidatedList  The liquidated list
-    /// @return borrowAmountList  The borrow amount list
-    function checkLiquidate(
-        IPairMarginManager poolManager,
-        LiquidateStatus memory _liqStatus,
-        MarginPosition[] memory inPositions
-    ) external view returns (bool[] memory liquidatedList, uint256[] memory borrowAmountList);
 }
