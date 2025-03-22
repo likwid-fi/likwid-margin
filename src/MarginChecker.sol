@@ -55,6 +55,10 @@ contract MarginChecker is IMarginChecker, Owned {
         minMarginLevel = _minMarginLevel;
     }
 
+    function setMinBorrowLevel(uint24 _minBorrowLevel) external onlyOwner {
+        minBorrowLevel = _minBorrowLevel;
+    }
+
     // ******************** EXTERNAL CALL ********************
     /// @inheritdoc IMarginChecker
     function getProfitMillions() external view returns (uint24, uint24) {
