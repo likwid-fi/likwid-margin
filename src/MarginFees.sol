@@ -158,9 +158,11 @@ contract MarginFees is IMarginFees, Owned {
         {
             uint256 marginTotal = params.marginAmount * params.leverage;
             require(marginReserves >= marginTotal, "MARGIN_NOT_ENOUGH");
-            (borrowAmount,,) =
-                IPairPoolManager(msg.sender).statusManager().getAmountIn(status, params.marginForOne, marginTotal);
-            require(incrementMaxMirror >= borrowAmount, "MIRROR_TOO_MUCH");
+            if (params.leverage > 0) {
+                (borrowAmount,,) =
+                    IPairPoolManager(msg.sender).statusManager().getAmountIn(status, params.marginForOne, marginTotal);
+                require(incrementMaxMirror >= borrowAmount, "MIRROR_TOO_MUCH");
+            }
             uint24 _marginFeeRate = status.marginFee == 0 ? marginFee : status.marginFee;
             (marginWithoutFee, marginFeeAmount) = _marginFeeRate.deduct(marginTotal);
         }
