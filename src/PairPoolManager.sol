@@ -220,7 +220,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             }
             if (liquidity == 0) revert InsufficientLiquidityMinted();
         }
-        liquidity = marginLiquidity.addLiquidity(params.to, uPoolId, params.level, liquidity);
+        marginLiquidity.addLiquidity(params.to, uPoolId, params.level, liquidity);
         poolManager.unlock(abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, amount0In, amount1In)));
         statusManager.update(params.poolId, false);
         emit Mint(params.poolId, msg.sender, params.to, liquidity, amount0In, amount1In, params.level);
@@ -248,7 +248,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         {
             (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
             (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) = marginLiquidity.getSupplies(uPoolId);
-            params.liquidity = marginLiquidity.removeLiquidity(msg.sender, uPoolId, params.level, params.liquidity);
+            marginLiquidity.removeLiquidity(msg.sender, uPoolId, params.level, params.liquidity);
             uint256 maxReserve0 = status.realReserve0;
             uint256 maxReserve1 = status.realReserve1;
             amount0 = Math.mulDiv(params.liquidity, _reserve0, _totalSupply);

@@ -7,13 +7,9 @@ import {IERC6909Accrues} from "../interfaces/external/IERC6909Accrues.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
 
 interface IMarginLiquidity is IERC6909Accrues {
-    function addLiquidity(address receiver, uint256 id, uint8 level, uint256 amount)
-        external
-        returns (uint256 liquidity);
+    function addLiquidity(address receiver, uint256 id, uint8 level, uint256 amount) external;
 
-    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount)
-        external
-        returns (uint256 liquidity);
+    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount) external;
 
     function changeLiquidity(PoolId poolId, uint256 _reserve0, uint256 _reserve1, int256 interest0, int256 interest1)
         external

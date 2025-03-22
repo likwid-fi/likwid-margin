@@ -186,6 +186,18 @@ contract DeployHelper is Test {
         pairPoolManager.addLiquidity{value: 1 ether}(params);
     }
 
+    function initUSDTKey() internal {
+        AddLiquidityParams memory params = AddLiquidityParams({
+            poolId: usdtKey.toId(),
+            level: 4,
+            amount0: 1 ether,
+            amount1: 100 ether,
+            to: address(this),
+            deadline: type(uint256).max
+        });
+        pairPoolManager.addLiquidity{value: 1 ether}(params);
+    }
+
     function initPoolLiquidity() internal {
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: tokensKey.toId(),
