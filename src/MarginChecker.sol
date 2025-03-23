@@ -135,12 +135,16 @@ contract MarginChecker is IMarginChecker, Owned {
         (uint256 reserveBorrow, uint256 reserveMargin) =
             params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
         uint256 repayAmount;
+        IPairPoolManager pairPoolManager = IPairPoolManager(IStatusBase(msg.sender).pairPoolManager());
+        uint256 assetsAmount = pairPoolManager.lendingPoolManager().computeRealAmount(
+            params.poolId, paramsVo.marginCurrency, params.marginAmount + paramsVo.marginTotal
+        );
         if (params.leverage > 0) {
-            repayAmount = Math.mulDiv(reserveBorrow, params.marginAmount + paramsVo.marginTotal, reserveMargin);
+            repayAmount = Math.mulDiv(reserveBorrow, assetsAmount, reserveMargin);
             repayAmount = repayAmount.mulMillionDiv(minMarginLevel);
         } else {
-            uint256 numerator = params.marginAmount * reserveBorrow;
-            uint256 denominator = reserveMargin + params.marginAmount;
+            uint256 numerator = assetsAmount * reserveBorrow;
+            uint256 denominator = reserveMargin + assetsAmount;
             repayAmount = numerator / denominator;
             repayAmount = repayAmount.mulMillionDiv(minBorrowLevel);
         }
