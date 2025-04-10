@@ -17,15 +17,30 @@ interface IMarginFees {
     /// @notice Get the dynamic swap fee from the status of pool
     /// @param _poolManager The address of pool manager
     /// @param status The status of the pool
+    /// @param zeroForOne if true amountIn is currency0,else amountIn is currency1
+    /// @param amountIn The amount swap in
+    /// @param amountOut The amount swap out
     /// @return _fee The dynamic fee of swap transaction
-    function dynamicFee(address _poolManager, PoolStatus memory status) external view returns (uint24 _fee);
+    function dynamicFee(
+        address _poolManager,
+        PoolStatus memory status,
+        bool zeroForOne,
+        uint256 amountIn,
+        uint256 amountOut
+    ) external view returns (uint24 _fee);
 
     /// @notice Get the dynamic liquidity fee from the status of pool
     /// @param _poolManager The address of pool manager
     /// @param poolId The pool id
+    /// @param zeroForOne if true amountIn is currency0,else amountIn is currency1
+    /// @param amountIn The amount swap in
+    /// @param amountOut The amount swap out
     /// @return _fee The dynamic fee of swap transaction
     /// @return _marginFee The fee of margin transaction
-    function getPoolFees(address _poolManager, PoolId poolId) external view returns (uint24 _fee, uint24 _marginFee);
+    function getPoolFees(address _poolManager, PoolId poolId, bool zeroForOne, uint256 amountIn, uint256 amountOut)
+        external
+        view
+        returns (uint24 _fee, uint24 _marginFee);
 
     function computeDiff(address pairPoolManager, PoolStatus memory status, bool marginForOne, int256 diff)
         external

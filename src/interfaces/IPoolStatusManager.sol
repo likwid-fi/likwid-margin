@@ -9,6 +9,7 @@ import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {IStatusBase} from "./IStatusBase.sol";
 import {BalanceStatus} from "../types/BalanceStatus.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
+import {GlobalStatus} from "../types/GlobalStatus.sol";
 
 interface IPoolStatusManager is IStatusBase {
     function hooks() external view returns (IHooks hook);
@@ -17,6 +18,8 @@ interface IPoolStatusManager is IStatusBase {
     function marginOracle() external view returns (address);
 
     function initialize(PoolKey calldata key) external;
+
+    function getGlobalStatus(PoolId poolId) external view returns (GlobalStatus memory _status);
 
     function getStatus(PoolId poolId) external view returns (PoolStatus memory _status);
 
@@ -36,11 +39,7 @@ interface IPoolStatusManager is IStatusBase {
 
     function updateInterests(PoolId poolId) external returns (PoolStatus memory _status);
 
-    function update(PoolId poolId, bool fromMargin) external;
-
     function update(PoolId poolId) external;
-
-    function updateLendingPoolStatus(PoolId poolId) external;
 
     function updateProtocolFees(Currency currency, uint256 amount) external returns (uint256 restAmount);
 

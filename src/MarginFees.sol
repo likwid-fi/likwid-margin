@@ -34,8 +34,7 @@ contract MarginFees is IMarginFees, Owned {
 
     uint24 public marginFee = 3000; // 0.3%
     uint24 public protocolFee = 50000; // 5%
-    uint24 public dynamicFeeUnit = 10;
-    uint24 public dynamicFeeMinDegree = 30000; // 3%
+    uint24 public dynamicFeeMinDegree = 100000; // 10%
 
     address public feeTo;
 
@@ -54,10 +53,14 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     /// @inheritdoc IMarginFees
-    function getPoolFees(address _poolManager, PoolId poolId) external view returns (uint24 _fee, uint24 _marginFee) {
+    function getPoolFees(address _poolManager, PoolId poolId, bool zeroForOne, uint256 amountIn, uint256 amountOut)
+        external
+        view
+        returns (uint24 _fee, uint24 _marginFee)
+    {
         IPairPoolManager poolManager = IPairPoolManager(_poolManager);
         PoolStatus memory status = poolManager.getStatus(poolId);
-        _fee = dynamicFee(_poolManager, status);
+        _fee = dynamicFee(_poolManager, status, zeroForOne, amountIn, amountOut);
         _marginFee = status.marginFee == 0 ? marginFee : status.marginFee;
     }
 
@@ -65,11 +68,29 @@ contract MarginFees is IMarginFees, Owned {
         priceDiff = price > lastPrice ? price - lastPrice : lastPrice - price;
     }
 
-    function _getPriceDegree(uint224 oracleReserves, PoolStatus memory status) internal pure returns (uint256 degree) {
+    function _getPriceDegree(
+        uint224 oracleReserves,
+        PoolStatus memory status,
+        bool zeroForOne,
+        uint256 amountIn,
+        uint256 amountOut
+    ) internal pure returns (uint256 degree) {
         if (oracleReserves > 0) {
             uint256 lastPrice0X112 = oracleReserves.getPrice0X112();
             uint256 lastPrice1X112 = oracleReserves.getPrice1X112();
             (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
+            if (amountIn > 0) {
+                amountOut = status.getAmountOut(zeroForOne, amountIn);
+            } else if (amountOut > 0) {
+                amountIn = status.getAmountIn(zeroForOne, amountOut);
+            }
+            if (zeroForOne) {
+                _reserve1 -= amountOut;
+                _reserve0 += amountIn;
+            } else {
+                _reserve0 -= amountOut;
+                _reserve1 += amountIn;
+            }
             uint224 price0X112 = UQ112x112.encode(_reserve1.toUint112()).div(_reserve0.toUint112());
             uint224 price1X112 = UQ112x112.encode(_reserve0.toUint112()).div(_reserve1.toUint112());
             uint256 degree0 = differencePrice(price0X112, lastPrice0X112).mulMillionDiv(lastPrice0X112);
@@ -79,28 +100,29 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     /// @inheritdoc IMarginFees
-    function dynamicFee(address _poolManager, PoolStatus memory status) public view returns (uint24 _fee) {
-        uint256 timeElapsed = status.marginTimestampLast.getTimeElapsed();
+    function dynamicFee(
+        address _poolManager,
+        PoolStatus memory status,
+        bool zeroForOne,
+        uint256 amountIn,
+        uint256 amountOut
+    ) public view returns (uint24 _fee) {
         _fee = status.key.fee;
         IMarginOracleReader oracleReader = IPairPoolManager(_poolManager).marginOracleReader();
         if (address(oracleReader) != address(0)) {
             (uint224 oracleReserves,) = oracleReader.observeNow(IPairPoolManager(_poolManager), status);
             if (oracleReserves > 0) {
-                uint256 degree = _getPriceDegree(oracleReserves, status);
-                if (degree > dynamicFeeMinDegree) {
-                    uint256 dFee = degree.mulDivMillion(uint256(dynamicFeeUnit) * _fee) + _fee;
+                uint256 degree = _getPriceDegree(oracleReserves, status, zeroForOne, amountIn, amountOut);
+                if (degree > PerLibrary.ONE_MILLION) {
+                    _fee = uint24(PerLibrary.ONE_MILLION) - 10000;
+                } else if (degree > dynamicFeeMinDegree) {
+                    uint256 dFee = Math.mulDiv((degree * 10) ** 3, _fee, PerLibrary.ONE_MILLION ** 3);
                     if (dFee >= PerLibrary.ONE_MILLION) {
-                        _fee = uint24(PerLibrary.ONE_MILLION) - 1;
+                        _fee = uint24(PerLibrary.ONE_MILLION) - 10000;
                     } else {
                         _fee = uint24(dFee);
                     }
                 }
-            }
-        }
-        if (timeElapsed == 0) {
-            uint24 oneBlockFee = 20 * status.key.fee;
-            if (oneBlockFee > _fee) {
-                _fee = oneBlockFee;
             }
         }
     }
@@ -264,10 +286,6 @@ contract MarginFees is IMarginFees, Owned {
 
     function setDynamicFeeMinDegree(uint24 _dynamicFeeMinDegree) external onlyOwner {
         dynamicFeeMinDegree = _dynamicFeeMinDegree;
-    }
-
-    function setDynamicFeeUnit(uint24 _dynamicFeeUnit) external onlyOwner {
-        dynamicFeeUnit = _dynamicFeeUnit;
     }
 
     /// @inheritdoc IMarginFees
