@@ -6,7 +6,7 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 // Local
-import {ERC6909Accrues} from "./base/ERC6909Accrues.sol";
+import {ERC6909Liquidity} from "./base/ERC6909Liquidity.sol";
 import {LiquidityLevel} from "./libraries/LiquidityLevel.sol";
 import {TimeLibrary} from "./libraries/TimeLibrary.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
@@ -14,9 +14,9 @@ import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {PoolStatus, PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IStatusBase} from "./interfaces/IStatusBase.sol";
-import {IPoolBase} from "./interfaces/IPoolBase.sol";
+import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 
-contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
+contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
     using SafeCast for uint256;
     using LiquidityLevel for *;
     using UQ112x112 for *;
@@ -24,11 +24,8 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
     using TimeLibrary for uint32;
     using PoolStatusLibrary for PoolStatus;
 
-    error NotAllowed();
-
-    mapping(address => bool) public poolManagers;
     uint24 private maxSliding = 5000; // 0.5%
-    mapping(uint256 => uint32) public datetimeStore;
+    mapping(address => bool) public interestOperator;
 
     constructor(address initialOwner) Owned(initialOwner) {}
 
@@ -37,8 +34,8 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         _;
     }
 
-    modifier onlyStatus() {
-        require(poolManagers[IStatusBase(msg.sender).pairPoolManager()], "UNAUTHORIZED");
+    modifier onlyInterestOperator() {
+        require(interestOperator[msg.sender], "UNAUTHORIZED");
         _;
     }
 
@@ -73,11 +70,11 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         bool addFlag
     ) internal {
         uint256 level4Id = LiquidityLevel.BOTH_MARGIN.getLevelId(id);
-        uint256 total4Liquidity = balanceOf(pairPoolManager, level4Id);
+        uint256 total4Liquidity = balanceOriginal[pairPoolManager][level4Id];
         uint256 level4Liquidity;
         if (liquidity0 > 0) {
             uint256 level2Id = LiquidityLevel.ONE_MARGIN.getLevelId(id);
-            uint256 total2Liquidity = balanceOf(pairPoolManager, level2Id);
+            uint256 total2Liquidity = balanceOriginal[pairPoolManager][level2Id];
             if (total2Liquidity > 0) {
                 uint256 level2Liquidity = Math.mulDiv(liquidity0, total2Liquidity, total2Liquidity + total4Liquidity);
                 level4Liquidity += liquidity0 - level2Liquidity;
@@ -94,7 +91,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         }
         if (liquidity1 > 0) {
             uint256 level3Id = LiquidityLevel.ZERO_MARGIN.getLevelId(id);
-            uint256 total3Liquidity = balanceOf(pairPoolManager, level3Id);
+            uint256 total3Liquidity = balanceOriginal[pairPoolManager][level3Id];
             if (total3Liquidity > 0) {
                 uint256 level3Liquidity = Math.mulDiv(liquidity1, total3Liquidity, total3Liquidity + total4Liquidity);
                 level4Liquidity += liquidity1 - level3Liquidity;
@@ -134,7 +131,8 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
             uint256 denominator = rootK + rootKLast;
             liquidity = numerator / denominator;
             if (liquidity > 0) {
-                accruesRatioX112Of[uPoolId] = accruesRatioX112Of[uPoolId].growRatioX112(liquidity, _totalSupply);
+                uint256 _total = balanceOriginal[pairPoolManager][uPoolId];
+                accruesRatioX112Of[uPoolId] = accruesRatioX112Of[uPoolId].growRatioX112(liquidity, _total);
                 denominator = interest0 + Math.mulDiv(interest1, _reserve0, _reserve1);
                 uint256 liquidity0 = Math.mulDiv(liquidity, interest0, denominator);
                 uint256 liquidity1 = liquidity - liquidity0;
@@ -160,7 +158,8 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
             uint256 denominator = rootK + rootKLast;
             liquidity = numerator / denominator;
             if (liquidity > 0) {
-                accruesRatioX112Of[uPoolId] = accruesRatioX112Of[uPoolId].reduceRatioX112(liquidity, _totalSupply);
+                uint256 _total = balanceOriginal[pairPoolManager][uPoolId];
+                accruesRatioX112Of[uPoolId] = accruesRatioX112Of[uPoolId].reduceRatioX112(liquidity, _total);
                 denominator = interest0 + Math.mulDiv(interest1, _reserve0, _reserve1);
                 uint256 liquidity0 = Math.mulDiv(liquidity, interest0, denominator);
                 uint256 liquidity1 = liquidity - liquidity0;
@@ -172,6 +171,9 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
     // ******************** OWNER CALL ********************
     function addPoolManager(address _manager) external onlyOwner {
         poolManagers[_manager] = true;
+        address statusManager = address(IPairPoolManager(_manager).statusManager());
+        require(statusManager != address(0), "STATUS_MANAGER_ERROR");
+        interestOperator[statusManager] = true;
     }
 
     function setMaxSliding(uint24 _maxSliding) external onlyOwner {
@@ -182,7 +184,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
 
     function addInterests(PoolId poolId, uint256 _reserve0, uint256 _reserve1, uint256 interest0, uint256 interest1)
         external
-        onlyStatus
+        onlyInterestOperator
         returns (uint256 liquidity)
     {
         address pairPoolManager = IStatusBase(msg.sender).pairPoolManager();
@@ -205,11 +207,9 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
 
     function addLiquidity(address receiver, uint256 id, uint8 level, uint256 amount) external onlyPoolManager {
         uint256 levelId = level.getLevelId(id);
-
+        datetimeStore[receiver][levelId] = uint32(block.timestamp % 2 ** 32);
         address poolManager = msg.sender;
-        datetimeStore[id] = uint32(block.timestamp % 2 ** 32);
         uint256 uPoolId = id.getPoolId();
-
         unchecked {
             _mint(poolManager, uPoolId, amount);
             _mint(poolManager, levelId, amount);
@@ -218,13 +218,9 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
     }
 
     function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount) external onlyPoolManager {
-        if (datetimeStore[id].getTimeElapsed() < 30) {
-            revert NotAllowed();
-        }
         uint256 levelId = level.getLevelId(id);
         uint256 uPoolId = id.getPoolId();
         address pool = msg.sender;
-
         unchecked {
             _burn(pool, uPoolId, amount);
             _burn(pool, levelId, amount);
@@ -289,7 +285,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
         view
         returns (uint256 reserve0, uint256 reserve1)
     {
-        PoolStatus memory status = IPoolBase(pairPoolManager).getStatus(poolId);
+        PoolStatus memory status = IPairPoolManager(pairPoolManager).getStatus(poolId);
         (reserve0, reserve1) = getInterestReserves(pairPoolManager, poolId, status);
     }
 
@@ -315,7 +311,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
                     incrementMaxMirror0 =
                         Math.mulDiv(canMirrorReserve0 - status.mirrorReserve0, totalSupply, retainSupply0);
                 } else {
-                    incrementMaxMirror0 = type(uint112).max;
+                    incrementMaxMirror0 = type(uint112).max / 2;
                 }
             }
             if (canMirrorReserve1 > status.mirrorReserve1) {
@@ -323,7 +319,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
                     incrementMaxMirror1 =
                         Math.mulDiv(canMirrorReserve1 - status.mirrorReserve1, totalSupply, retainSupply1);
                 } else {
-                    incrementMaxMirror1 = type(uint112).max;
+                    incrementMaxMirror1 = type(uint112).max / 2;
                 }
             }
 
@@ -342,7 +338,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Accrues, Owned {
             uint256 incrementMaxMirror1
         )
     {
-        PoolStatus memory status = IPoolBase(pairPoolManager).getStatus(poolId);
+        PoolStatus memory status = IPairPoolManager(pairPoolManager).getStatus(poolId);
         (marginReserve0, marginReserve1, incrementMaxMirror0, incrementMaxMirror1) =
             getMarginReserves(pairPoolManager, poolId, status);
     }

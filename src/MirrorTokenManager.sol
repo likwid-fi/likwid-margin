@@ -3,11 +3,11 @@ pragma solidity ^0.8.26;
 
 import {Owned} from "solmate/src/auth/Owned.sol";
 
-import {ERC6909Accrues} from "./base/ERC6909Accrues.sol";
+import {ERC6909} from "./external/solmate/ERC6909.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
-import {IStatusBase} from "./interfaces/IStatusBase.sol";
+import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 
-contract MirrorTokenManager is IMirrorTokenManager, ERC6909Accrues, Owned {
+contract MirrorTokenManager is IMirrorTokenManager, ERC6909, Owned {
     mapping(address => bool) public poolManagers;
 
     constructor(address initialOwner) Owned(initialOwner) {}
@@ -17,24 +17,19 @@ contract MirrorTokenManager is IMirrorTokenManager, ERC6909Accrues, Owned {
         _;
     }
 
-    modifier onlyStatusManager() {
-        require(poolManagers[IStatusBase(msg.sender).pairPoolManager()], "UNAUTHORIZED");
-        _;
-    }
-
     function mint(uint256 id, uint256 amount) external onlyPoolManager {
         unchecked {
             _mint(msg.sender, id, amount);
         }
     }
 
-    function mintInStatus(address receiver, uint256 id, uint256 amount) external onlyStatusManager {
+    function mintInStatus(address receiver, uint256 id, uint256 amount) external onlyPoolManager {
         unchecked {
             _mint(receiver, id, amount);
         }
     }
 
-    function burn(uint256 id, uint256 amount) external onlyStatusManager {
+    function burn(uint256 id, uint256 amount) external onlyPoolManager {
         unchecked {
             _burn(msg.sender, id, amount);
         }
@@ -45,7 +40,7 @@ contract MirrorTokenManager is IMirrorTokenManager, ERC6909Accrues, Owned {
         onlyPoolManager
         returns (uint256 pairAmount, uint256 lendingAmount)
     {
-        uint256 balance = balanceOf(msg.sender, id);
+        uint256 balance = balanceOf[msg.sender][id];
         if (balance >= amount) {
             pairAmount = amount;
             unchecked {
@@ -60,7 +55,7 @@ contract MirrorTokenManager is IMirrorTokenManager, ERC6909Accrues, Owned {
                 amount -= balance;
             }
             if (amount > 0) {
-                balance = balanceOf(lendingPoolManager, id);
+                balance = balanceOf[lendingPoolManager][id];
                 if (balance > 0) {
                     amount = amount < balance ? amount : balance;
                     lendingAmount = amount;
@@ -73,7 +68,13 @@ contract MirrorTokenManager is IMirrorTokenManager, ERC6909Accrues, Owned {
     }
 
     // ******************** OWNER CALL ********************
-    function addPoolManger(address _manager) external onlyOwner {
+    function addPoolManager(address _manager) external onlyOwner {
         poolManagers[_manager] = true;
+        address statusManager = address(IPairPoolManager(_manager).statusManager());
+        require(statusManager != address(0), "STATUS_MANAGER_ERROR");
+        poolManagers[statusManager] = true;
+        address lendingPoolManager = address(IPairPoolManager(_manager).lendingPoolManager());
+        require(lendingPoolManager != address(0), "LENDING_MANAGER_ERROR");
+        poolManagers[lendingPoolManager] = true;
     }
 }

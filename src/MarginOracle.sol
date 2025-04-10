@@ -8,6 +8,7 @@ import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {TruncatedOracle} from "./libraries/TruncatedOracle.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
+import {IPoolStatusManager} from "./interfaces/IPoolStatusManager.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 import {IMarginOracleWriter} from "./interfaces/IMarginOracleWriter.sol";
@@ -23,9 +24,15 @@ contract MarginOracle {
         uint16 cardinalityNext;
     }
 
-    modifier onlyPairPoolManager(IHooks hooks) {
-        require(IPairPoolManager(msg.sender).hooks() == hooks, "UNAUTHORIZED");
+    IPoolStatusManager public immutable statusManager;
+
+    modifier onlyStatusManager() {
+        require(msg.sender == address(statusManager), "UNAUTHORIZED");
         _;
+    }
+
+    constructor(IPoolStatusManager _statusManager) {
+        statusManager = _statusManager;
     }
 
     /// @notice The list of observations for a given pool ID
@@ -42,7 +49,7 @@ contract MarginOracle {
         return uint32(block.timestamp % 2 ** 32);
     }
 
-    function write(PoolKey calldata key, uint112 reserve0, uint112 reserve1) external onlyPairPoolManager(key.hooks) {
+    function write(PoolKey calldata key, uint112 reserve0, uint112 reserve1) external onlyStatusManager {
         PoolId id = key.toId();
         address hook = address(key.hooks);
         ObservationState storage _state = states[hook][id];

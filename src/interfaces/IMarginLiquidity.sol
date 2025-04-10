@@ -3,10 +3,10 @@ pragma solidity ^0.8.26;
 
 import {PoolId} from "v4-core/types/PoolId.sol";
 
-import {IERC6909Accrues} from "../interfaces/external/IERC6909Accrues.sol";
+import {IERC6909} from "../interfaces/external/IERC6909.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
 
-interface IMarginLiquidity is IERC6909Accrues {
+interface IMarginLiquidity is IERC6909 {
     function addLiquidity(address receiver, uint256 id, uint8 level, uint256 amount) external;
 
     function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount) external;

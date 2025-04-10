@@ -60,9 +60,6 @@ contract DeployAllScript is Script {
         marginChecker = new MarginChecker(owner);
         console2.log("marginChecker:", address(marginChecker));
 
-        marginOracle = new MarginOracle();
-        console2.log("marginOracle:", address(marginOracle));
-
         marginFees = new MarginFees(owner);
         console2.log("marginFees:", address(marginFees));
 
@@ -88,6 +85,9 @@ contract DeployAllScript is Script {
         );
         console2.log("poolStatusManager:", address(poolStatusManager));
 
+        marginOracle = new MarginOracle(poolStatusManager);
+        console2.log("marginOracle:", address(marginOracle));
+
         MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), pairPoolManager);
         console2.log("swapRouter:", address(swapRouter));
 
@@ -112,10 +112,7 @@ contract DeployAllScript is Script {
         // verify proper create2 usage
         require(deployedHook == hookAddress, "DeployScript: hook address mismatch");
         console2.log("hookAddress:", hookAddress);
-        // config marginLiquidity
-        marginLiquidity.addPoolManager(address(pairPoolManager));
-        // config mirrorTokenManager
-        mirrorTokenManager.addPoolManger(address(pairPoolManager));
+
         // config poolStatusManager
         poolStatusManager.setMarginOracle(address(marginOracle));
         // config pairPoolManager
@@ -124,7 +121,10 @@ contract DeployAllScript is Script {
         pairPoolManager.setStatusManager(poolStatusManager);
         // config lendingPoolManager
         lendingPoolManager.setPairPoolManger(pairPoolManager);
-
+        // config marginLiquidity
+        marginLiquidity.addPoolManager(address(pairPoolManager));
+        // config mirrorTokenManager
+        mirrorTokenManager.addPoolManager(address(pairPoolManager));
         vm.stopBroadcast();
     }
 }
