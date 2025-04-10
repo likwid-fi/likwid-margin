@@ -16,8 +16,6 @@ struct PoolStatus {
     uint112 realReserve0;
     /// @notice The real reserve of the second currency in the pool.(y)
     uint112 realReserve1;
-    /// @notice The last timestamp of margin trading.
-    uint32 marginTimestampLast;
     /// @notice The mirror reserve of the first currency in the pool.(x')
     uint112 mirrorReserve0;
     /// @notice The mirror reserve of the second currency in the pool.(y')

@@ -91,5 +91,29 @@ library PoolStatusLibrary {
         }
     }
 
-    function refresh(PoolStatus memory status) internal pure {}
+    function getAmountOut(PoolStatus memory status, bool zeroForOne, uint256 amountIn)
+        internal
+        pure
+        returns (uint256 amountOut)
+    {
+        (uint256 reserveIn, uint256 reserveOut) =
+            zeroForOne ? (reserve0(status), reserve1(status)) : (reserve1(status), reserve0(status));
+        uint256 amountInWithoutFee = status.key.fee.deductFrom(amountIn);
+        uint256 numerator = amountInWithoutFee * reserveOut;
+        uint256 denominator = reserveIn + amountInWithoutFee;
+        amountOut = numerator / denominator;
+    }
+
+    function getAmountIn(PoolStatus memory status, bool zeroForOne, uint256 amountOut)
+        internal
+        pure
+        returns (uint256 amountIn)
+    {
+        (uint256 reserveIn, uint256 reserveOut) =
+            zeroForOne ? (reserve0(status), reserve1(status)) : (reserve1(status), reserve0(status));
+        uint256 numerator = reserveIn * amountOut;
+        uint256 denominator = (reserveOut - amountOut);
+        uint256 amountInWithoutFee = (numerator / denominator) + 1;
+        amountIn = status.key.fee.attachFrom(amountInWithoutFee);
+    }
 }

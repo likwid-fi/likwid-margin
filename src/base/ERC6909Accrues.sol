@@ -18,7 +18,12 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
 
     mapping(address => mapping(address => mapping(uint256 => uint256))) public allowance;
 
+    /*//////////////////////////////////////////////////////////////
+                             EXTEND STORAGE
+    //////////////////////////////////////////////////////////////*/
+
     mapping(uint256 => uint256) public accruesRatioX112Of;
+    mapping(uint256 => int256) public deviationOf;
 
     /*//////////////////////////////////////////////////////////////
                               ERC6909 LOGIC
@@ -86,28 +91,71 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
     }
 
     /*//////////////////////////////////////////////////////////////
+                        EXTEND LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    function totalSupply(uint256 id) public view virtual returns (uint256) {
+        return balanceOf(address(this), id);
+    }
+
+    /*//////////////////////////////////////////////////////////////
                         INTERNAL MINT/BURN LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function _mint(address receiver, uint256 id, uint256 amount) internal virtual {
-        if (accruesRatioX112Of[id] == 0) {
-            accruesRatioX112Of[id] = UQ112x112.Q112;
+    function _mint(address receiver, uint256 id, uint256 amount) internal virtual returns (uint256 originalAmount) {
+        int256 deviation = deviationOf[id];
+        if (deviation > 0) {
+            amount += uint256(deviation);
+            deviationOf[id] = 0;
         } else {
-            amount = amount.divRatioX112(accruesRatioX112Of[id]);
+            if (amount > uint256(-deviation)) {
+                amount -= uint256(-deviation);
+                deviationOf[id] = 0;
+            } else {
+                deviationOf[id] += int256(amount);
+                return originalAmount;
+            }
+        }
+        uint256 ratioX112 = accruesRatioX112Of[id];
+        if (ratioX112 == 0) {
+            ratioX112 = accruesRatioX112Of[id] = UQ112x112.Q112;
+            originalAmount = amount;
+        } else {
+            originalAmount = amount.divRatioX112(ratioX112);
         }
 
-        balanceOriginal[receiver][id] += amount;
-        balanceOriginal[address(this)][id] += amount;
-
-        emit Transfer(msg.sender, address(0), receiver, id, amount);
+        balanceOriginal[receiver][id] += originalAmount;
+        balanceOriginal[address(this)][id] += originalAmount;
+        emit Transfer(msg.sender, address(0), receiver, id, originalAmount);
     }
 
-    function _burn(address sender, uint256 id, uint256 amount) internal virtual {
-        amount = amount.divRatioX112(accruesRatioX112Of[id]);
+    function _burn(address sender, uint256 id, uint256 amount) internal virtual returns (uint256 originalAmount) {
+        int256 deviation = deviationOf[id];
+        if (deviation > 0) {
+            if (amount > uint256(deviation)) {
+                amount -= uint256(deviation);
+            } else {
+                deviationOf[id] -= int256(amount);
+                return originalAmount;
+            }
+        }
+        uint256 ratioX112 = accruesRatioX112Of[id];
 
-        balanceOriginal[sender][id] -= amount;
-        balanceOriginal[address(this)][id] -= amount;
+        uint256 beforeOriginal = balanceOriginal[sender][id];
+        uint256 beforeBalance = beforeOriginal.mulRatioX112(ratioX112);
+        if (amount == beforeBalance) {
+            originalAmount = beforeOriginal;
+        } else {
+            uint256 afterBalance = beforeBalance - amount;
+            uint256 afterOriginal = afterBalance.divRatioX112(ratioX112);
+            originalAmount = beforeOriginal - afterOriginal;
+        }
 
-        emit Transfer(msg.sender, sender, address(0), id, amount);
+        deviationOf[id] = 0;
+
+        balanceOriginal[sender][id] -= originalAmount;
+        balanceOriginal[address(this)][id] -= originalAmount;
+
+        emit Transfer(msg.sender, sender, address(0), id, originalAmount);
     }
 }

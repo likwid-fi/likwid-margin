@@ -5,9 +5,12 @@ import {Currency} from "v4-core/types/Currency.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 // Local
 import {IERC6909Accrues} from "../interfaces/external/IERC6909Accrues.sol";
+import {PoolStatus} from "../types/PoolStatus.sol";
 
 interface ILendingPoolManager is IERC6909Accrues {
     // ******************** EXTERNAL CALL ********************
+    function getGrownRatioX112(uint256 id, uint256 growAmount) external view returns (uint256 accruesRatioX112Grown);
+
     function computeRealAmount(PoolId poolId, Currency currency, uint256 originalAmount)
         external
         view
@@ -20,13 +23,15 @@ interface ILendingPoolManager is IERC6909Accrues {
         external
         returns (uint256 originalAmount);
 
+    function sync(PoolId poolId, PoolStatus memory status) external;
+
     function balanceAccounts(Currency currency, uint256 amount) external;
 
     function mirrorIn(address receiver, PoolId poolId, Currency currency, uint256 amount)
         external
         returns (uint256 originalAmount);
 
-    function mirrorInRealOut(PoolId poolId, Currency currency, uint256 amount)
+    function mirrorInRealOut(PoolId poolId, PoolStatus memory status, Currency currency, uint256 amount)
         external
         returns (uint256 exchangeAmount);
 

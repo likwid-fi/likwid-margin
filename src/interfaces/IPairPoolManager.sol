@@ -21,6 +21,8 @@ import {IMarginOracleReader} from "./IMarginOracleReader.sol";
 interface IPairPoolManager is IPairMarginManager {
     function hooks() external view returns (IHooks hook);
 
+    function positionManagers(address _positionManager) external view returns (bool);
+
     function lendingPoolManager() external view returns (ILendingPoolManager);
 
     function statusManager() external view returns (IPoolStatusManager);
@@ -88,7 +90,9 @@ interface IPairPoolManager is IPairMarginManager {
 
     // ******************** EXTERNAL FUNCTIONS ********************
 
-    function mirrorInRealOut(PoolId poolId, Currency currency, uint256 amount) external returns (bool success);
+    function mirrorInRealOut(PoolId poolId, PoolStatus memory status, Currency currency, uint256 amount)
+        external
+        returns (bool success);
 
     function swapMirror(address sender, address recipient, PoolId poolId, bool zeroForOne, uint256 amountIn)
         external
