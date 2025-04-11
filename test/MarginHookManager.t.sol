@@ -6,7 +6,6 @@ import {PairPoolManager} from "../src/PairPoolManager.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
-import {MarginOracle} from "../src/MarginOracle.sol";
 import {PoolStatus} from "../src/types/PoolStatus.sol";
 import {PoolStatusLibrary} from "../src/types/PoolStatusLibrary.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
@@ -83,7 +82,7 @@ contract PairPoolManagerTest is DeployHelper {
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         console.log("status.reserve0:%s,status.reserve1:%s", status.reserve0(), status.reserve1());
         assertEq(status.marginFee, 0);
-        (uint24 _fee, uint24 _marginFee) = marginFees.getPoolFees(address(pairPoolManager), poolId);
+        (uint24 _fee, uint24 _marginFee) = marginFees.getPoolFees(address(pairPoolManager), poolId, true, 0, 0);
         assertEq(_fee, 3000);
         assertEq(_marginFee, 3000);
     }

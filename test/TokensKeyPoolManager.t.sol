@@ -97,7 +97,7 @@ contract TokensKeyPoolManagerTest is DeployHelper {
         skip(3600 * 10);
         borrowAmount = marginPositionManager.getPosition(positionId).borrowAmount;
         console.log("borrowAmount:%s", borrowAmount);
-        marginPositionManager.close(positionId, PerLibrary.ONE_MILLION, 0, block.timestamp + 1000);
+        marginPositionManager.close(positionId, PerLibrary.ONE_MILLION, 0, block.timestamp + 1001);
         uint256 lb = lendingPoolManager.balanceOf(user, token1Id);
         uint256 mirror1Balance = mirrorTokenManager.balanceOf(address(lendingPoolManager), token1Id);
         token1Amount = manager.balanceOf(address(lendingPoolManager), tokensKey.currency1.toId());
@@ -143,13 +143,13 @@ contract TokensKeyPoolManagerTest is DeployHelper {
             borrowAmount: 0,
             borrowMaxAmount: 0,
             recipient: user0,
-            deadline: block.timestamp + 1000
+            deadline: block.timestamp + 1002
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         skip(3600 * 10);
         borrowAmount = marginPositionManager.getPosition(positionId).borrowAmount;
         console.log("borrowAmount:%s", borrowAmount);
-        marginPositionManager.close(positionId, PerLibrary.ONE_MILLION, 0, block.timestamp + 1000);
+        marginPositionManager.close(positionId, PerLibrary.ONE_MILLION, 0, block.timestamp + 1003);
         uint256 lb = lendingPoolManager.balanceOf(user, token1Id);
         uint256 mirror1Balance = mirrorTokenManager.balanceOf(address(lendingPoolManager), token1Id);
         token1Amount = manager.balanceOf(address(lendingPoolManager), usdtKey.currency1.toId());

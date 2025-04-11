@@ -10,7 +10,6 @@ import {MirrorTokenManager} from "../../src/MirrorTokenManager.sol";
 import {MarginLiquidity} from "../../src/MarginLiquidity.sol";
 import {MarginPositionManager} from "../../src/MarginPositionManager.sol";
 import {MarginRouter} from "../../src/MarginRouter.sol";
-import {MarginOracle} from "../../src/MarginOracle.sol";
 import {MarginFees} from "../../src/MarginFees.sol";
 import {MarginChecker} from "../../src/MarginChecker.sol";
 import {PoolStatus} from "../../src/types/PoolStatus.sol";
@@ -66,7 +65,6 @@ contract DeployHelper is Test {
     MarginLiquidity marginLiquidity;
     MarginPositionManager marginPositionManager;
     MarginRouter swapRouter;
-    MarginOracle marginOracle;
     MarginFees marginFees;
     MarginChecker marginChecker;
     PoolStatusManager poolStatusManager;
@@ -97,11 +95,8 @@ contract DeployHelper is Test {
         poolStatusManager = new PoolStatusManager(
             address(this), manager, mirrorTokenManager, lendingPoolManager, marginLiquidity, pairPoolManager, marginFees
         );
-        poolStatusManager.setMarginOracle(address(marginOracle));
-        pairPoolManager.setStatusManager(poolStatusManager);
 
-        marginLiquidity.addPoolManager(address(pairPoolManager));
-        mirrorTokenManager.addPoolManger(address(pairPoolManager));
+        pairPoolManager.setStatusManager(poolStatusManager);
 
         bytes memory constructorArgs = abi.encode(address(this), manager, address(pairPoolManager)); //Add all the necessary constructor arguments from the hook
         // Mine a salt that will produce a hook address with the correct flags
@@ -150,6 +145,9 @@ contract DeployHelper is Test {
         tokenA.approve(address(swapRouter), type(uint256).max);
         tokenB.approve(address(swapRouter), type(uint256).max);
         tokenUSDT.approve(address(swapRouter), type(uint256).max);
+
+        marginLiquidity.addPoolManager(address(pairPoolManager));
+        mirrorTokenManager.addPoolManager(address(pairPoolManager));
     }
 
     function deployHookAndRouter() internal {
@@ -158,7 +156,7 @@ contract DeployHelper is Test {
         lendingPoolManager = new LendingPoolManager(address(this), manager, mirrorTokenManager);
         marginFees = new MarginFees(address(this));
         marginLiquidity = new MarginLiquidity(address(this));
-        marginOracle = new MarginOracle();
+
         deployMintAndApprove2Currencies();
     }
 
@@ -238,6 +236,8 @@ contract DeployHelper is Test {
         console.log("status.lendingRealReserve1:", status.lendingRealReserve1);
         console.log("status.lendingMirrorReserve0:", status.lendingMirrorReserve0);
         console.log("status.lendingMirrorReserve1:", status.lendingMirrorReserve1);
+        console.log("status.truncatedReserve0:", status.truncatedReserve0);
+        console.log("status.truncatedReserve1:", status.truncatedReserve1);
     }
 
     function nativeKeyBalance(string memory message) internal view {

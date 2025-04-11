@@ -8,17 +8,20 @@ import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
 import {PoolStatus} from "../src/types/PoolStatus.sol";
-import {RateStatus} from "../src/types/RateStatus.sol";
+import {PoolStatusLibrary} from "../src/types/PoolStatusLibrary.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
 import {CurrencyPoolLibrary} from "../src/libraries/CurrencyPoolLibrary.sol";
+import {UQ112x112} from "../src/libraries/UQ112x112.sol";
+import {PerLibrary} from "../src/libraries/PerLibrary.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 // V4
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
@@ -33,7 +36,10 @@ import {HookMiner} from "./utils/HookMiner.sol";
 import {DeployHelper} from "./utils/DeployHelper.sol";
 
 contract MarginFeesTest is DeployHelper {
+    using UQ112x112 for *;
     using CurrencyPoolLibrary for *;
+    using PoolStatusLibrary for PoolStatus;
+    using PerLibrary for uint256;
 
     function setUp() public {
         deployHookAndRouter();
@@ -62,12 +68,12 @@ contract MarginFeesTest is DeployHelper {
         assertEq(test24, type(uint24).max);
     }
 
-    function testDynamicFee() public {
+    function testMarginDynamicFee() public {
         address user = address(this);
         PoolId poolId = nativeKey.toId();
         uint256 keyId = CurrencyLibrary.ADDRESS_ZERO.toTokenId(poolId);
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
-        uint24 _beforeFee = marginFees.dynamicFee(address(pairPoolManager), status);
+        uint24 _beforeFee = marginFees.dynamicFee(status, true, 0, 0);
         assertEq(_beforeFee, status.key.fee);
         uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), poolId, false);
         assertEq(rate, 50000);
@@ -93,14 +99,61 @@ contract MarginFeesTest is DeployHelper {
         uint256 _positionId = marginPositionManager.getPositionId(poolId, false, user, true);
         assertEq(positionId, _positionId);
         status = pairPoolManager.getStatus(poolId);
-        uint24 _afterFee = marginFees.dynamicFee(address(pairPoolManager), status);
-        assertEq(_afterFee, 20 * status.key.fee);
-        vm.warp(10);
-        _afterFee = marginFees.dynamicFee(address(pairPoolManager), status);
-        assertLe(_afterFee, 20 * status.key.fee);
+        printPoolStatus(status);
+        (uint24 _afterFee,) = marginFees.getPoolFees(address(pairPoolManager), poolId, true, 0, 0);
+        assertEq(_afterFee, 41044);
+        skip(10);
+        (_afterFee,) = marginFees.getPoolFees(address(pairPoolManager), poolId, true, 0, 0);
+        assertLe(_afterFee, 41044);
+        status = pairPoolManager.getStatus(poolId);
+        printPoolStatus(status);
         console.log("_afterFee:", _afterFee);
-        vm.warp(130);
-        _afterFee = marginFees.dynamicFee(address(pairPoolManager), status);
+        skip(130);
+        status = pairPoolManager.getStatus(poolId);
+        printPoolStatus(status);
+        (_afterFee,) = marginFees.getPoolFees(address(pairPoolManager), poolId, true, 0, 0);
         assertEq(_afterFee, status.key.fee);
+    }
+
+    function differencePrice(uint256 price, uint256 lastPrice) internal pure returns (uint256 priceDiff) {
+        priceDiff = price > lastPrice ? price - lastPrice : lastPrice - price;
+    }
+
+    function testDynamicFee() public view {
+        PoolId poolId = nativeKey.toId();
+        bool zeroForOne = true;
+        PoolStatus memory status = pairPoolManager.getStatus(poolId);
+        uint24 _beforeFee = marginFees.dynamicFee(status, zeroForOne, 0, 0);
+        assertEq(_beforeFee, status.key.fee);
+        uint256 amountIn = 0.1 ether;
+        uint24 _afterFee1 = marginFees.dynamicFee(status, zeroForOne, amountIn, 0);
+        assertGt(_afterFee1, status.key.fee);
+        uint256 amountOut = status.getAmountOut(zeroForOne, amountIn);
+        uint24 _afterFee2 = marginFees.dynamicFee(status, zeroForOne, 0, amountOut);
+        assertEq(_afterFee1, _afterFee2);
+
+        (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
+        if (amountIn > 0) {
+            amountOut = status.getAmountOut(zeroForOne, amountIn);
+        } else if (amountOut > 0) {
+            amountIn = status.getAmountIn(zeroForOne, amountOut);
+        }
+        if (zeroForOne) {
+            _reserve1 -= amountOut;
+            _reserve0 += amountIn;
+        } else {
+            _reserve0 -= amountOut;
+            _reserve1 += amountIn;
+        }
+        uint256 lastPrice0X112 = status.getPrice0X112();
+        uint256 lastPrice1X112 = status.getPrice1X112();
+        uint224 price0X112 = UQ112x112.encode(_reserve1.toUint112()).div(_reserve0.toUint112());
+        uint224 price1X112 = UQ112x112.encode(_reserve0.toUint112()).div(_reserve1.toUint112());
+        uint256 degree0 = differencePrice(price0X112, lastPrice0X112).mulMillionDiv(lastPrice0X112);
+        uint256 degree1 = differencePrice(price1X112, lastPrice1X112).mulMillionDiv(lastPrice1X112);
+        uint256 degree = Math.max(degree0, degree1);
+        console.log("degree:%s", degree);
+        uint256 dFee = Math.mulDiv((degree * 10) ** 3, status.key.fee, PerLibrary.ONE_MILLION ** 3);
+        assertEq(dFee, _afterFee2);
     }
 }

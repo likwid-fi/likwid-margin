@@ -11,7 +11,6 @@ import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {LendingPoolManager} from "../src/LendingPoolManager.sol";
 import {MarginLiquidity} from "../src/MarginLiquidity.sol";
 import {MarginChecker} from "../src/MarginChecker.sol";
-import {MarginOracle} from "../src/MarginOracle.sol";
 import {MarginFees} from "../src/MarginFees.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
@@ -24,7 +23,6 @@ contract DeployAllScript is Script {
     LendingPoolManager lendingPoolManager;
     MarginLiquidity marginLiquidity;
     MarginChecker marginChecker;
-    MarginOracle marginOracle;
     MarginFees marginFees;
     PairPoolManager pairPoolManager;
     MarginPositionManager marginPositionManager;
@@ -85,9 +83,6 @@ contract DeployAllScript is Script {
         );
         console2.log("poolStatusManager:", address(poolStatusManager));
 
-        marginOracle = new MarginOracle(poolStatusManager);
-        console2.log("marginOracle:", address(marginOracle));
-
         MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), pairPoolManager);
         console2.log("swapRouter:", address(swapRouter));
 
@@ -113,8 +108,6 @@ contract DeployAllScript is Script {
         require(deployedHook == hookAddress, "DeployScript: hook address mismatch");
         console2.log("hookAddress:", hookAddress);
 
-        // config poolStatusManager
-        poolStatusManager.setMarginOracle(address(marginOracle));
         // config pairPoolManager
         pairPoolManager.addPositionManager(address(marginPositionManager));
         pairPoolManager.setHooks(MarginHook(hookAddress));
