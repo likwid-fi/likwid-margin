@@ -30,6 +30,10 @@ struct PoolStatus {
     uint112 lendingMirrorReserve0;
     /// @notice The mirror reserve of the second currency in the lending pool.
     uint112 lendingMirrorReserve1;
+    /// @notice The truncated reserve of the first currency in the lending pool.
+    uint112 truncatedReserve0;
+    /// @notice The truncated reserve of the second currency in the lending pool.
+    uint112 truncatedReserve1;
     /// @notice The cumulative borrow rate of the first currency in the pool.
     uint256 rate0CumulativeLast;
     /// @notice The cumulative borrow rate of the second currency in the pool.

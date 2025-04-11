@@ -10,8 +10,7 @@ import {FeeLibrary} from "../libraries/FeeLibrary.sol";
 import {PoolStatus} from "./PoolStatus.sol";
 
 library PoolStatusLibrary {
-    using UQ112x112 for uint224;
-    using UQ112x112 for uint112;
+    using UQ112x112 for *;
     using FeeLibrary for uint24;
 
     function reserve0(PoolStatus memory status) internal pure returns (uint112) {

@@ -20,7 +20,6 @@ import {IStatusBase} from "./interfaces/IStatusBase.sol";
 import {IPairMarginManager} from "./interfaces/IPairMarginManager.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginChecker} from "./interfaces/IMarginChecker.sol";
-import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 
 contract MarginChecker is IMarginChecker, Owned {
@@ -301,31 +300,16 @@ contract MarginChecker is IMarginChecker, Owned {
     }
 
     /// @inheritdoc IMarginChecker
-    function getOracleReserves(address poolManager, PoolId poolId) public view returns (uint224 reserves) {
-        address marginOracle = IPairPoolManager(poolManager).statusManager().marginOracle();
-        if (marginOracle == address(0)) {
-            reserves = 0;
-        } else {
-            (reserves,) = IMarginOracleReader(marginOracle).observeNow(IPairPoolManager(poolManager), poolId);
-        }
-    }
-
-    /// @inheritdoc IMarginChecker
     function getReserves(address _poolManager, PoolId poolId, bool marginForOne)
         public
         view
         returns (uint256 reserveBorrow, uint256 reserveMargin)
     {
         IPairPoolManager poolManager = IPairPoolManager(_poolManager);
-        uint224 oracleReserves = getOracleReserves(address(poolManager), poolId);
-        if (oracleReserves == 0) {
-            (uint256 reserve0, uint256 reserve1) = poolManager.getReserves(poolId);
-            (reserveBorrow, reserveMargin) = marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
-        } else {
-            (reserveBorrow, reserveMargin) = marginForOne
-                ? (oracleReserves.getReverse0(), oracleReserves.getReverse1())
-                : (oracleReserves.getReverse1(), oracleReserves.getReverse0());
-        }
+        PoolStatus memory status = poolManager.getStatus(poolId);
+        (reserveBorrow, reserveMargin) = marginForOne
+            ? (status.truncatedReserve0, status.truncatedReserve1)
+            : (status.truncatedReserve1, status.truncatedReserve0);
     }
 
     function _getReservesX224(PoolStatus memory status) internal pure returns (uint224 reserves) {
@@ -333,22 +317,13 @@ contract MarginChecker is IMarginChecker, Owned {
             + uint224(status.realReserve1 + status.mirrorReserve1);
     }
 
-    function _getOracleReserves(address poolManager, PoolStatus memory _status)
-        internal
-        view
-        returns (uint224 reserves)
-    {
-        address marginOracle = IPairPoolManager(poolManager).statusManager().marginOracle();
-        if (marginOracle == address(0)) {
-            reserves = 0;
-        } else {
-            (reserves,) = IMarginOracleReader(marginOracle).observeNow(IPairPoolManager(poolManager), _status);
-        }
+    function _getTruncatedReservesX224(PoolStatus memory status) internal pure returns (uint224 reserves) {
+        reserves = (uint224(status.truncatedReserve0) << 112) + uint224(status.truncatedReserve1);
     }
 
-    function getLiquidateStatus(address pairPoolManager, PoolStatus memory _status, bool marginForOne)
+    function getLiquidateStatus(PoolStatus memory _status, bool marginForOne)
         external
-        view
+        pure
         returns (LiquidateStatus memory liquidateStatus)
     {
         liquidateStatus.poolId = _status.key.toId();
@@ -357,7 +332,7 @@ contract MarginChecker is IMarginChecker, Owned {
             ? (_status.key.currency0, _status.key.currency1)
             : (_status.key.currency1, _status.key.currency0);
         liquidateStatus.statusReserves = _getReservesX224(_status);
-        liquidateStatus.oracleReserves = _getOracleReserves(pairPoolManager, _status);
+        liquidateStatus.oracleReserves = _getTruncatedReservesX224(_status);
     }
 
     function _checkLiquidate(

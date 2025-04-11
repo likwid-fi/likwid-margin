@@ -14,9 +14,6 @@ import {GlobalStatus} from "../types/GlobalStatus.sol";
 interface IPoolStatusManager is IStatusBase {
     function hooks() external view returns (IHooks hook);
 
-    /// @notice Get current margin oracle address
-    function marginOracle() external view returns (address);
-
     function initialize(PoolKey calldata key) external;
 
     function getGlobalStatus(PoolId poolId) external view returns (GlobalStatus memory _status);

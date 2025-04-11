@@ -24,12 +24,15 @@ library PerLibrary {
         z = Math.mulDiv(x, y, ONE_MILLION);
     }
 
-    function upperMillion(uint256 x, uint256 y, uint256 per) internal pure returns (uint256 z) {
-        z = Math.mulDiv(x, ONE_MILLION + per, y);
+    function upperMillion(uint256 x, uint256 per) internal pure returns (uint256 z) {
+        z = Math.mulDiv(x, ONE_MILLION + per, ONE_MILLION);
     }
 
-    function lowerMillion(uint256 x, uint256 y, uint256 per) internal pure returns (uint256 z) {
-        z = Math.mulDiv(x, ONE_MILLION - per, y);
+    function lowerMillion(uint256 x, uint256 per) internal pure returns (uint256 z) {
+        if (per >= ONE_MILLION) {
+            return z;
+        }
+        z = Math.mulDiv(x, ONE_MILLION - per, ONE_MILLION);
     }
 
     function isWithinTolerance(uint256 a, uint256 b, uint256 t) internal pure returns (bool) {

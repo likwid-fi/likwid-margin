@@ -34,7 +34,6 @@ import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
-import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 
 contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     using UQ112x112 for *;
@@ -126,10 +125,6 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     modifier onlyLendingPool() {
         require(msg.sender == address(lendingPoolManager), "UNAUTHORIZED");
         _;
-    }
-
-    function marginOracleReader() external view returns (IMarginOracleReader oracleReader) {
-        oracleReader = IMarginOracleReader(statusManager.marginOracle());
     }
 
     function getStatus(PoolId poolId) external view returns (PoolStatus memory _status) {

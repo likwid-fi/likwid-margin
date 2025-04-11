@@ -442,8 +442,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         }
         MarginPosition memory _position = _positions[positionId];
         PoolStatus memory _status = pairPoolManager.setBalances(_position.poolId);
-        LiquidateStatus memory liquidateStatus =
-            checker.getLiquidateStatus(address(pairPoolManager), _status, _position.marginForOne);
+        LiquidateStatus memory liquidateStatus = checker.getLiquidateStatus(_status, _position.marginForOne);
         ReleaseParams memory params = ReleaseParams({
             poolId: _position.poolId,
             marginForOne: _position.marginForOne,
@@ -483,8 +482,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         }
         MarginPosition memory _position = _positions[positionId];
         PoolStatus memory _status = pairPoolManager.setBalances(_position.poolId);
-        LiquidateStatus memory liquidateStatus =
-            checker.getLiquidateStatus(address(pairPoolManager), _status, _position.marginForOne);
+        LiquidateStatus memory liquidateStatus = checker.getLiquidateStatus(_status, _position.marginForOne);
         uint256 sendValue = liquidateStatus.borrowCurrency.checkAmount(borrowAmount);
         ReleaseParams memory params = ReleaseParams({
             poolId: _position.poolId,

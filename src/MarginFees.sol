@@ -20,7 +20,6 @@ import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {MarginParams} from "./types/MarginParams.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {IMarginFees} from "./interfaces/IMarginFees.sol";
-import {IMarginOracleReader} from "./interfaces/IMarginOracleReader.sol";
 
 contract MarginFees is IMarginFees, Owned {
     using SafeCast for uint256;
@@ -60,7 +59,7 @@ contract MarginFees is IMarginFees, Owned {
     {
         IPairPoolManager poolManager = IPairPoolManager(_poolManager);
         PoolStatus memory status = poolManager.getStatus(poolId);
-        _fee = dynamicFee(_poolManager, status, zeroForOne, amountIn, amountOut);
+        _fee = dynamicFee(status, zeroForOne, amountIn, amountOut);
         _marginFee = status.marginFee == 0 ? marginFee : status.marginFee;
     }
 
@@ -68,17 +67,18 @@ contract MarginFees is IMarginFees, Owned {
         priceDiff = price > lastPrice ? price - lastPrice : lastPrice - price;
     }
 
-    function _getPriceDegree(
-        uint224 oracleReserves,
-        PoolStatus memory status,
-        bool zeroForOne,
-        uint256 amountIn,
-        uint256 amountOut
-    ) internal pure returns (uint256 degree) {
-        if (oracleReserves > 0) {
-            uint256 lastPrice0X112 = oracleReserves.getPrice0X112();
-            uint256 lastPrice1X112 = oracleReserves.getPrice1X112();
+    function _getPriceDegree(PoolStatus memory status, bool zeroForOne, uint256 amountIn, uint256 amountOut)
+        internal
+        pure
+        returns (uint256 degree)
+    {
+        if (status.truncatedReserve0 > 0 && status.truncatedReserve1 > 0) {
+            uint256 lastPrice0X112 = UQ112x112.encode(status.truncatedReserve1).div(status.truncatedReserve0);
+            uint256 lastPrice1X112 = UQ112x112.encode(status.truncatedReserve0).div(status.truncatedReserve1);
             (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
+            if (_reserve0 == 0 || _reserve1 == 0) {
+                return degree;
+            }
             if (amountIn > 0) {
                 amountOut = status.getAmountOut(zeroForOne, amountIn);
             } else if (amountOut > 0) {
@@ -100,29 +100,21 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     /// @inheritdoc IMarginFees
-    function dynamicFee(
-        address _poolManager,
-        PoolStatus memory status,
-        bool zeroForOne,
-        uint256 amountIn,
-        uint256 amountOut
-    ) public view returns (uint24 _fee) {
+    function dynamicFee(PoolStatus memory status, bool zeroForOne, uint256 amountIn, uint256 amountOut)
+        public
+        view
+        returns (uint24 _fee)
+    {
         _fee = status.key.fee;
-        IMarginOracleReader oracleReader = IPairPoolManager(_poolManager).marginOracleReader();
-        if (address(oracleReader) != address(0)) {
-            (uint224 oracleReserves,) = oracleReader.observeNow(IPairPoolManager(_poolManager), status);
-            if (oracleReserves > 0) {
-                uint256 degree = _getPriceDegree(oracleReserves, status, zeroForOne, amountIn, amountOut);
-                if (degree > PerLibrary.ONE_MILLION) {
-                    _fee = uint24(PerLibrary.ONE_MILLION) - 10000;
-                } else if (degree > dynamicFeeMinDegree) {
-                    uint256 dFee = Math.mulDiv((degree * 10) ** 3, _fee, PerLibrary.ONE_MILLION ** 3);
-                    if (dFee >= PerLibrary.ONE_MILLION) {
-                        _fee = uint24(PerLibrary.ONE_MILLION) - 10000;
-                    } else {
-                        _fee = uint24(dFee);
-                    }
-                }
+        uint256 degree = _getPriceDegree(status, zeroForOne, amountIn, amountOut);
+        if (degree > PerLibrary.ONE_MILLION) {
+            _fee = uint24(PerLibrary.ONE_MILLION) - 10000;
+        } else if (degree > dynamicFeeMinDegree) {
+            uint256 dFee = Math.mulDiv((degree * 10) ** 3, _fee, PerLibrary.ONE_MILLION ** 3);
+            if (dFee >= PerLibrary.ONE_MILLION) {
+                _fee = uint24(PerLibrary.ONE_MILLION) - 10000;
+            } else {
+                _fee = uint24(dFee);
             }
         }
     }

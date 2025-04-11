@@ -103,12 +103,6 @@ interface IMarginChecker {
         view
         returns (uint256 maxAmount);
 
-    /// @notice Get the oracle reserve amount of the pool
-    /// @param poolManager The manager of the pool
-    /// @param poolId  The pool id
-    /// @return reserves The oracle reserve amount of the pool
-    function getOracleReserves(address poolManager, PoolId poolId) external view returns (uint224 reserves);
-
     /// @notice Get the reserve amount of the pool
     /// @param poolManager The manager of the pool
     /// @param poolId  The pool id
@@ -120,7 +114,7 @@ interface IMarginChecker {
         view
         returns (uint256 reserveBorrow, uint256 reserveMargin);
 
-    function getLiquidateStatus(address pairPoolManager, PoolStatus memory _status, bool marginForOne)
+    function getLiquidateStatus(PoolStatus memory _status, bool marginForOne)
         external
         view
         returns (LiquidateStatus memory liquidateStatus);
