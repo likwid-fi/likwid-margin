@@ -51,6 +51,8 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     error InsufficientLiquidityBurnt();
     error NotPositionManager();
     error NotAllowed();
+    error StatusManagerAlreadySet();
+    error HookAlreadySet();
 
     event Initialize(
         PoolId indexed id,
@@ -289,13 +291,13 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
 
     // ******************** OWNER CALL ********************
     function setHooks(IHooks _hooks) external onlyOwner {
+        if (address(hooks) != address(0)) revert HookAlreadySet();
         hooks = _hooks;
     }
 
     function setStatusManager(IPoolStatusManager _poolStatusManager) external onlyOwner {
-        if (address(statusManager) == address(0)) {
-            statusManager = _poolStatusManager;
-        }
+        if (address(statusManager) != address(0)) revert StatusManagerAlreadySet();
+        statusManager = _poolStatusManager;
     }
 
     function addPositionManager(address _marginPositionManager) external onlyOwner {
