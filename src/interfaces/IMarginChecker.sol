@@ -114,11 +114,6 @@ interface IMarginChecker {
         view
         returns (uint256 reserveBorrow, uint256 reserveMargin);
 
-    function getLiquidateStatus(PoolStatus memory _status, bool marginForOne)
-        external
-        view
-        returns (LiquidateStatus memory liquidateStatus);
-
     /// @notice Check if the position is liquidated
     /// @param manager The position manager address
     /// @param positionId The position id

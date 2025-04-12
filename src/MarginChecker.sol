@@ -312,29 +312,6 @@ contract MarginChecker is IMarginChecker, Owned {
             : (status.truncatedReserve1, status.truncatedReserve0);
     }
 
-    function _getReservesX224(PoolStatus memory status) internal pure returns (uint224 reserves) {
-        reserves = (uint224(status.realReserve0 + status.mirrorReserve0) << 112)
-            + uint224(status.realReserve1 + status.mirrorReserve1);
-    }
-
-    function _getTruncatedReservesX224(PoolStatus memory status) internal pure returns (uint224 reserves) {
-        reserves = (uint224(status.truncatedReserve0) << 112) + uint224(status.truncatedReserve1);
-    }
-
-    function getLiquidateStatus(PoolStatus memory _status, bool marginForOne)
-        external
-        pure
-        returns (LiquidateStatus memory liquidateStatus)
-    {
-        liquidateStatus.poolId = _status.key.toId();
-        liquidateStatus.marginForOne = marginForOne;
-        (liquidateStatus.borrowCurrency, liquidateStatus.marginCurrency) = marginForOne
-            ? (_status.key.currency0, _status.key.currency1)
-            : (_status.key.currency1, _status.key.currency0);
-        liquidateStatus.statusReserves = _getReservesX224(_status);
-        liquidateStatus.oracleReserves = _getTruncatedReservesX224(_status);
-    }
-
     function _checkLiquidate(
         IPairMarginManager poolManager,
         PoolStatus memory _status,

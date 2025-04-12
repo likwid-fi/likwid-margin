@@ -233,11 +233,30 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         emit Deposit(poolId, currency, msg.sender, recipient, amount, originalAmount, accruesRatioX112Of[id]);
     }
 
-    function realOut(address sender, PoolId poolId, Currency currency, uint256 amount) external onlyPairManager {
+    function reserveOut(address sender, PoolId poolId, PoolStatus memory status, Currency currency, uint256 amount)
+        external
+        onlyPairManager
+    {
         uint256 tokenId = currency.toTokenId(poolId);
         uint256 balance = balanceOf(sender, tokenId);
         amount = Math.min(balance, amount);
-        poolManager.transfer(msg.sender, currency.toId(), amount);
+        uint256 realReserve;
+        if (status.key.currency0 == currency) {
+            realReserve = status.lendingRealReserve0;
+        } else if (status.key.currency1 == currency) {
+            realReserve = status.lendingRealReserve1;
+        }
+        uint256 transferAmount = amount;
+        if (transferAmount > realReserve) {
+            poolManager.transfer(msg.sender, currency.toId(), realReserve);
+            transferAmount -= realReserve;
+        } else {
+            poolManager.transfer(msg.sender, currency.toId(), transferAmount);
+            transferAmount = 0;
+        }
+        if (transferAmount > 0) {
+            mirrorTokenManager.transfer(msg.sender, tokenId, transferAmount);
+        }
         uint256 originalAmount = _burn(sender, tokenId, amount);
         emit Withdraw(poolId, currency, msg.sender, sender, amount, originalAmount, accruesRatioX112Of[tokenId]);
     }

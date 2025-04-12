@@ -39,7 +39,8 @@ interface ILendingPoolManager is IERC6909Accrues {
         external
         returns (uint256 originalAmount);
 
-    function realOut(address sender, PoolId poolId, Currency currency, uint256 amount) external;
+    function reserveOut(address sender, PoolId poolId, PoolStatus memory status, Currency currency, uint256 amount)
+        external;
 
     // ******************** USER CALL ********************
     function deposit(address sender, address recipient, PoolId poolId, Currency currency, uint256 amount)

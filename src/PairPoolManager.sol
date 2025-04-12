@@ -446,7 +446,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             }
 
             // release margin
-            lendingPoolManager.realOut(params.payer, params.poolId, marginCurrency, params.releaseAmount + 1);
+            lendingPoolManager.reserveOut(params.payer, params.poolId, status, marginCurrency, params.releaseAmount + 1);
         } else if (repayAmount > 0) {
             // repay borrow
             borrowCurrency.settle(poolManager, params.payer, repayAmount, false);

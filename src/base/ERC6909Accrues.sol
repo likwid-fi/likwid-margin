@@ -107,7 +107,7 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
         if (deviation > 0) {
             amount += uint256(deviation);
             deviationOf[id] = 0;
-        } else {
+        } else if (deviation < 0) {
             if (amount > uint256(-deviation)) {
                 amount -= uint256(-deviation);
                 deviationOf[id] = 0;
@@ -130,17 +130,7 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
     }
 
     function _burn(address sender, uint256 id, uint256 amount) internal virtual returns (uint256 originalAmount) {
-        int256 deviation = deviationOf[id];
-        if (deviation > 0) {
-            if (amount > uint256(deviation)) {
-                amount -= uint256(deviation);
-            } else {
-                deviationOf[id] -= int256(amount);
-                return originalAmount;
-            }
-        }
         uint256 ratioX112 = accruesRatioX112Of[id];
-
         uint256 beforeOriginal = balanceOriginal[sender][id];
         uint256 beforeBalance = beforeOriginal.mulRatioX112(ratioX112);
         if (amount == beforeBalance) {
@@ -150,8 +140,6 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
             uint256 afterOriginal = afterBalance.divRatioX112(ratioX112);
             originalAmount = beforeOriginal - afterOriginal;
         }
-
-        deviationOf[id] = 0;
 
         balanceOriginal[sender][id] -= originalAmount;
         balanceOriginal[address(this)][id] -= originalAmount;
