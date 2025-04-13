@@ -50,7 +50,7 @@ interface IPairMarginManager {
 
     // ******************** MARGIN FUNCTIONS ********************
 
-    function setBalances(PoolId poolId) external returns (PoolStatus memory _status);
+    function setBalances(address sender, PoolId poolId) external returns (PoolStatus memory _status);
 
     /// @notice Margin
     /// @param sender The address of sender
@@ -63,8 +63,12 @@ interface IPairMarginManager {
         returns (MarginParamsVo memory);
 
     /// @notice Release
+    /// @param sender The address of sender
     /// @param status The status for the pool
     /// @param params The parameters for the release hook
     /// @return The amount of tokens repaid
-    function release(PoolStatus memory status, ReleaseParams memory params) external payable returns (uint256);
+    function release(address sender, PoolStatus memory status, ReleaseParams memory params)
+        external
+        payable
+        returns (uint256);
 }

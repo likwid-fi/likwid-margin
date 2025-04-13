@@ -45,6 +45,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         PoolId indexed poolId,
         Currency indexed currency,
         address indexed sender,
+        uint256 tokeId,
         address recipient,
         uint256 amount,
         uint256 originalAmount,
@@ -55,10 +56,23 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         PoolId indexed poolId,
         Currency indexed currency,
         address indexed sender,
+        uint256 tokeId,
         address recipient,
         uint256 amount,
         uint256 originalAmount,
         uint256 incrementRatioX112
+    );
+
+    event Sync(
+        PoolId indexed poolId,
+        uint256 id0,
+        uint256 reserve0,
+        uint256 total0,
+        int256 deviation0,
+        uint256 id1,
+        uint256 reserve1,
+        uint256 total1,
+        int256 deviation1
     );
 
     IMirrorTokenManager public immutable mirrorTokenManager;
@@ -160,7 +174,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         emit UpdateInterestRatio(id, totalSupply, interest, incrementRatioX112Old, incrementRatioX112New);
     }
 
-    function updateProtocolInterests(PoolId poolId, Currency currency, uint256 interest)
+    function updateProtocolInterests(address caller, PoolId poolId, Currency currency, uint256 interest)
         external
         onlyStatusManager
         returns (uint256 originalAmount)
@@ -170,19 +184,20 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         }
         uint256 id = currency.toTokenId(poolId);
         mirrorTokenManager.mintInStatus(address(this), id, interest);
-        originalAmount = _mint(owner, id, interest);
-        emit Deposit(poolId, currency, msg.sender, owner, interest, originalAmount, accruesRatioX112Of[id]);
+        originalAmount = _mint(msg.sender, owner, id, interest);
+        emit Deposit(poolId, currency, caller, id, owner, interest, originalAmount, accruesRatioX112Of[id]);
     }
 
     function sync(PoolId poolId, PoolStatus memory status) external onlyStatusManager {
-        uint256 id = status.key.currency0.toTokenId(poolId);
-        uint256 total = totalSupply(id);
-        uint256 reserve = status.lendingReserve0();
-        deviationOf[id] = reserve.toInt256() - total.toInt256();
-        id = status.key.currency1.toTokenId(poolId);
-        total = totalSupply(id);
-        reserve = status.lendingReserve1();
-        deviationOf[id] = reserve.toInt256() - total.toInt256();
+        uint256 id0 = status.key.currency0.toTokenId(poolId);
+        uint256 total0 = totalSupply(id0);
+        uint256 reserve0 = status.lendingReserve0();
+        deviationOf[id0] = reserve0.toInt256() - total0.toInt256();
+        uint256 id1 = status.key.currency1.toTokenId(poolId);
+        uint256 total1 = totalSupply(id1);
+        uint256 reserve1 = status.lendingReserve1();
+        deviationOf[id1] = reserve1.toInt256() - total1.toInt256();
+        emit Sync(poolId, id0, reserve0, total0, deviationOf[id0], id1, reserve1, total1, deviationOf[id1]);
     }
 
     function balanceAccounts(Currency currency, uint256 amount) external onlyPairManager {
@@ -192,15 +207,15 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         poolManager.transfer(msg.sender, currency.toId(), amount);
     }
 
-    function mirrorIn(address receiver, PoolId poolId, Currency currency, uint256 amount)
+    function mirrorIn(address caller, address receiver, PoolId poolId, Currency currency, uint256 amount)
         external
         onlyPairManager
         returns (uint256 originalAmount)
     {
         uint256 id = currency.toTokenId(poolId);
         mirrorTokenManager.transferFrom(msg.sender, address(this), id, amount);
-        originalAmount = _mint(receiver, id, amount);
-        emit Deposit(poolId, currency, msg.sender, receiver, amount, originalAmount, accruesRatioX112Of[id]);
+        originalAmount = _mint(caller, receiver, id, amount);
+        emit Deposit(poolId, currency, caller, id, receiver, amount, originalAmount, accruesRatioX112Of[id]);
     }
 
     function mirrorInRealOut(PoolId poolId, PoolStatus memory status, Currency currency, uint256 amount)
@@ -222,23 +237,27 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         }
     }
 
-    function realIn(address recipient, PoolId poolId, Currency currency, uint256 amount)
+    function realIn(address caller, address recipient, PoolId poolId, Currency currency, uint256 amount)
         external
         onlyPairManager
         returns (uint256 originalAmount)
     {
         uint256 id = currency.toTokenId(poolId);
         poolManager.transferFrom(msg.sender, address(this), currency.toId(), amount);
-        originalAmount = _mint(recipient, id, amount);
-        emit Deposit(poolId, currency, msg.sender, recipient, amount, originalAmount, accruesRatioX112Of[id]);
+        originalAmount = _mint(caller, recipient, id, amount);
+        emit Deposit(poolId, currency, caller, id, recipient, amount, originalAmount, accruesRatioX112Of[id]);
     }
 
-    function reserveOut(address sender, PoolId poolId, PoolStatus memory status, Currency currency, uint256 amount)
-        external
-        onlyPairManager
-    {
+    function reserveOut(
+        address caller,
+        address payer,
+        PoolId poolId,
+        PoolStatus memory status,
+        Currency currency,
+        uint256 amount
+    ) external onlyPairManager {
         uint256 tokenId = currency.toTokenId(poolId);
-        uint256 balance = balanceOf(sender, tokenId);
+        uint256 balance = balanceOf(payer, tokenId);
         amount = Math.min(balance, amount);
         uint256 realReserve;
         if (status.key.currency0 == currency) {
@@ -257,8 +276,8 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         if (transferAmount > 0) {
             mirrorTokenManager.transfer(msg.sender, tokenId, transferAmount);
         }
-        uint256 originalAmount = _burn(sender, tokenId, amount);
-        emit Withdraw(poolId, currency, msg.sender, sender, amount, originalAmount, accruesRatioX112Of[tokenId]);
+        uint256 originalAmount = _burn(caller, payer, tokenId, amount);
+        emit Withdraw(poolId, currency, caller, tokenId, payer, amount, originalAmount, accruesRatioX112Of[tokenId]);
     }
 
     // ******************** USER CALL ********************
@@ -297,13 +316,13 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         returns (uint256 originalAmount)
     {
         IPoolStatusManager statusManager = pairPoolManager.statusManager();
-        statusManager.setBalances(poolId);
+        statusManager.setBalances(sender, poolId);
         uint256 id = currency.toTokenId(poolId);
         currency.settle(poolManager, sender, amount, false);
         currency.take(poolManager, address(this), amount, true);
-        originalAmount = _mint(recipient, id, amount);
-        emit Deposit(poolId, currency, sender, recipient, amount, originalAmount, accruesRatioX112Of[id]);
+        originalAmount = _mint(sender, recipient, id, amount);
         statusManager.update(poolId);
+        emit Deposit(poolId, currency, sender, id, recipient, amount, originalAmount, accruesRatioX112Of[id]);
     }
 
     function withdraw(address recipient, PoolId poolId, Currency currency, uint256 amount) external {
@@ -315,7 +334,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         selfOnly
     {
         IPoolStatusManager statusManager = pairPoolManager.statusManager();
-        PoolStatus memory status = statusManager.setBalances(poolId);
+        PoolStatus memory status = statusManager.setBalances(sender, poolId);
         uint256 id = currency.toTokenId(poolId);
         uint256 balance = balanceOf(sender, id);
         amount = Math.min(balance, amount);
@@ -331,8 +350,8 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         }
         currency.settle(poolManager, address(this), realAmount, true);
         currency.take(poolManager, recipient, realAmount, false);
-        uint256 originalAmount = _burn(sender, id, realAmount);
-        emit Withdraw(poolId, currency, sender, recipient, realAmount, originalAmount, accruesRatioX112Of[id]);
+        uint256 originalAmount = _burn(sender, sender, id, realAmount);
+        emit Withdraw(poolId, currency, sender, id, recipient, realAmount, originalAmount, accruesRatioX112Of[id]);
         statusManager.update(poolId);
     }
 
@@ -342,7 +361,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
 
     function handleBalanceMirror(address sender, PoolId poolId, Currency currency, uint256 amount) external selfOnly {
         IPoolStatusManager statusManager = pairPoolManager.statusManager();
-        statusManager.setBalances(poolId);
+        statusManager.setBalances(sender, poolId);
         uint256 id = currency.toTokenId(poolId);
         mirrorTokenManager.burn(id, amount);
         currency.settle(poolManager, sender, amount, false);

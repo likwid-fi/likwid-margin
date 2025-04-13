@@ -32,9 +32,9 @@ interface IPoolStatusManager is IStatusBase {
 
     function protocolFeesAccrued(Currency currency) external view returns (uint256);
 
-    function setBalances(PoolId poolId) external returns (PoolStatus memory _status);
+    function setBalances(address sender, PoolId poolId) external returns (PoolStatus memory _status);
 
-    function updateInterests(PoolId poolId) external returns (PoolStatus memory _status);
+    function updateInterests(address sender, PoolId poolId) external returns (PoolStatus memory _status);
 
     function update(PoolId poolId) external;
 
@@ -44,7 +44,7 @@ interface IPoolStatusManager is IStatusBase {
 
     // ******************** HOOK CALL ********************
 
-    function setBalances(PoolKey calldata key) external;
+    function setBalances(address sender, PoolKey calldata key) external;
 
     function updateBalances(PoolKey calldata key) external;
 }

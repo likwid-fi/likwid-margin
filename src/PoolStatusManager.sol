@@ -341,7 +341,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         }
     }
 
-    function _updateInterests(PoolStatus storage status) internal {
+    function _updateInterests(address sender, PoolStatus storage status) internal {
         PoolKey memory key = status.key;
         uint32 blockTS = uint32(block.timestamp % 2 ** 32);
         if (status.blockTimestampLast != blockTS) {
@@ -377,7 +377,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                         if (interestStatus0.protocolInterest > 0) {
                             status.lendingMirrorReserve0 += interestStatus0.protocolInterest.toUint112();
                             lendingPoolManager.updateProtocolInterests(
-                                poolId, key.currency0, interestStatus0.protocolInterest
+                                sender, poolId, key.currency0, interestStatus0.protocolInterest
                             );
                         }
                     }
@@ -404,7 +404,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                         if (interestStatus1.protocolInterest > 0) {
                             status.lendingMirrorReserve1 += interestStatus1.protocolInterest.toUint112();
                             lendingPoolManager.updateProtocolInterests(
-                                poolId, key.currency1, interestStatus1.protocolInterest
+                                sender, poolId, key.currency1, interestStatus1.protocolInterest
                             );
                         }
                     }
@@ -444,8 +444,8 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
 
     // ******************** HOOK CALL ********************
 
-    function setBalances(PoolKey calldata key) external onlyHooks {
-        setBalances(key.toId());
+    function setBalances(address sender, PoolKey calldata key) external onlyHooks {
+        setBalances(sender, key.toId());
     }
 
     function updateBalances(PoolKey calldata key) external onlyHooks {
@@ -465,10 +465,10 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         statusStore[id] = status;
     }
 
-    function setBalances(PoolId poolId) public onlyPoolManager returns (PoolStatus memory) {
+    function setBalances(address sender, PoolId poolId) public onlyPoolManager returns (PoolStatus memory) {
         _callSet();
         PoolStatus storage status = statusStore[poolId];
-        _updateInterests(status);
+        _updateInterests(sender, status);
         BalanceStatus memory balanceStatus = _getRealBalances(status.key);
         BALANCE_0_SLOT.asUint256().tstore(balanceStatus.balance0);
         BALANCE_1_SLOT.asUint256().tstore(balanceStatus.balance1);
@@ -477,9 +477,9 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         return status;
     }
 
-    function updateInterests(PoolId poolId) external onlyPoolManager returns (PoolStatus memory) {
+    function updateInterests(address sender, PoolId poolId) external onlyPoolManager returns (PoolStatus memory) {
         PoolStatus storage status = statusStore[poolId];
-        _updateInterests(status);
+        _updateInterests(sender, status);
         return status;
     }
 

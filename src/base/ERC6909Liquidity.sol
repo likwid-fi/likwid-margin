@@ -112,7 +112,11 @@ abstract contract ERC6909Liquidity is IERC6909 {
                         INTERNAL MINT/BURN LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function _mint(address receiver, uint256 id, uint256 amount) internal virtual returns (uint256 originalAmount) {
+    function _mint(address caller, address receiver, uint256 id, uint256 amount)
+        internal
+        virtual
+        returns (uint256 originalAmount)
+    {
         uint256 ratioX112 = accruesRatioX112Of[id];
         if (ratioX112 == 0) {
             ratioX112 = accruesRatioX112Of[id] = UQ112x112.Q112;
@@ -123,10 +127,14 @@ abstract contract ERC6909Liquidity is IERC6909 {
 
         balanceOriginal[receiver][id] += originalAmount;
 
-        emit Transfer(msg.sender, address(0), receiver, id, originalAmount);
+        emit Transfer(caller, address(0), receiver, id, originalAmount);
     }
 
-    function _burn(address sender, uint256 id, uint256 amount) internal virtual returns (uint256 originalAmount) {
+    function _burn(address caller, address sender, uint256 id, uint256 amount)
+        internal
+        virtual
+        returns (uint256 originalAmount)
+    {
         if (datetimeStore[sender][id].getTimeElapsed() < minHoldingDuration) {
             revert NotAllowed();
         }
@@ -134,6 +142,6 @@ abstract contract ERC6909Liquidity is IERC6909 {
 
         balanceOriginal[sender][id] -= originalAmount;
 
-        emit Transfer(msg.sender, sender, address(0), id, originalAmount);
+        emit Transfer(caller, sender, address(0), id, originalAmount);
     }
 }

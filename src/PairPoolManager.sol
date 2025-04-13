@@ -199,7 +199,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         ensure(params.deadline)
         returns (uint256 liquidity)
     {
-        PoolStatus memory status = statusManager.setBalances(params.poolId);
+        PoolStatus memory status = statusManager.setBalances(msg.sender, params.poolId);
         if (status.key.currency0.isAddressZero() && params.amount0 != msg.value) revert InsufficientValue();
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
         uint256 _totalSupply = marginLiquidity.balanceOf(address(this), uPoolId);
@@ -212,7 +212,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             status.key.currency0.transfer(msg.sender, params.amount0 - amount0In);
         }
         if (liquidity == 0) revert InsufficientLiquidityMinted();
-        marginLiquidity.addLiquidity(params.to, uPoolId, params.level, liquidity);
+        marginLiquidity.addLiquidity(msg.sender, params.to, uPoolId, params.level, liquidity);
         poolManager.unlock(abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, amount0In, amount1In)));
         statusManager.update(params.poolId);
         emit Mint(params.poolId, msg.sender, params.to, liquidity, amount0In, amount1In, params.level);
@@ -235,12 +235,12 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         ensure(params.deadline)
         returns (uint256 amount0, uint256 amount1)
     {
-        PoolStatus memory status = statusManager.setBalances(params.poolId);
+        PoolStatus memory status = statusManager.setBalances(msg.sender, params.poolId);
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
         {
             (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
             (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) = marginLiquidity.getSupplies(uPoolId);
-            marginLiquidity.removeLiquidity(msg.sender, uPoolId, params.level, params.liquidity);
+            marginLiquidity.removeLiquidity(msg.sender, msg.sender, uPoolId, params.level, params.liquidity);
             uint256 maxReserve0 = status.realReserve0;
             uint256 maxReserve1 = status.realReserve1;
             amount0 = Math.mulDiv(params.liquidity, _reserve0, _totalSupply);
@@ -305,8 +305,8 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
 
     // ******************** MARGIN FUNCTIONS ********************
 
-    function setBalances(PoolId poolId) external onlyPosition returns (PoolStatus memory _status) {
-        _status = statusManager.setBalances(poolId);
+    function setBalances(address sender, PoolId poolId) external onlyPosition returns (PoolStatus memory _status) {
+        _status = statusManager.setBalances(sender, poolId);
     }
 
     function margin(address sender, PoolStatus memory status, MarginParamsVo memory paramsVo)
@@ -336,12 +336,13 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         // transfer marginAmount to lendingPoolManager
         marginCurrency.settle(poolManager, sender, params.marginAmount, false);
         marginCurrency.take(poolManager, address(this), params.marginAmount, true);
-        marginAmount = lendingPoolManager.realIn(_positionManager, params.poolId, marginCurrency, params.marginAmount);
+        marginAmount =
+            lendingPoolManager.realIn(sender, _positionManager, params.poolId, marginCurrency, params.marginAmount);
         if (params.leverage > 0) {
             (marginWithoutFee, marginFeeAmount, borrowAmount) = marginFees.getMarginBorrow(status, params);
             // transfer marginTotal to lendingPoolManager
             marginWithoutFee =
-                lendingPoolManager.realIn(_positionManager, params.poolId, marginCurrency, marginWithoutFee);
+                lendingPoolManager.realIn(sender, _positionManager, params.poolId, marginCurrency, marginWithoutFee);
         } else {
             {
                 uint256 borrowMaxAmount = marginFees.getBorrowMaxAmount(
@@ -416,17 +417,17 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         emit Release(params.poolId, borrowCurrency, params.debtAmount, repayAmount, burnAmount, params.rawBorrowAmount);
     }
 
-    function release(PoolStatus memory status, ReleaseParams memory params)
+    function release(address sender, PoolStatus memory status, ReleaseParams memory params)
         external
         payable
         onlyPosition
         returns (uint256)
     {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRelease, (status, params)));
+        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRelease, (sender, status, params)));
         return abi.decode(result, (uint256));
     }
 
-    function handleRelease(PoolStatus memory status, ReleaseParams calldata params)
+    function handleRelease(address sender, PoolStatus memory status, ReleaseParams calldata params)
         external
         selfOnly
         returns (uint256)
@@ -443,7 +444,9 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             }
 
             // release margin
-            lendingPoolManager.reserveOut(params.payer, params.poolId, status, marginCurrency, params.releaseAmount + 1);
+            lendingPoolManager.reserveOut(
+                sender, params.payer, params.poolId, status, marginCurrency, params.releaseAmount + 1
+            );
         } else if (repayAmount > 0) {
             // repay borrow
             borrowCurrency.settle(poolManager, params.payer, repayAmount, false);
@@ -480,7 +483,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         payable
         returns (uint256 amountOut)
     {
-        PoolStatus memory status = statusManager.setBalances(poolId);
+        PoolStatus memory status = statusManager.setBalances(sender, poolId);
         uint256 feeAmount;
         (amountOut,, feeAmount) = statusManager.getAmountOut(status, zeroForOne, amountIn);
         uint256 mirrorOut = zeroForOne ? status.mirrorReserve1 : status.mirrorReserve0;
@@ -495,7 +498,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             }
         }
         poolManager.unlock(abi.encodeCall(this.handleSwapMirror, (sender, inputCurrency, amountIn)));
-        lendingPoolManager.mirrorIn(recipient, poolId, outputCurrency, amountOut);
+        lendingPoolManager.mirrorIn(sender, recipient, poolId, outputCurrency, amountOut);
         if (feeAmount > 0) {
             feeAmount = statusManager.updateProtocolFees(inputCurrency, feeAmount);
             emit Fees(poolId, inputCurrency, sender, uint8(FeeType.SWAP), feeAmount);

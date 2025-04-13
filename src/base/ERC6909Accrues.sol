@@ -107,7 +107,11 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
                         INTERNAL MINT/BURN LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function _mint(address receiver, uint256 id, uint256 amount) internal virtual returns (uint256 originalAmount) {
+    function _mint(address caller, address receiver, uint256 id, uint256 amount)
+        internal
+        virtual
+        returns (uint256 originalAmount)
+    {
         int256 deviation = deviationOf[id];
         if (deviation > 0) {
             amount += uint256(deviation);
@@ -131,10 +135,14 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
 
         balanceOriginal[receiver][id] += originalAmount;
         balanceOriginal[address(this)][id] += originalAmount;
-        emit Transfer(msg.sender, address(0), receiver, id, originalAmount);
+        emit Transfer(caller, address(0), receiver, id, originalAmount);
     }
 
-    function _burn(address sender, uint256 id, uint256 amount) internal virtual returns (uint256 originalAmount) {
+    function _burn(address caller, address sender, uint256 id, uint256 amount)
+        internal
+        virtual
+        returns (uint256 originalAmount)
+    {
         uint256 ratioX112 = accruesRatioX112Of[id];
         uint256 beforeOriginal = balanceOriginal[sender][id];
         uint256 beforeBalance = beforeOriginal.mulRatioX112(ratioX112);
@@ -149,6 +157,6 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
         balanceOriginal[sender][id] -= originalAmount;
         balanceOriginal[address(this)][id] -= originalAmount;
 
-        emit Transfer(msg.sender, sender, address(0), id, originalAmount);
+        emit Transfer(caller, sender, address(0), id, originalAmount);
     }
 }
