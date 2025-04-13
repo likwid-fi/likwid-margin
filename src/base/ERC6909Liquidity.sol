@@ -19,7 +19,7 @@ abstract contract ERC6909Liquidity is IERC6909 {
 
     mapping(address => mapping(uint256 => uint256)) public balanceOriginal;
 
-    mapping(address => mapping(address => mapping(uint256 => uint256))) public allowance;
+    mapping(address => mapping(address => mapping(uint256 => uint256))) public allowanceOriginal;
 
     /*//////////////////////////////////////////////////////////////
                              EXTEND STORAGE
@@ -39,6 +39,11 @@ abstract contract ERC6909Liquidity is IERC6909 {
     function balanceOf(address owner, uint256 id) public view virtual returns (uint256) {
         uint256 balance = balanceOriginal[owner][id];
         return balance.mulRatioX112(accruesRatioX112Of[id]);
+    }
+
+    function allowance(address owner, address spender, uint256 id) external view returns (uint256) {
+        uint256 amount = allowanceOriginal[owner][spender][id];
+        return amount.mulRatioX112(accruesRatioX112Of[id]);
     }
 
     function transfer(address receiver, uint256 id, uint256 amount) public virtual returns (bool) {
@@ -63,8 +68,8 @@ abstract contract ERC6909Liquidity is IERC6909 {
         amount = amount.divRatioX112(accruesRatioX112Of[id]);
 
         if (msg.sender != sender && !isOperator[sender][msg.sender]) {
-            uint256 allowed = allowance[sender][msg.sender][id];
-            if (allowed != type(uint256).max) allowance[sender][msg.sender][id] = allowed - amount;
+            uint256 allowed = allowanceOriginal[sender][msg.sender][id];
+            if (allowed != type(uint256).max) allowanceOriginal[sender][msg.sender][id] = allowed - amount;
         }
 
         balanceOriginal[sender][id] -= amount;
@@ -79,7 +84,7 @@ abstract contract ERC6909Liquidity is IERC6909 {
     function approve(address spender, uint256 id, uint256 amount) public virtual returns (bool) {
         amount = amount.divRatioX112(accruesRatioX112Of[id]);
 
-        allowance[msg.sender][spender][id] = amount;
+        allowanceOriginal[msg.sender][spender][id] = amount;
 
         emit Approval(msg.sender, spender, id, amount);
 
