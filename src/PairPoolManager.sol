@@ -184,8 +184,9 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             poolManager.approve(address(hooks), specified.toId(), specifiedAmount);
         }
         if (feeAmount > 0) {
-            feeAmount = statusManager.updateProtocolFees(specified, feeAmount);
-            emit Fees(key.toId(), specified, sender, uint8(FeeType.SWAP), feeAmount);
+            Currency feeCurrency = params.zeroForOne ? key.currency0 : key.currency1;
+            feeAmount = statusManager.updateProtocolFees(feeCurrency, feeAmount);
+            emit Fees(key.toId(), feeCurrency, sender, uint8(FeeType.SWAP), feeAmount);
         }
     }
 
