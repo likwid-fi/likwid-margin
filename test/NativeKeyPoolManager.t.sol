@@ -97,7 +97,6 @@ contract NativeKeyPoolManagerTest is DeployHelper {
         uint256 positionId;
         uint256 borrowAmount;
         uint256 payValue = 0.001 ether;
-        address user0 = address(this);
         MarginParams memory params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
@@ -105,7 +104,6 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
-            recipient: user0,
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -130,7 +128,6 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
-            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         marginPositionManager.margin{value: payValue}(params);
@@ -166,7 +163,6 @@ contract NativeKeyPoolManagerTest is DeployHelper {
         uint256 positionId;
         uint256 borrowAmount;
         uint256 payValue = 0.001 ether;
-        address user0 = address(this);
         MarginParams memory params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: true,
@@ -174,7 +170,6 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
-            recipient: user0,
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -245,7 +240,6 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
-            recipient: user,
             deadline: block.timestamp + 1000
         });
         uint256 beforeBalance = tokenB.balanceOf(user);
@@ -355,7 +349,6 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
-            recipient: user,
             deadline: block.timestamp + 1000
         });
         uint256 beforeBalance = tokenB.balanceOf(user);
@@ -375,7 +368,6 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
-            recipient: user,
             deadline: block.timestamp + 1000
         });
         beforeBalance = tokenB.balanceOf(user);
@@ -802,7 +794,6 @@ contract NativeKeyPoolManagerTest is DeployHelper {
         uint256 positionId;
         uint256 borrowAmount;
         uint256 payValue = 0.001 ether;
-        address user0 = address(this);
         MarginParams memory params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
@@ -810,7 +801,6 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
-            recipient: user0,
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -832,7 +822,6 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 marginAmount: payValue,
                 borrowAmount: 0,
                 borrowMaxAmount: 0,
-                recipient: address(this),
                 deadline: block.timestamp + 1000
             });
             (uint256 positionId,) = marginPositionManager.margin{value: payValue}(params);
@@ -847,7 +836,6 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
-            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         vm.expectPartialRevert(MarginPositionManager.InsufficientAmount.selector);

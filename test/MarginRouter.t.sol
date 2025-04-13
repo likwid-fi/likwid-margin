@@ -216,7 +216,6 @@ contract MarginRouterTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
-            recipient: user,
             deadline: block.timestamp + 1000
         });
 

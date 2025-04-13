@@ -90,7 +90,6 @@ contract TokensKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
-            recipient: user0,
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin(params);
@@ -142,7 +141,6 @@ contract TokensKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
-            recipient: user0,
             deadline: block.timestamp + 1002
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
