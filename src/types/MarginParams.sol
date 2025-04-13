@@ -18,8 +18,6 @@ struct MarginParams {
     uint256 borrowAmount;
     /// @notice The maximum borrow amount of the margin position.
     uint256 borrowMaxAmount;
-    /// @notice Margin position recipient.
-    address recipient;
     /// @notice Deadline for the transaction
     uint256 deadline;
 }

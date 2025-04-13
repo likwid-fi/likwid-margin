@@ -361,7 +361,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             if (borrowAmount > 0) {
                 // transfer borrowAmount to user
                 borrowCurrency.settle(poolManager, address(this), borrowAmount, true);
-                borrowCurrency.take(poolManager, params.recipient, borrowAmount, false);
+                borrowCurrency.take(poolManager, sender, borrowAmount, false);
             }
             marginWithoutFee = 0;
         }

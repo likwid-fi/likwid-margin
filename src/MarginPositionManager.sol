@@ -178,9 +178,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         PoolStatus memory _status = pairPoolManager.setBalances(msg.sender, params.poolId);
         uint256 positionId;
         if (params.leverage > 0) {
-            positionId = _marginPositionIds[params.poolId][params.marginForOne][params.recipient];
+            positionId = _marginPositionIds[params.poolId][params.marginForOne][msg.sender];
         } else {
-            positionId = _borrowPositionIds[params.poolId][params.marginForOne][params.recipient];
+            positionId = _borrowPositionIds[params.poolId][params.marginForOne][msg.sender];
         }
         // call margin
         MarginParamsVo memory paramsVo = MarginParamsVo({
@@ -202,8 +202,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             revert InsufficientAmount(params.marginAmount);
         }
         if (positionId == 0) {
-            _mint(params.recipient, (positionId = nextId++));
-            emit Mint(params.poolId, msg.sender, params.recipient, positionId);
+            _mint(msg.sender, (positionId = nextId++));
+            emit Mint(params.poolId, msg.sender, msg.sender, positionId);
             uint256 rateCumulativeLast = params.marginForOne ? _status.rate0CumulativeLast : _status.rate1CumulativeLast;
             MarginPosition memory _position = MarginPosition({
                 poolId: params.poolId,
@@ -215,9 +215,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
                 rateCumulativeLast: rateCumulativeLast
             });
             if (paramsVo.marginTotal > 0) {
-                _marginPositionIds[params.poolId][params.marginForOne][params.recipient] = positionId;
+                _marginPositionIds[params.poolId][params.marginForOne][msg.sender] = positionId;
             } else {
-                _borrowPositionIds[params.poolId][params.marginForOne][params.recipient] = positionId;
+                _borrowPositionIds[params.poolId][params.marginForOne][msg.sender] = positionId;
             }
             _positions[positionId] = _position;
         } else {
@@ -238,7 +238,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
                 lendingPoolManager.computeRealAmount(params.poolId, paramsVo.marginCurrency, paramsVo.marginTotal);
             emit Margin(
                 params.poolId,
-                params.recipient,
+                msg.sender,
                 positionId,
                 marginAmount,
                 marginTotal,
