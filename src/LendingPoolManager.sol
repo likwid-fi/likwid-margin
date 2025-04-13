@@ -271,7 +271,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         bytes memory result =
             poolManager.unlock(abi.encodeCall(this.handleDeposit, (sender, recipient, poolId, currency, amount)));
         originalAmount = abi.decode(result, (uint256));
-        if (msg.value > sendAmount) transferNative(msg.sender, msg.value - sendAmount);
+        if (msg.value > sendAmount) transferNative(sender, msg.value - sendAmount);
     }
 
     function deposit(address sender, address recipient, PoolId poolId, Currency currency, uint256 amount)
