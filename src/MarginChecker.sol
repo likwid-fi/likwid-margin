@@ -12,7 +12,6 @@ import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {MarginParams, MarginParamsVo} from "./types/MarginParams.sol";
 import {LiquidateStatus} from "./types/LiquidateStatus.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
-import {PriceMath} from "./libraries/PriceMath.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {MarginPosition, MarginPositionVo} from "./types/MarginPosition.sol";
@@ -24,7 +23,6 @@ import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 
 contract MarginChecker is IMarginChecker, Owned {
     using UQ112x112 for *;
-    using PriceMath for uint224;
     using PerLibrary for uint256;
     using FeeLibrary for uint24;
     using PoolStatusLibrary for PoolStatus;

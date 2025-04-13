@@ -13,7 +13,6 @@ import {UQ112x112} from "./libraries/UQ112x112.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {TimeLibrary} from "./libraries/TimeLibrary.sol";
-import {TruncatedOracle, PriceMath} from "./libraries/TruncatedOracle.sol";
 import {RateStatus} from "./types/RateStatus.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
@@ -24,7 +23,6 @@ import {IMarginFees} from "./interfaces/IMarginFees.sol";
 contract MarginFees is IMarginFees, Owned {
     using SafeCast for uint256;
     using UQ112x112 for *;
-    using PriceMath for uint224;
     using PoolIdLibrary for PoolKey;
     using TimeLibrary for uint32;
     using FeeLibrary for uint24;

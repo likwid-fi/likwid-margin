@@ -262,8 +262,8 @@ library TruncatedOracle {
                 // we're in the middle
                 uint32 observationTimeDelta = atOrAfter.blockTimestamp - beforeOrAt.blockTimestamp;
                 uint32 targetDelta = target - beforeOrAt.blockTimestamp;
-                uint112 beforeReserve1 = beforeOrAt.reserves.getReverse1();
-                uint112 afterReserve1 = atOrAfter.reserves.getReverse1();
+                uint112 beforeReserve1 = beforeOrAt.reserves.getReserve1();
+                uint112 afterReserve1 = atOrAfter.reserves.getReserve1();
                 if (beforeReserve1 > afterReserve1) {
                     reserve1 = afterReserve1 + (beforeReserve1 - afterReserve1) * targetDelta / observationTimeDelta;
                 } else {

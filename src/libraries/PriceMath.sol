@@ -13,20 +13,20 @@ library PriceMath {
         reserves = (uint224(reserve0) << 112) + uint224(reserve1);
     }
 
-    function getReverse0(uint224 reserves) internal pure returns (uint112 reserve0) {
+    function getReserve0(uint224 reserves) internal pure returns (uint112 reserve0) {
         reserve0 = uint112(reserves >> 112);
     }
 
-    function getReverse1(uint224 reserves) internal pure returns (uint112 reserve1) {
+    function getReserve1(uint224 reserves) internal pure returns (uint112 reserve1) {
         reserve1 = uint112(reserves);
     }
 
     function getPrice0X112(uint224 reserves) internal pure returns (uint224 price0X112) {
-        price0X112 = getReverse1(reserves).encode().div(getReverse0(reserves));
+        price0X112 = getReserve1(reserves).encode().div(getReserve0(reserves));
     }
 
     function getPrice1X112(uint224 reserves) internal pure returns (uint224 price1X112) {
-        price1X112 = getReverse0(reserves).encode().div(getReverse1(reserves));
+        price1X112 = getReserve0(reserves).encode().div(getReserve1(reserves));
     }
 
     function truncated(uint224 price1X112, uint112 reverse0, uint112 reverse1, uint32 moved)

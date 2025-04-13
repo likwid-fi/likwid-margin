@@ -20,7 +20,6 @@ import {LiquidateStatus} from "./types/LiquidateStatus.sol";
 import {ReleaseParams} from "./types/ReleaseParams.sol";
 import {MarginParams, MarginParamsVo} from "./types/MarginParams.sol";
 import {UQ112x112} from "./libraries/UQ112x112.sol";
-import {PriceMath} from "./libraries/PriceMath.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 
@@ -29,7 +28,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
     using CurrencyPoolLibrary for Currency;
     using CurrencyExtLibrary for Currency;
     using UQ112x112 for *;
-    using PriceMath for uint224;
     using PerLibrary for uint256;
     using FeeLibrary for uint24;
 
