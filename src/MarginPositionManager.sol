@@ -109,7 +109,6 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
     }
 
     function _burnPosition(uint256 positionId, BurnType burnType) internal {
-        // _burn(positionId);
         MarginPosition memory _position = _positions[positionId];
         require(_position.rateCumulativeLast > 0, "ALREADY_BURNT");
         if (_position.marginTotal == 0) {
@@ -119,19 +118,23 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         }
         delete _positions[positionId];
         emit Burn(_position.poolId, msg.sender, positionId, uint8(burnType));
+        _burn(positionId);
     }
 
     function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
         address from = super._update(to, tokenId, auth);
         MarginPosition memory _position = _positions[tokenId];
-        if (_position.marginTotal == 0) {
-            delete _borrowPositionIds[_position.poolId][_position.marginForOne][from];
-            _borrowPositionIds[_position.poolId][_position.marginForOne][to] = tokenId;
-        } else {
-            delete _marginPositionIds[_position.poolId][_position.marginForOne][from];
-            _marginPositionIds[_position.poolId][_position.marginForOne][to] = tokenId;
+        if (_position.rateCumulativeLast > 0) {
+            if (_position.marginTotal == 0) {
+                require(_borrowPositionIds[_position.poolId][_position.marginForOne][to] == 0, "ALREADY_EXISTS");
+                delete _borrowPositionIds[_position.poolId][_position.marginForOne][from];
+                _borrowPositionIds[_position.poolId][_position.marginForOne][to] = tokenId;
+            } else {
+                require(_marginPositionIds[_position.poolId][_position.marginForOne][to] == 0, "ALREADY_EXISTS");
+                delete _marginPositionIds[_position.poolId][_position.marginForOne][from];
+                _marginPositionIds[_position.poolId][_position.marginForOne][to] = tokenId;
+            }
         }
-
         return from;
     }
 
