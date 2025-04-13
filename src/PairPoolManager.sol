@@ -49,6 +49,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
 
     error InsufficientLiquidityMinted();
     error InsufficientLiquidityBurnt();
+    error InsufficientValue();
     error NotPositionManager();
     error NotAllowed();
     error StatusManagerAlreadySet();
@@ -198,25 +199,24 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         returns (uint256 liquidity)
     {
         PoolStatus memory status = statusManager.setBalances(params.poolId);
+        if (status.key.currency0.isAddressZero() && params.amount0 != msg.value) revert InsufficientValue();
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
+        uint256 _totalSupply = marginLiquidity.balanceOf(address(this), uPoolId);
         uint256 amount0In;
         uint256 amount1In;
-        {
-            uint256 _totalSupply = marginLiquidity.balanceOf(address(this), uPoolId);
-            if (_totalSupply == 0) {
-                liquidity = Math.sqrt(params.amount0 * params.amount1);
-                amount0In = params.amount0;
-                amount1In = params.amount1;
-            } else {
-                uint24 maxSliding = marginLiquidity.getMaxSliding();
-                (liquidity, amount0In, amount1In) =
-                    status.computeLiquidity(_totalSupply, params.amount0, params.amount1, maxSliding);
-                if (params.amount0 > amount0In && status.key.currency0.isAddressZero()) {
-                    status.key.currency0.transfer(msg.sender, params.amount0 - amount0In);
-                }
+        if (_totalSupply == 0) {
+            liquidity = Math.sqrt(params.amount0 * params.amount1);
+            amount0In = params.amount0;
+            amount1In = params.amount1;
+        } else {
+            uint24 maxSliding = marginLiquidity.getMaxSliding();
+            (liquidity, amount0In, amount1In) =
+                status.computeLiquidity(_totalSupply, params.amount0, params.amount1, maxSliding);
+            if (params.amount0 > amount0In && status.key.currency0.isAddressZero()) {
+                status.key.currency0.transfer(msg.sender, params.amount0 - amount0In);
             }
-            if (liquidity == 0) revert InsufficientLiquidityMinted();
         }
+        if (liquidity == 0) revert InsufficientLiquidityMinted();
         marginLiquidity.addLiquidity(params.to, uPoolId, params.level, liquidity);
         poolManager.unlock(abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, amount0In, amount1In)));
         statusManager.update(params.poolId);
