@@ -6,6 +6,7 @@ import {Currency} from "v4-core/types/Currency.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 import {UQ112x112} from "../libraries/UQ112x112.sol";
+import {PerLibrary} from "../libraries/PerLibrary.sol";
 import {FeeLibrary} from "../libraries/FeeLibrary.sol";
 import {PoolStatus} from "./PoolStatus.sol";
 
@@ -69,10 +70,14 @@ library PoolStatusLibrary {
         uint256 amount1,
         uint24 maxSliding
     ) internal pure returns (uint256 liquidity, uint256 amount0In, uint256 amount1In) {
+        require(maxSliding < PerLibrary.ONE_MILLION, "ERROR_SLIDING");
         (uint256 _reserve0, uint256 _reserve1) = getReserves(status);
         if (_reserve0 > 0 && _reserve1 > 0) {
             uint256 amount1Exactly = Math.mulDiv(amount0, _reserve1, _reserve0);
-            (uint256 amount1Lower, uint256 amount1Upper) = maxSliding.bound(amount1Exactly);
+            uint256 amount1Lower =
+                Math.mulDiv(amount1Exactly, PerLibrary.ONE_MILLION - maxSliding, PerLibrary.ONE_MILLION);
+            uint256 amount1Upper =
+                Math.mulDiv(amount1Exactly, PerLibrary.ONE_MILLION + maxSliding, PerLibrary.ONE_MILLION);
             require(amount1 > amount1Lower && amount1 < amount1Upper, "OUT_OF_RANGE");
             if (amount1Exactly > amount1) {
                 amount1In = amount1;
