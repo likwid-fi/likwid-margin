@@ -818,4 +818,39 @@ contract NativeKeyPoolManagerTest is DeployHelper {
         borrowAmount = marginPositionManager.getPosition(positionId).borrowAmount;
         console.log("borrowAmount:%s", borrowAmount);
     }
+
+    function testGetMaxDecreaseByDiffLeverage() public {
+        // Without considering the price curve: When marginLevel ≤ marginAmount/(marginAmount*(leverage+1)),
+        // a minimum marginLevel of 117% implies a maximum leverage value of 5.
+        // For equal marginAmount, higher leverage results in a smaller getMaxDecrease.
+        uint256 payValue = 0.000001 ether;
+        for (uint8 i = 1; i <= 5; i++) {
+            MarginParams memory params = MarginParams({
+                poolId: nativeKey.toId(),
+                marginForOne: true,
+                leverage: i,
+                marginAmount: payValue,
+                borrowAmount: 0,
+                borrowMaxAmount: 0,
+                recipient: address(this),
+                deadline: block.timestamp + 1000
+            });
+            (uint256 positionId,) = marginPositionManager.margin{value: payValue}(params);
+            uint256 maxAmount = marginChecker.getMaxDecrease(address(marginPositionManager), positionId);
+            console.log("leverage:%s,maxAmount:%s", i, maxAmount);
+            marginPositionManager.close(positionId, 1000000, 0, UINT256_MAX);
+        }
+        MarginParams memory outParams = MarginParams({
+            poolId: nativeKey.toId(),
+            marginForOne: true,
+            leverage: 6,
+            marginAmount: payValue,
+            borrowAmount: 0,
+            borrowMaxAmount: 0,
+            recipient: address(this),
+            deadline: block.timestamp + 1000
+        });
+        vm.expectPartialRevert(MarginPositionManager.InsufficientAmount.selector);
+        marginPositionManager.margin{value: payValue}(outParams);
+    }
 }
