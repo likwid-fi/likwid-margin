@@ -78,7 +78,7 @@ library PoolStatusLibrary {
                 Math.mulDiv(amount1Exactly, PerLibrary.ONE_MILLION - maxSliding, PerLibrary.ONE_MILLION);
             uint256 amount1Upper =
                 Math.mulDiv(amount1Exactly, PerLibrary.ONE_MILLION + maxSliding, PerLibrary.ONE_MILLION);
-            require(amount1 > amount1Lower && amount1 < amount1Upper, "OUT_OF_RANGE");
+            require(amount1 >= amount1Lower && amount1 <= amount1Upper, "OUT_OF_RANGE");
             if (amount1Exactly > amount1) {
                 amount1In = amount1;
                 amount0In = Math.mulDiv(amount1In, _reserve0, _reserve1);
