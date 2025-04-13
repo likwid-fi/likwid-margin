@@ -54,11 +54,11 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
     {
         uPoolId = uPoolId & LiquidityLevel.LP_FLAG;
         totalSupply = balanceOf(poolManager, uPoolId);
-        uint256 lPoolId = LiquidityLevel.NO_MARGIN.getLevelId(uPoolId);
+        uint256 lPoolId = LiquidityLevel.RETAIN_BOTH.getLevelId(uPoolId);
         retainSupply0 = retainSupply1 = balanceOf(poolManager, lPoolId);
-        lPoolId = LiquidityLevel.ZERO_MARGIN.getLevelId(uPoolId);
+        lPoolId = LiquidityLevel.BORROW_TOKEN1.getLevelId(uPoolId);
         retainSupply0 += balanceOf(poolManager, lPoolId);
-        lPoolId = LiquidityLevel.ONE_MARGIN.getLevelId(uPoolId);
+        lPoolId = LiquidityLevel.BORROW_TOKEN0.getLevelId(uPoolId);
         retainSupply1 += balanceOf(poolManager, lPoolId);
     }
 
@@ -69,11 +69,11 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         uint256 liquidity1,
         bool addFlag
     ) internal {
-        uint256 level4Id = LiquidityLevel.BOTH_MARGIN.getLevelId(id);
+        uint256 level4Id = LiquidityLevel.BORROW_BOTH.getLevelId(id);
         uint256 total4Liquidity = balanceOriginal[pairPoolManager][level4Id];
         uint256 level4Liquidity;
         if (liquidity0 > 0) {
-            uint256 level2Id = LiquidityLevel.ONE_MARGIN.getLevelId(id);
+            uint256 level2Id = LiquidityLevel.BORROW_TOKEN0.getLevelId(id);
             uint256 total2Liquidity = balanceOriginal[pairPoolManager][level2Id];
             if (total2Liquidity > 0) {
                 uint256 level2Liquidity = Math.mulDiv(liquidity0, total2Liquidity, total2Liquidity + total4Liquidity);
@@ -90,7 +90,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
             }
         }
         if (liquidity1 > 0) {
-            uint256 level3Id = LiquidityLevel.ZERO_MARGIN.getLevelId(id);
+            uint256 level3Id = LiquidityLevel.BORROW_TOKEN1.getLevelId(id);
             uint256 total3Liquidity = balanceOriginal[pairPoolManager][level3Id];
             if (total3Liquidity > 0) {
                 uint256 level3Liquidity = Math.mulDiv(liquidity1, total3Liquidity, total3Liquidity + total4Liquidity);

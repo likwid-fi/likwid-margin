@@ -1107,11 +1107,11 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256 liquidity;
         PoolId poolId = nativeKey.toId();
         {
-            liquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BOTH_MARGIN);
+            liquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BORROW_BOTH);
             assertGt(liquidity, 0);
             RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
                 poolId: poolId,
-                level: LiquidityLevel.BOTH_MARGIN,
+                level: LiquidityLevel.BORROW_BOTH,
                 liquidity: liquidity,
                 deadline: type(uint256).max
             });
@@ -1124,7 +1124,7 @@ contract MarginPositionManagerTest is DeployHelper {
                 amount0: amount0,
                 amount1: amount1,
                 to: address(this),
-                level: LiquidityLevel.NO_MARGIN,
+                level: LiquidityLevel.RETAIN_BOTH,
                 deadline: type(uint256).max
             });
             pairPoolManager.addLiquidity{value: amount0}(params);
@@ -1133,13 +1133,13 @@ contract MarginPositionManagerTest is DeployHelper {
                 amount0: amount0,
                 amount1: amount1,
                 to: address(this),
-                level: LiquidityLevel.BOTH_MARGIN,
+                level: LiquidityLevel.BORROW_BOTH,
                 deadline: type(uint256).max
             });
             pairPoolManager.addLiquidity{value: amount0}(params);
             PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
             printPoolStatus(status);
-            liquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BOTH_MARGIN);
+            liquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BORROW_BOTH);
         }
         address user = vm.addr(1);
         uint256 payValue = 0.001 ether;
@@ -1152,7 +1152,7 @@ contract MarginPositionManagerTest is DeployHelper {
         }
         skip(1000);
         {
-            uint256 nowLiquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BOTH_MARGIN);
+            uint256 nowLiquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BORROW_BOTH);
             assertEq(nowLiquidity, liquidity);
             console.log("before margin:nowLiquidity, liquidity", nowLiquidity, liquidity);
             tokenB.transfer(user, 1 ether);
@@ -1190,7 +1190,7 @@ contract MarginPositionManagerTest is DeployHelper {
             console.log("borrowAmount:%s", borrowAmount);
         }
         {
-            uint256 nowLiquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BOTH_MARGIN);
+            uint256 nowLiquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BORROW_BOTH);
             assertGt(nowLiquidity, liquidity);
             console.log("after margin:nowLiquidity%s, liquidity%s", nowLiquidity, liquidity);
         }

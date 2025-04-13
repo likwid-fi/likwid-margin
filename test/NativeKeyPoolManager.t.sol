@@ -207,11 +207,11 @@ contract NativeKeyPoolManagerTest is DeployHelper {
         PoolId poolId = nativeKey.toId();
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         printPoolStatus(status);
-        uint256 liquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BOTH_MARGIN);
+        uint256 liquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BORROW_BOTH);
         assertGt(liquidity, 0);
         RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
             poolId: poolId,
-            level: LiquidityLevel.BOTH_MARGIN,
+            level: LiquidityLevel.BORROW_BOTH,
             liquidity: liquidity,
             deadline: type(uint256).max
         });
@@ -227,7 +227,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             amount0: amount0,
             amount1: amount1,
             to: address(this),
-            level: LiquidityLevel.NO_MARGIN,
+            level: LiquidityLevel.RETAIN_BOTH,
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: amount0}(params);
@@ -267,7 +267,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 amount0: amount0,
                 amount1: amount1,
                 to: address(this),
-                level: LiquidityLevel.NO_MARGIN,
+                level: LiquidityLevel.RETAIN_BOTH,
                 deadline: type(uint256).max
             });
             pairPoolManager.addLiquidity{value: amount0}(params);
@@ -276,17 +276,17 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 amount0: amount0,
                 amount1: amount1,
                 to: address(this),
-                level: LiquidityLevel.BOTH_MARGIN,
+                level: LiquidityLevel.BORROW_BOTH,
                 deadline: type(uint256).max
             });
             pairPoolManager.addLiquidity{value: amount0}(params);
             PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
             printPoolStatus(status);
-            liquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BOTH_MARGIN);
+            liquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BORROW_BOTH);
             assertGt(liquidity, 0);
             RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
                 poolId: poolId,
-                level: LiquidityLevel.BOTH_MARGIN,
+                level: LiquidityLevel.BORROW_BOTH,
                 liquidity: liquidity,
                 deadline: type(uint256).max
             });
@@ -297,14 +297,14 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             pairPoolManager.removeLiquidity(removeParams);
             skip(60);
             pairPoolManager.removeLiquidity(removeParams);
-            liquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BOTH_MARGIN);
+            liquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BORROW_BOTH);
             assertEq(liquidity, 0);
             params = AddLiquidityParams({
                 poolId: poolId,
                 amount0: amount0,
                 amount1: amount1,
                 to: address(this),
-                level: LiquidityLevel.BOTH_MARGIN,
+                level: LiquidityLevel.BORROW_BOTH,
                 deadline: type(uint256).max
             });
             pairPoolManager.addLiquidity{value: amount0}(params);
@@ -314,8 +314,8 @@ contract NativeKeyPoolManagerTest is DeployHelper {
 
     function testBorrowAndLending() public returns (uint256 positionId1, uint256 positionId2) {
         PoolId poolId = nativeKey.toId();
-        uint256 liquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BOTH_MARGIN);
-        uint256 nowLiquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BOTH_MARGIN);
+        uint256 liquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BORROW_BOTH);
+        uint256 nowLiquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BORROW_BOTH);
         assertEq(nowLiquidity, liquidity, "nowLiquidity==liquidity");
         console.log("before margin:nowLiquidity, liquidity", nowLiquidity, liquidity);
         address user = vm.addr(1);
@@ -388,7 +388,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
         afterBalance = tokenB.balanceOf(user);
         console.log("borrowAmount:%s", borrowAmount);
         assertEq(afterBalance, beforeBalance - payValue, "afterBalance=beforeBalance - payValue");
-        nowLiquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BOTH_MARGIN);
+        nowLiquidity = marginLiquidity.getPoolLiquidity(poolId, address(this), LiquidityLevel.BORROW_BOTH);
         assertGe(nowLiquidity, liquidity, "nowLiquidity>liquidity");
         console.log("after margin:nowLiquidity%s, liquidity%s", nowLiquidity, liquidity);
         vm.stopPrank();
