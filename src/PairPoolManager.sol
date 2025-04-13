@@ -299,6 +299,10 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         positionManagers[_marginPositionManager] = true;
     }
 
+    function removePositionManager(address _marginPositionManager) external onlyOwner {
+        delete positionManagers[_marginPositionManager];
+    }
+
     function setMarginFees(address _marginFees) external onlyOwner {
         marginFees = IMarginFees(_marginFees);
     }
