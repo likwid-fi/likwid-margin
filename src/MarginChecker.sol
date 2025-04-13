@@ -186,22 +186,6 @@ contract MarginChecker is IMarginChecker, Owned {
         }
     }
 
-    /// @inheritdoc IMarginChecker
-    function getMarginTotal(
-        address _poolManager,
-        PoolId poolId,
-        bool marginForOne,
-        uint24 leverage,
-        uint256 marginAmount
-    ) external view returns (uint256 marginWithoutFee, uint256 borrowAmount) {
-        IPairPoolManager poolManager = IPairPoolManager(_poolManager);
-        uint256 marginFeeAmount;
-        uint256 marginTotal = marginAmount * leverage;
-        PoolStatus memory status = poolManager.statusManager().getStatus(poolId);
-        (borrowAmount,, marginFeeAmount) = poolManager.statusManager().getAmountIn(status, marginForOne, marginTotal);
-        marginWithoutFee = marginTotal - marginFeeAmount;
-    }
-
     function getBorrowMax(address _poolManager, PoolId poolId, bool marginForOne, uint256 marginAmount)
         external
         view

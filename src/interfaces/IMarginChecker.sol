@@ -65,22 +65,6 @@ interface IMarginChecker {
         view
         returns (bool valid);
 
-    /// @notice Get the marginTotal amount and borrow amount for the given pool, leverage, and marginAmount
-    /// @param poolManager The manager of the pool
-    /// @param poolId The ID of the pool
-    /// @param marginForOne If true, currency1 is marginToken, otherwise currency2 is marginToken
-    /// @param leverage The leverage ratio
-    /// @param marginAmount The amount of margin
-    /// @return marginWithoutFee The marginTotal amount without fee
-    /// @return borrowAmount The borrow amount
-    function getMarginTotal(
-        address poolManager,
-        PoolId poolId,
-        bool marginForOne,
-        uint24 leverage,
-        uint256 marginAmount
-    ) external view returns (uint256 marginWithoutFee, uint256 borrowAmount);
-
     /// @notice Get the maximum marginAmount for the given pool, leverage
     /// @param poolManager The manager of the pool
     /// @param poolId The ID of the pool
