@@ -273,4 +273,32 @@ contract PairPoolManagerTest is DeployHelper {
         pairPoolManager.addLiquidity{value: amount0}(params);
         vm.stopPrank();
     }
+
+    function testRemoveAll() public {
+        uint256 amount0 = 1 ether;
+        uint256 amount1 = 1 ether;
+        PoolId poolId = nativeKey.toId();
+        uint256 uPoolId = marginLiquidity.getPoolId(poolId);
+        AddLiquidityParams memory params = AddLiquidityParams({
+            poolId: poolId,
+            amount0: amount0,
+            amount1: amount1,
+            to: address(this),
+            level: LiquidityLevel.BORROW_BOTH,
+            deadline: type(uint256).max
+        });
+        uint256 liquidity = pairPoolManager.addLiquidity{value: amount0}(params);
+        uint256 balance = marginLiquidity.balanceOf(address(this), LiquidityLevel.BORROW_BOTH.getLevelId(uPoolId));
+        assertEq(liquidity, balance, "liquidity==balance");
+        skip(1000);
+        RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
+            poolId: poolId,
+            level: LiquidityLevel.BORROW_BOTH,
+            liquidity: liquidity * 2,
+            deadline: type(uint256).max
+        });
+        pairPoolManager.removeLiquidity(removeParams);
+        balance = marginLiquidity.balanceOf(address(this), LiquidityLevel.BORROW_BOTH.getLevelId(uPoolId));
+        assertEq(0, balance, "balance==0");
+    }
 }

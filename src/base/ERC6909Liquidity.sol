@@ -139,6 +139,9 @@ abstract contract ERC6909Liquidity is IERC6909 {
             revert NotAllowed();
         }
         originalAmount = amount.divRatioX112(accruesRatioX112Of[id]);
+        if (amount > 0 && originalAmount == 0) {
+            originalAmount = 1;
+        }
 
         balanceOriginal[sender][id] -= originalAmount;
 

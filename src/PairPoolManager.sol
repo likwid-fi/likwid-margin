@@ -240,7 +240,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         {
             (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
             (uint256 _totalSupply, uint256 retainSupply0, uint256 retainSupply1) = marginLiquidity.getSupplies(uPoolId);
-            marginLiquidity.removeLiquidity(msg.sender, msg.sender, uPoolId, params.level, params.liquidity);
+            params.liquidity = marginLiquidity.removeLiquidity(msg.sender, uPoolId, params.level, params.liquidity);
             uint256 maxReserve0 = status.realReserve0;
             uint256 maxReserve1 = status.realReserve1;
             amount0 = Math.mulDiv(params.liquidity, _reserve0, _totalSupply);

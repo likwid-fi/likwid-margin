@@ -220,18 +220,22 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         }
     }
 
-    function removeLiquidity(address caller, address sender, uint256 id, uint8 level, uint256 amount)
+    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount)
         external
         onlyPoolManager
+        returns (uint256)
     {
         uint256 levelId = level.getLevelId(id);
         uint256 uPoolId = id.getPoolId();
         address pool = msg.sender;
+        uint256 balance = balanceOf(sender, levelId);
+        amount = Math.min(balance, amount);
         unchecked {
-            _burn(caller, pool, uPoolId, amount);
-            _burn(caller, pool, levelId, amount);
-            _burn(caller, sender, levelId, amount);
+            _burn(sender, pool, uPoolId, amount);
+            _burn(sender, pool, levelId, amount);
+            _burn(sender, sender, levelId, amount);
         }
+        return amount;
     }
 
     function getSupplies(uint256 uPoolId)
