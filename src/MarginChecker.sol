@@ -128,10 +128,7 @@ contract MarginChecker is IMarginChecker, Owned {
         returns (bool valid)
     {
         MarginParams memory params = paramsVo.params;
-        (uint256 reserve0, uint256 reserve1) =
-            (_status.realReserve0 + _status.mirrorReserve0, _status.realReserve1 + _status.mirrorReserve1);
-        (uint256 reserveBorrow, uint256 reserveMargin) =
-            params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+        (uint256 reserveBorrow, uint256 reserveMargin) = _getReserves(_status, params.marginForOne);
         uint256 repayAmount;
         IPairPoolManager pairPoolManager = IPairPoolManager(IStatusBase(msg.sender).pairPoolManager());
         uint256 assetsAmount = pairPoolManager.lendingPoolManager().computeRealAmount(
@@ -192,7 +189,7 @@ contract MarginChecker is IMarginChecker, Owned {
         returns (uint256 marginAmountIn, uint256 borrowMax)
     {
         (uint256 reserveBorrow, uint256 reserveMargin) = getReserves(_poolManager, poolId, marginForOne);
-        marginAmountIn = marginAmount.mulMillionDiv(minMarginLevel);
+        marginAmountIn = marginAmount.mulMillionDiv(minBorrowLevel);
         borrowMax = Math.mulDiv(marginAmountIn, reserveBorrow, reserveMargin);
     }
 
@@ -281,6 +278,16 @@ contract MarginChecker is IMarginChecker, Owned {
         maxAmount = getMaxDecrease(_poolManager, _status, _position);
     }
 
+    function _getReserves(PoolStatus memory status, bool marginForOne)
+        internal
+        pure
+        returns (uint256 reserveBorrow, uint256 reserveMargin)
+    {
+        (reserveBorrow, reserveMargin) = marginForOne
+            ? (status.truncatedReserve0, status.truncatedReserve1)
+            : (status.truncatedReserve1, status.truncatedReserve0);
+    }
+
     /// @inheritdoc IMarginChecker
     function getReserves(address _poolManager, PoolId poolId, bool marginForOne)
         public
@@ -289,9 +296,7 @@ contract MarginChecker is IMarginChecker, Owned {
     {
         IPairPoolManager poolManager = IPairPoolManager(_poolManager);
         PoolStatus memory status = poolManager.getStatus(poolId);
-        (reserveBorrow, reserveMargin) = marginForOne
-            ? (status.truncatedReserve0, status.truncatedReserve1)
-            : (status.truncatedReserve1, status.truncatedReserve0);
+        (reserveBorrow, reserveMargin) = _getReserves(status, marginForOne);
     }
 
     function _checkLiquidate(
@@ -317,8 +322,7 @@ contract MarginChecker is IMarginChecker, Owned {
                 assetAmount =
                     poolManager.lendingPoolManager().computeRealAmount(_position.poolId, marginCurrency, assetAmount);
             }
-            (uint256 reserveBorrow, uint256 reserveMargin) =
-                getReserves(address(poolManager), _position.poolId, _position.marginForOne);
+            (uint256 reserveBorrow, uint256 reserveMargin) = _getReserves(_status, _position.marginForOne);
             uint256 repayAmount;
             if (_position.marginTotal > 0) {
                 repayAmount = Math.mulDiv(reserveBorrow, assetAmount, reserveMargin);

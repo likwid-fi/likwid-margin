@@ -209,14 +209,14 @@ contract MarginFees is IMarginFees, Owned {
         }
         uint256 useLevel = Math.mulDiv(mirrorReserve, PerLibrary.ONE_MILLION, (mirrorReserve + realReserve));
         if (useLevel >= rateStatus.useHighLevel) {
-            rate += uint256(useLevel - rateStatus.useHighLevel) * rateStatus.mHigh;
+            rate += uint256(useLevel - rateStatus.useHighLevel) * rateStatus.mHigh / 100;
             useLevel = rateStatus.useHighLevel;
         }
         if (useLevel >= rateStatus.useMiddleLevel) {
-            rate += uint256(useLevel - rateStatus.useMiddleLevel) * rateStatus.mMiddle;
+            rate += uint256(useLevel - rateStatus.useMiddleLevel) * rateStatus.mMiddle / 100;
             useLevel = rateStatus.useMiddleLevel;
         }
-        return rate + useLevel * rateStatus.mLow;
+        return rate + useLevel * rateStatus.mLow / 100;
     }
 
     function getBorrowRateCumulativeLast(PoolStatus memory status)

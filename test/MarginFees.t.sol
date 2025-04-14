@@ -52,17 +52,20 @@ contract MarginFeesTest is DeployHelper {
         uint256 rate = marginFees.getBorrowRateByReserves(realReserve, mirrorReserve);
         (uint24 rateBase, uint24 useMiddleLevel, uint24 useHighLevel, uint24 mLow, uint24 mMiddle, uint24 mHigh) =
             marginFees.rateStatus();
+        console.log("rate:%s", rate);
         assertEq(rate, uint256(rateBase));
         mirrorReserve = 0.4 ether;
         rate = marginFees.getBorrowRateByReserves(realReserve, mirrorReserve);
-        assertEq(rate, rateBase + useMiddleLevel * mLow);
+        console.log("rate:%s", rate);
+        assertEq(rate, rateBase + useMiddleLevel * mLow / 100);
         realReserve = 0;
         rate = marginFees.getBorrowRateByReserves(realReserve, mirrorReserve);
         assertEq(
             rate,
-            rateBase + uint256(useMiddleLevel) * mLow + uint256(useHighLevel - useMiddleLevel) * mMiddle
-                + (ONE_MILLION - useHighLevel) * mHigh
+            rateBase + uint256(useMiddleLevel) * mLow / 100 + uint256(useHighLevel - useMiddleLevel) * mMiddle / 100
+                + (ONE_MILLION - useHighLevel) * mHigh / 100
         );
+        console.log("rate:%s", rate);
         uint256 test = UINT256_MAX;
         uint24 test24 = uint24(test);
         assertEq(test24, type(uint24).max);
