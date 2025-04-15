@@ -64,7 +64,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     IMarginLiquidity public immutable marginLiquidity;
     address public immutable pairPoolManager;
     IMarginFees public marginFees;
-    bool public interestSwitch;
+    mapping(PoolId => bool) public interestClosed;
 
     mapping(PoolId => PoolStatus) private statusStore;
     mapping(Currency currency => uint256 amount) public protocolFeesAccrued;
@@ -91,7 +91,6 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         marginLiquidity = _marginLiquidity;
         pairPoolManager = address(_pairPoolManager);
         marginFees = _marginFees;
-        interestSwitch = true;
     }
 
     modifier onlyPoolManager() {
@@ -155,7 +154,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         uint256 lendingGrownAmount1;
         if (_status.blockTimestampLast != blockTS) {
             (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = marginFees.getBorrowRateCumulativeLast(_status);
-            if (interestSwitch && _status.totalMirrorReserves() > 0) {
+            if (!interestClosed[poolId] && _status.totalMirrorReserves() > 0) {
                 (uint256 interestReserve0, uint256 interestReserve1) =
                     marginLiquidity.getInterestReserves(pairPoolManager, poolId, _status);
                 InterestBalance memory interestStatus0 =
@@ -448,8 +447,8 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         }
     }
 
-    function setInterestSwitch(bool _interestSwitch) external onlyOwner {
-        interestSwitch = _interestSwitch;
+    function setInterestClosed(PoolId poolId, bool _closed) external onlyOwner {
+        interestClosed[poolId] = _closed;
     }
 
     // ******************** HOOK CALL ********************
@@ -478,7 +477,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     function setBalances(address sender, PoolId poolId) public onlyPoolManager returns (PoolStatus memory) {
         _callSet();
         PoolStatus storage status = statusStore[poolId];
-        if (interestSwitch) {
+        if (!interestClosed[poolId]) {
             _updateInterests(sender, status);
         }
         BalanceStatus memory balanceStatus = _getRealBalances(status.key);
