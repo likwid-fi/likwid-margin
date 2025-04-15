@@ -8,6 +8,7 @@ import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
 import {PoolStatus} from "../src/types/PoolStatus.sol";
+import {PoolStatusLibrary} from "../src/types/PoolStatusLibrary.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition, MarginPositionVo} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
@@ -38,6 +39,7 @@ contract MarginPositionManagerTest is DeployHelper {
     using TimeLibrary for *;
     using LiquidityLevel for uint8;
     using CurrencyPoolLibrary for Currency;
+    using PoolStatusLibrary for PoolStatus;
 
     function setUp() public {
         deployHookAndRouter();
@@ -1311,5 +1313,42 @@ contract MarginPositionManagerTest is DeployHelper {
         printPoolStatus(status);
         uint256 balance0 = manager.balanceOf(address(lendingPoolManager), nativeKey.currency0.toId());
         console.log("balance0:%s", balance0);
+    }
+
+    function testInterestSwitch() public {
+        address user = address(this);
+        uint256 rate = marginFees.getBorrowRate(address(pairPoolManager), tokensKey.toId(), false);
+        assertEq(rate, 50000);
+        uint256 positionId;
+        uint256 borrowAmount;
+        PoolId poolId = tokensKey.toId();
+        uint256 payValue = 0.01 ether;
+        tokenA.approve(address(marginPositionManager), payValue);
+        tokenB.approve(address(marginPositionManager), payValue);
+        MarginParams memory params = MarginParams({
+            poolId: poolId,
+            marginForOne: false,
+            leverage: 3,
+            marginAmount: payValue,
+            borrowAmount: 0,
+            borrowMaxAmount: 0,
+            deadline: block.timestamp + 1000
+        });
+
+        (positionId, borrowAmount) = marginPositionManager.margin(params);
+        positionId = marginPositionManager.getPositionId(tokensKey.toId(), false, user, true);
+        assertGt(positionId, 0);
+        PoolStatus memory beforeStatus = pairPoolManager.getStatus(poolId);
+        PoolStatus memory afterStatus = pairPoolManager.getStatus(poolId);
+        assertGt(beforeStatus.totalMirrorReserve1(), 0, "MirrorReserve1 > 0");
+        assertEq(beforeStatus.totalMirrorReserve1(), afterStatus.totalMirrorReserve1(), "MirrorReserve1 Eq 1");
+        skip(1000);
+        afterStatus = pairPoolManager.getStatus(poolId);
+        assertLt(beforeStatus.totalMirrorReserve1(), afterStatus.totalMirrorReserve1(), "MirrorReserve1 Lt");
+        poolStatusManager.setInterestSwitch(false);
+        beforeStatus = pairPoolManager.getStatus(poolId);
+        skip(1000);
+        afterStatus = pairPoolManager.getStatus(poolId);
+        assertEq(beforeStatus.totalMirrorReserve1(), afterStatus.totalMirrorReserve1(), "MirrorReserve1 Eq 2");
     }
 }

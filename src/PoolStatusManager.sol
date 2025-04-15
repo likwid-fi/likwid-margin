@@ -64,6 +64,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     IMarginLiquidity public immutable marginLiquidity;
     address public immutable pairPoolManager;
     IMarginFees public marginFees;
+    bool public interestSwitch;
 
     mapping(PoolId => PoolStatus) private statusStore;
     mapping(Currency currency => uint256 amount) public protocolFeesAccrued;
@@ -90,6 +91,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         marginLiquidity = _marginLiquidity;
         pairPoolManager = address(_pairPoolManager);
         marginFees = _marginFees;
+        interestSwitch = true;
     }
 
     modifier onlyPoolManager() {
@@ -153,7 +155,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         uint256 lendingGrownAmount1;
         if (_status.blockTimestampLast != blockTS) {
             (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = marginFees.getBorrowRateCumulativeLast(_status);
-            if (_status.totalMirrorReserves() > 0) {
+            if (interestSwitch && _status.totalMirrorReserves() > 0) {
                 (uint256 interestReserve0, uint256 interestReserve1) =
                     marginLiquidity.getInterestReserves(pairPoolManager, poolId, _status);
                 InterestBalance memory interestStatus0 =
@@ -435,11 +437,19 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     }
 
     function setMarginFees(address _marginFees) external onlyOwner {
-        marginFees = IMarginFees(_marginFees);
+        if (_marginFees != address(0)) {
+            marginFees = IMarginFees(_marginFees);
+        }
     }
 
     function setMaxPriceMovePerSecond(uint32 _maxPriceMovePerSecond) external onlyOwner {
-        maxPriceMovePerSecond = _maxPriceMovePerSecond;
+        if (_maxPriceMovePerSecond > 0) {
+            maxPriceMovePerSecond = _maxPriceMovePerSecond;
+        }
+    }
+
+    function setInterestSwitch(bool _interestSwitch) external onlyOwner {
+        interestSwitch = _interestSwitch;
     }
 
     // ******************** HOOK CALL ********************
@@ -468,18 +478,14 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     function setBalances(address sender, PoolId poolId) public onlyPoolManager returns (PoolStatus memory) {
         _callSet();
         PoolStatus storage status = statusStore[poolId];
-        _updateInterests(sender, status);
+        if (interestSwitch) {
+            _updateInterests(sender, status);
+        }
         BalanceStatus memory balanceStatus = _getRealBalances(status.key);
         BALANCE_0_SLOT.asUint256().tstore(balanceStatus.balance0);
         BALANCE_1_SLOT.asUint256().tstore(balanceStatus.balance1);
         LENDING_BALANCE_0_SLOT.asUint256().tstore(balanceStatus.lendingBalance0);
         LENDING_BALANCE_1_SLOT.asUint256().tstore(balanceStatus.lendingBalance1);
-        return status;
-    }
-
-    function updateInterests(address sender, PoolId poolId) external onlyPoolManager returns (PoolStatus memory) {
-        PoolStatus storage status = statusStore[poolId];
-        _updateInterests(sender, status);
         return status;
     }
 

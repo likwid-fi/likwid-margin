@@ -34,8 +34,6 @@ interface IPoolStatusManager is IStatusBase {
 
     function setBalances(address sender, PoolId poolId) external returns (PoolStatus memory _status);
 
-    function updateInterests(address sender, PoolId poolId) external returns (PoolStatus memory _status);
-
     function update(PoolId poolId) external;
 
     function updateProtocolFees(Currency currency, uint256 amount) external returns (uint256 restAmount);

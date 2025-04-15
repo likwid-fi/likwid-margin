@@ -194,9 +194,9 @@ contract MarginFees is IMarginFees, Owned {
             borrowMaxAmount = Math.min(borrowMaxAmount, flowMaxAmount);
         }
         {
-            (uint256 interestReserve0, uint256 interestReserve1) = IPairPoolManager(msg.sender).marginLiquidity()
-                .getInterestReserves(msg.sender, status.key.toId(), status);
-            uint256 borrowReserves = (marginForOne ? interestReserve0 : interestReserve1);
+            (uint256 flowReserve0, uint256 flowReserve1) =
+                IPairPoolManager(msg.sender).marginLiquidity().getFlowReserves(msg.sender, status.key.toId(), status);
+            uint256 borrowReserves = (marginForOne ? flowReserve0 : flowReserve1);
             require(borrowReserves >= borrowMaxAmount, "MIRROR_TOO_MUCH");
         }
     }

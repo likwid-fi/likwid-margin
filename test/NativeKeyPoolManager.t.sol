@@ -135,7 +135,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
         uint256 borrowRate = marginFees.getBorrowRate(address(pairPoolManager), nativeKey.toId(), false);
         apr = lendingPoolManager.getLendingAPR(nativeKey.toId(), nativeKey.currency1, 0);
         PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
-        assertGt(borrowRate, apr);
+        assertGt(borrowRate, apr, "borrowRate>apr");
         assertEq(
             borrowRate * status.totalMirrorReserve1() / (status.totalMirrorReserve1() + status.totalRealReserve1()), apr
         );

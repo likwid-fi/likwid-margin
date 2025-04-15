@@ -50,6 +50,11 @@ interface IMarginLiquidity is IERC6909 {
         view
         returns (uint256 reserve0, uint256 reserve1);
 
+    function getFlowReserves(address pairPoolManager, PoolId poolId, PoolStatus memory status)
+        external
+        view
+        returns (uint256 reserve0, uint256 reserve1);
+
     function getMarginReserves(address pairPoolManager, PoolId poolId, PoolStatus memory status)
         external
         view

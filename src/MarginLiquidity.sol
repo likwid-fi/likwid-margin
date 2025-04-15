@@ -288,6 +288,28 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         uint256 uPoolId = _getPoolId(poolId);
         (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) = _getPoolSupplies(pairPoolManager, uPoolId);
         if (totalSupply > 0) {
+            reserve0 = Math.mulDiv(totalSupply - retainSupply0, status.reserve0(), totalSupply);
+            reserve1 = Math.mulDiv(totalSupply - retainSupply1, status.reserve1(), totalSupply);
+        }
+    }
+
+    function getInterestReserves(address pairPoolManager, PoolId poolId)
+        external
+        view
+        returns (uint256 reserve0, uint256 reserve1)
+    {
+        PoolStatus memory status = IPairPoolManager(pairPoolManager).getStatus(poolId);
+        (reserve0, reserve1) = getInterestReserves(pairPoolManager, poolId, status);
+    }
+
+    function getFlowReserves(address pairPoolManager, PoolId poolId, PoolStatus memory status)
+        external
+        view
+        returns (uint256 reserve0, uint256 reserve1)
+    {
+        uint256 uPoolId = _getPoolId(poolId);
+        (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) = _getPoolSupplies(pairPoolManager, uPoolId);
+        if (totalSupply > 0) {
             uint256 maxReserve0 = status.realReserve0;
             uint256 maxReserve1 = status.realReserve1;
             uint256 retainAmount0 = Math.mulDiv(retainSupply0, status.reserve0(), totalSupply);
@@ -299,15 +321,6 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
                 reserve1 = maxReserve1 - retainAmount1;
             }
         }
-    }
-
-    function getInterestReserves(address pairPoolManager, PoolId poolId)
-        external
-        view
-        returns (uint256 reserve0, uint256 reserve1)
-    {
-        PoolStatus memory status = IPairPoolManager(pairPoolManager).getStatus(poolId);
-        (reserve0, reserve1) = getInterestReserves(pairPoolManager, poolId, status);
     }
 
     function getMarginReserves(address pairPoolManager, PoolId poolId, PoolStatus memory status)
