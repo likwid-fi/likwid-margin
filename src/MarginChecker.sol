@@ -78,6 +78,27 @@ contract MarginChecker is IMarginChecker, Owned {
         return true;
     }
 
+    function _getReserves(PoolStatus memory status, bool marginForOne)
+        internal
+        pure
+        returns (uint256 reserveBorrow, uint256 reserveMargin)
+    {
+        (reserveBorrow, reserveMargin) = marginForOne
+            ? (status.truncatedReserve0, status.truncatedReserve1)
+            : (status.truncatedReserve1, status.truncatedReserve0);
+    }
+
+    /// @inheritdoc IMarginChecker
+    function getReserves(address _poolManager, PoolId poolId, bool marginForOne)
+        public
+        view
+        returns (uint256 reserveBorrow, uint256 reserveMargin)
+    {
+        IPairPoolManager poolManager = IPairPoolManager(_poolManager);
+        PoolStatus memory status = poolManager.getStatus(poolId);
+        (reserveBorrow, reserveMargin) = _getReserves(status, marginForOne);
+    }
+
     function estimatePNL(
         IPairMarginManager pairPoolManager,
         PoolStatus memory _status,
@@ -242,31 +263,40 @@ contract MarginChecker is IMarginChecker, Owned {
         }
     }
 
+    function _getMaxDecrease(
+        address _poolManager,
+        PoolStatus memory _status,
+        MarginPosition memory _position,
+        bool computeRealAmount
+    ) internal view returns (uint256 maxAmount) {
+        IPairPoolManager poolManager = IPairPoolManager(_poolManager);
+        (uint256 reserveBorrow, uint256 reserveMargin) = _getReserves(_status, _position.marginForOne);
+        uint256 needAmount;
+        uint256 debtAmount = uint256(_position.borrowAmount).mulDivMillion(minBorrowLevel);
+        if (_position.marginTotal > 0) {
+            needAmount = Math.mulDiv(reserveMargin, debtAmount, reserveBorrow);
+        } else {
+            needAmount = _status.getAmountIn(!_position.marginForOne, debtAmount);
+        }
+        Currency marginCurrency = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;
+        uint256 assetAmount = _position.marginAmount + _position.marginTotal;
+        if (computeRealAmount) {
+            assetAmount =
+                poolManager.lendingPoolManager().computeRealAmount(_position.poolId, marginCurrency, assetAmount);
+        }
+        if (needAmount < assetAmount) {
+            maxAmount = assetAmount - needAmount;
+        }
+        maxAmount = Math.min(uint256(_position.marginAmount), maxAmount);
+    }
+
     /// @inheritdoc IMarginChecker
     function getMaxDecrease(address _poolManager, PoolStatus memory _status, MarginPosition memory _position)
         public
         view
         returns (uint256 maxAmount)
     {
-        IPairPoolManager poolManager = IPairPoolManager(_poolManager);
-        (uint256 reserveBorrow, uint256 reserveMargin) =
-            getReserves(_poolManager, _position.poolId, _position.marginForOne);
-        uint256 needAmount;
-        if (_position.marginTotal > 0) {
-            uint256 debtAmount = uint256(_position.borrowAmount).mulDivMillion(minMarginLevel);
-            needAmount = Math.mulDiv(reserveMargin, debtAmount, reserveBorrow);
-        } else {
-            uint256 debtAmount = uint256(_position.borrowAmount).mulDivMillion(minBorrowLevel);
-            needAmount = _status.getAmountIn(!_position.marginForOne, debtAmount);
-        }
-        Currency marginCurrency = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;
-        uint256 assetAmount = poolManager.lendingPoolManager().computeRealAmount(
-            _position.poolId, marginCurrency, _position.marginAmount + _position.marginTotal
-        );
-        if (needAmount < assetAmount) {
-            maxAmount = assetAmount - needAmount;
-        }
-        maxAmount = Math.min(uint256(_position.marginAmount), maxAmount);
+        maxAmount = _getMaxDecrease(_poolManager, _status, _position, true);
     }
 
     function getMaxDecrease(address positionManager, uint256 positionId) external view returns (uint256 maxAmount) {
@@ -275,28 +305,7 @@ contract MarginChecker is IMarginChecker, Owned {
         address _poolManager = IStatusBase(positionManager).pairPoolManager();
         IPairPoolManager poolManager = IPairPoolManager(_poolManager);
         PoolStatus memory _status = poolManager.getStatus(_position.poolId);
-        maxAmount = getMaxDecrease(_poolManager, _status, _position);
-    }
-
-    function _getReserves(PoolStatus memory status, bool marginForOne)
-        internal
-        pure
-        returns (uint256 reserveBorrow, uint256 reserveMargin)
-    {
-        (reserveBorrow, reserveMargin) = marginForOne
-            ? (status.truncatedReserve0, status.truncatedReserve1)
-            : (status.truncatedReserve1, status.truncatedReserve0);
-    }
-
-    /// @inheritdoc IMarginChecker
-    function getReserves(address _poolManager, PoolId poolId, bool marginForOne)
-        public
-        view
-        returns (uint256 reserveBorrow, uint256 reserveMargin)
-    {
-        IPairPoolManager poolManager = IPairPoolManager(_poolManager);
-        PoolStatus memory status = poolManager.getStatus(poolId);
-        (reserveBorrow, reserveMargin) = _getReserves(status, marginForOne);
+        maxAmount = _getMaxDecrease(_poolManager, _status, _position, false);
     }
 
     function _checkLiquidate(
