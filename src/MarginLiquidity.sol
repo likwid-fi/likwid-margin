@@ -26,6 +26,8 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
 
     uint24 private maxSliding = 5000; // 0.5%
     mapping(address => bool) public interestOperator;
+    mapping(PoolId => int256) public interestStore0;
+    mapping(PoolId => int256) public interestStore1;
 
     constructor(address initialOwner) Owned(initialOwner) {}
 
@@ -125,6 +127,32 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         uint256 interest0,
         uint256 interest1
     ) internal returns (uint256 liquidity) {
+        int256 store0 = interestStore0[poolId];
+        if (store0 >= 0) {
+            interest0 += uint256(store0);
+            interestStore0[poolId] = 0;
+        } else {
+            if (interest0 > uint256(-store0)) {
+                interest0 -= uint256(-store0);
+                interestStore0[poolId] = 0;
+            } else {
+                interest0 = 0;
+                interestStore0[poolId] += int256(interest0);
+            }
+        }
+        int256 store1 = interestStore1[poolId];
+        if (store1 >= 0) {
+            interest1 += uint256(store1);
+            interestStore1[poolId] = 0;
+        } else {
+            if (interest1 > uint256(-store1)) {
+                interest1 -= uint256(-store1);
+                interestStore1[poolId] = 0;
+            } else {
+                interest1 = 0;
+                interestStore1[poolId] += int256(interest1);
+            }
+        }
         uint256 rootKLast = Math.sqrt(_reserve0 * _reserve1);
         uint256 rootK = Math.sqrt((_reserve0 + interest0) * (_reserve1 + interest1));
         if (rootK > rootKLast) {
@@ -135,10 +163,23 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
             liquidity = numerator / denominator;
             if (liquidity > 0) {
                 uint256 _total = balanceOriginal[pairPoolManager][uPoolId];
+                uint256 liquidity0;
+                uint256 liquidity1;
+                if (interest0 == 0) {
+                    liquidity1 = liquidity;
+                } else if (interest1 == 0) {
+                    liquidity0 = liquidity;
+                } else {
+                    denominator = interest0 + Math.mulDiv(interest1, _reserve0, _reserve1);
+                    liquidity0 = Math.mulDiv(liquidity, interest0, denominator);
+                    liquidity1 = liquidity - liquidity0;
+                    if (liquidity0 == 0 || liquidity1 == 0) {
+                        interestStore0[poolId] += int256(interest0);
+                        interestStore1[poolId] += int256(interest1);
+                        return liquidity;
+                    }
+                }
                 accruesRatioX112Of[uPoolId] = accruesRatioX112Of[uPoolId].growRatioX112(liquidity, _total);
-                denominator = interest0 + Math.mulDiv(interest1, _reserve0, _reserve1);
-                uint256 liquidity0 = Math.mulDiv(liquidity, interest0, denominator);
-                uint256 liquidity1 = liquidity - liquidity0;
                 _updateLevelRatio(pairPoolManager, uPoolId, liquidity0, liquidity1, true);
             }
         }
@@ -152,6 +193,32 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         uint256 interest0,
         uint256 interest1
     ) internal returns (uint256 liquidity) {
+        int256 store0 = interestStore0[poolId];
+        if (store0 <= 0) {
+            interest0 += uint256(-store0);
+            interestStore0[poolId] = 0;
+        } else {
+            if (interest0 > uint256(store0)) {
+                interest0 -= uint256(store0);
+                interestStore0[poolId] = 0;
+            } else {
+                interest0 = 0;
+                interestStore0[poolId] -= int256(interest0);
+            }
+        }
+        int256 store1 = interestStore1[poolId];
+        if (store1 <= 0) {
+            interest1 += uint256(-store1);
+            interestStore1[poolId] = 0;
+        } else {
+            if (interest1 > uint256(store1)) {
+                interest1 -= uint256(store1);
+                interestStore1[poolId] = 0;
+            } else {
+                interest1 = 0;
+                interestStore1[poolId] -= int256(interest1);
+            }
+        }
         uint256 rootKLast = Math.sqrt(_reserve0 * _reserve1);
         uint256 rootK = Math.sqrt((_reserve0 - interest0) * (_reserve1 - interest1));
         if (rootKLast > rootK) {
@@ -162,10 +229,23 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
             liquidity = numerator / denominator;
             if (liquidity > 0) {
                 uint256 _total = balanceOriginal[pairPoolManager][uPoolId];
+                uint256 liquidity0;
+                uint256 liquidity1;
+                if (interest0 == 0) {
+                    liquidity1 = liquidity;
+                } else if (interest1 == 0) {
+                    liquidity0 = liquidity;
+                } else {
+                    denominator = interest0 + Math.mulDiv(interest1, _reserve0, _reserve1);
+                    liquidity0 = Math.mulDiv(liquidity, interest0, denominator);
+                    liquidity1 = liquidity - liquidity0;
+                    if (liquidity0 == 0 || liquidity1 == 0) {
+                        interestStore0[poolId] -= int256(interest0);
+                        interestStore1[poolId] -= int256(interest1);
+                        return liquidity;
+                    }
+                }
                 accruesRatioX112Of[uPoolId] = accruesRatioX112Of[uPoolId].reduceRatioX112(liquidity, _total);
-                denominator = interest0 + Math.mulDiv(interest1, _reserve0, _reserve1);
-                uint256 liquidity0 = Math.mulDiv(liquidity, interest0, denominator);
-                uint256 liquidity1 = liquidity - liquidity0;
                 _updateLevelRatio(pairPoolManager, uPoolId, liquidity0, liquidity1, false);
             }
         }

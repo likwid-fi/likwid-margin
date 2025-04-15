@@ -1351,37 +1351,74 @@ contract MarginPositionManagerTest is DeployHelper {
         afterStatus = pairPoolManager.getStatus(poolId);
         assertEq(beforeStatus.totalMirrorReserve1(), afterStatus.totalMirrorReserve1(), "MirrorReserve1 Eq 2");
 
-        uint256 amountIn = 0.0123 ether;
-        MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
-            poolId: poolId,
-            zeroForOne: true,
-            to: user,
-            amountIn: amountIn,
-            amountOut: 0,
-            amountOutMin: 0,
-            deadline: type(uint256).max
-        });
-        uint256 amountOut = swapRouter.exactInput(swapParams);
-        console.log("amountIn:%s,amountOut:%s", amountIn, amountOut);
-        afterStatus = pairPoolManager.getStatus(poolId);
-        uint256 amount0 = 0.0123 ether;
-        uint256 amount1 = amount0 * afterStatus.reserve1() / afterStatus.reserve0();
-        AddLiquidityParams memory addParams = AddLiquidityParams({
-            poolId: poolId,
-            amount0: amount0,
-            amount1: amount1,
-            to: user,
-            level: LiquidityLevel.RETAIN_BOTH,
-            deadline: type(uint256).max
-        });
-        uint256 liquidity = pairPoolManager.addLiquidity(addParams);
-        skip(1000);
-        RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
-            poolId: poolId,
-            level: LiquidityLevel.RETAIN_BOTH,
-            liquidity: liquidity,
-            deadline: type(uint256).max
-        });
-        pairPoolManager.removeLiquidity(removeParams);
+        {
+            uint256 amountIn = 0.0123 ether;
+            MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+                poolId: poolId,
+                zeroForOne: true,
+                to: user,
+                amountIn: amountIn,
+                amountOut: 0,
+                amountOutMin: 0,
+                deadline: type(uint256).max
+            });
+            uint256 amountOut = swapRouter.exactInput(swapParams);
+            console.log("amountIn:%s,amountOut:%s", amountIn, amountOut);
+            afterStatus = pairPoolManager.getStatus(poolId);
+            uint256 amount0 = 0.0123 ether;
+            uint256 amount1 = amount0 * afterStatus.reserve1() / afterStatus.reserve0();
+            AddLiquidityParams memory addParams = AddLiquidityParams({
+                poolId: poolId,
+                amount0: amount0,
+                amount1: amount1,
+                to: user,
+                level: LiquidityLevel.RETAIN_BOTH,
+                deadline: type(uint256).max
+            });
+            uint256 liquidity = pairPoolManager.addLiquidity(addParams);
+            skip(1000);
+            RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
+                poolId: poolId,
+                level: LiquidityLevel.RETAIN_BOTH,
+                liquidity: liquidity,
+                deadline: type(uint256).max
+            });
+            pairPoolManager.removeLiquidity(removeParams);
+        }
+        poolStatusManager.setInterestClosed(poolId, false);
+        {
+            uint256 amountIn = 0.0123 ether;
+            MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+                poolId: poolId,
+                zeroForOne: true,
+                to: user,
+                amountIn: amountIn,
+                amountOut: 0,
+                amountOutMin: 0,
+                deadline: type(uint256).max
+            });
+            uint256 amountOut = swapRouter.exactInput(swapParams);
+            console.log("amountIn:%s,amountOut:%s", amountIn, amountOut);
+            afterStatus = pairPoolManager.getStatus(poolId);
+            uint256 amount0 = 0.0123 ether;
+            uint256 amount1 = amount0 * afterStatus.reserve1() / afterStatus.reserve0();
+            AddLiquidityParams memory addParams = AddLiquidityParams({
+                poolId: poolId,
+                amount0: amount0,
+                amount1: amount1,
+                to: user,
+                level: LiquidityLevel.RETAIN_BOTH,
+                deadline: type(uint256).max
+            });
+            uint256 liquidity = pairPoolManager.addLiquidity(addParams);
+            skip(1000);
+            RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
+                poolId: poolId,
+                level: LiquidityLevel.RETAIN_BOTH,
+                liquidity: liquidity,
+                deadline: type(uint256).max
+            });
+            pairPoolManager.removeLiquidity(removeParams);
+        }
     }
 }
