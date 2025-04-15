@@ -106,11 +106,14 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
                 level4Liquidity += liquidity1;
             }
         }
-        if (addFlag) {
-            accruesRatioX112Of[level4Id] = accruesRatioX112Of[level4Id].growRatioX112(level4Liquidity, total4Liquidity);
-        } else {
-            accruesRatioX112Of[level4Id] =
-                accruesRatioX112Of[level4Id].reduceRatioX112(level4Liquidity, total4Liquidity);
+        if (total4Liquidity > 0) {
+            if (addFlag) {
+                accruesRatioX112Of[level4Id] =
+                    accruesRatioX112Of[level4Id].growRatioX112(level4Liquidity, total4Liquidity);
+            } else {
+                accruesRatioX112Of[level4Id] =
+                    accruesRatioX112Of[level4Id].reduceRatioX112(level4Liquidity, total4Liquidity);
+            }
         }
     }
 
@@ -285,8 +288,16 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         uint256 uPoolId = _getPoolId(poolId);
         (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) = _getPoolSupplies(pairPoolManager, uPoolId);
         if (totalSupply > 0) {
-            reserve0 = Math.mulDiv(totalSupply - retainSupply0, status.reserve0(), totalSupply);
-            reserve1 = Math.mulDiv(totalSupply - retainSupply1, status.reserve1(), totalSupply);
+            uint256 maxReserve0 = status.realReserve0;
+            uint256 maxReserve1 = status.realReserve1;
+            uint256 retainAmount0 = Math.mulDiv(retainSupply0, status.reserve0(), totalSupply);
+            uint256 retainAmount1 = Math.mulDiv(retainSupply1, status.reserve1(), totalSupply);
+            if (maxReserve0 > retainAmount0) {
+                reserve0 = maxReserve0 - retainAmount0;
+            }
+            if (maxReserve1 > retainAmount1) {
+                reserve1 = maxReserve1 - retainAmount1;
+            }
         }
     }
 

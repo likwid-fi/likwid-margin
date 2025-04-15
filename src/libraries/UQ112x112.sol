@@ -69,7 +69,8 @@ library UQ112x112 {
         pure
         returns (uint256 result)
     {
-        result = Math.mulDiv(Q112, numerator, denominator) + ratio;
+        result = ratio;
+        if (numerator > 0 && denominator > 0) result += Math.mulDiv(Q112, numerator, denominator);
     }
 
     function reduceRatioX112(uint256 ratio, uint256 numerator, uint256 denominator)
@@ -77,7 +78,15 @@ library UQ112x112 {
         pure
         returns (uint256 result)
     {
-        result = ratio - Math.mulDiv(Q112, numerator, denominator, Math.Rounding.Ceil);
+        result = ratio;
+        if (numerator > 0 && denominator > 0) {
+            uint256 cut = Math.mulDiv(Q112, numerator, denominator, Math.Rounding.Ceil);
+            if (result > cut) {
+                result -= cut;
+            } else {
+                result = 0;
+            }
+        }
     }
 
     function mulRatioX112(uint256 input, uint256 ratioX112) internal pure returns (uint256 result) {
