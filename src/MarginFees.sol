@@ -202,12 +202,12 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     /// @inheritdoc IMarginFees
-    function getBorrowRateByReserves(uint256 realReserve, uint256 mirrorReserve) public view returns (uint256 rate) {
+    function getBorrowRateByReserves(uint256 borrowReserve, uint256 mirrorReserve) public view returns (uint256 rate) {
         rate = rateStatus.rateBase;
         if (mirrorReserve == 0) {
             return rate;
         }
-        uint256 useLevel = Math.mulDiv(mirrorReserve, PerLibrary.ONE_MILLION, (mirrorReserve + realReserve));
+        uint256 useLevel = Math.mulDiv(mirrorReserve, PerLibrary.ONE_MILLION, borrowReserve);
         if (useLevel >= rateStatus.useHighLevel) {
             rate += uint256(useLevel - rateStatus.useHighLevel) * rateStatus.mHigh / 100;
             useLevel = rateStatus.useHighLevel;
@@ -219,40 +219,73 @@ contract MarginFees is IMarginFees, Owned {
         return rate + useLevel * rateStatus.mLow / 100;
     }
 
-    function getBorrowRateCumulativeLast(PoolStatus memory status)
+    function getBorrowRateCumulativeLast(uint256 interestReserve0, uint256 interestReserve1, PoolStatus memory status)
         public
         view
         returns (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast)
     {
         uint256 timeElapsed = status.blockTimestampLast.getTimeElapsedMicrosecond();
-        uint256 rate0 = getBorrowRateByReserves(status.totalRealReserve0(), status.totalMirrorReserve0());
+        uint256 rate0 =
+            getBorrowRateByReserves(interestReserve0 + status.lendingReserve0(), status.totalMirrorReserve0());
         uint256 rate0LastYear = PerLibrary.TRILLION_YEAR_SECONDS + rate0 * timeElapsed;
         rate0CumulativeLast = Math.mulDiv(status.rate0CumulativeLast, rate0LastYear, PerLibrary.TRILLION_YEAR_SECONDS);
-        uint256 rate1 = getBorrowRateByReserves(status.totalRealReserve1(), status.totalMirrorReserve1());
+        uint256 rate1 =
+            getBorrowRateByReserves(interestReserve1 + status.lendingReserve1(), status.totalMirrorReserve1());
         uint256 rate1LastYear = PerLibrary.TRILLION_YEAR_SECONDS + rate1 * timeElapsed;
         rate1CumulativeLast = Math.mulDiv(status.rate1CumulativeLast, rate1LastYear, PerLibrary.TRILLION_YEAR_SECONDS);
     }
 
-    function getBorrowRateCumulativeLast(address pool, PoolId poolId, bool marginForOne)
+    function getBorrowRateCumulativeLast(address pairPoolManager, PoolId poolId, bool marginForOne)
         external
         view
         returns (uint256)
     {
-        PoolStatus memory status = IPairPoolManager(pool).getStatus(poolId);
+        PoolStatus memory status = IPairPoolManager(pairPoolManager).getStatus(poolId);
         return marginForOne ? status.rate0CumulativeLast : status.rate1CumulativeLast;
     }
 
     /// @inheritdoc IMarginFees
-    function getBorrowRate(PoolStatus memory status, bool marginForOne) public view returns (uint256) {
-        uint256 realReserve = marginForOne ? status.totalRealReserve0() : status.totalRealReserve1();
+    function getBorrowRate(address pairPoolManager, PoolStatus memory status, bool marginForOne)
+        public
+        view
+        returns (uint256)
+    {
+        (uint256 interestReserve0, uint256 interestReserve1) = IPairPoolManager(pairPoolManager).marginLiquidity()
+            .getInterestReserves(pairPoolManager, status.key.toId(), status);
+        uint256 interestReserve =
+            marginForOne ? interestReserve0 + status.lendingReserve0() : interestReserve1 + status.lendingReserve1();
         uint256 mirrorReserve = marginForOne ? status.totalMirrorReserve0() : status.totalMirrorReserve1();
-        return getBorrowRateByReserves(realReserve, mirrorReserve);
+        return getBorrowRateByReserves(interestReserve, mirrorReserve);
     }
 
     /// @inheritdoc IMarginFees
-    function getBorrowRate(address pool, PoolId poolId, bool marginForOne) external view returns (uint256) {
-        PoolStatus memory status = IPairPoolManager(pool).getStatus(poolId);
-        return getBorrowRate(status, marginForOne);
+    function getBorrowRate(address pairPoolManager, PoolId poolId, bool marginForOne) external view returns (uint256) {
+        PoolStatus memory status = IPairPoolManager(pairPoolManager).getStatus(poolId);
+        return getBorrowRate(pairPoolManager, status, marginForOne);
+    }
+
+    function getUtilizationReserves(address pairPoolManager, PoolId poolId)
+        external
+        view
+        returns (uint256 suppliedReserve0, uint256 suppliedReserve1, uint256 borrowedReserve0, uint256 borrowedReserve1)
+    {
+        PoolStatus memory status = IPairPoolManager(pairPoolManager).getStatus(poolId);
+        (uint256 interestReserve0, uint256 interestReserve1) = IPairPoolManager(pairPoolManager).marginLiquidity()
+            .getInterestReserves(pairPoolManager, status.key.toId(), status);
+        borrowedReserve0 = status.totalMirrorReserve0();
+        borrowedReserve1 = status.totalMirrorReserve1();
+        suppliedReserve0 = interestReserve0 + status.lendingReserve0();
+        if (suppliedReserve0 > borrowedReserve0) {
+            suppliedReserve0 -= borrowedReserve0;
+        } else {
+            suppliedReserve0 = 0;
+        }
+        suppliedReserve1 = interestReserve1 + status.lendingReserve1();
+        if (suppliedReserve1 > borrowedReserve1) {
+            suppliedReserve1 -= borrowedReserve1;
+        } else {
+            suppliedReserve1 = 0;
+        }
     }
 
     /// @inheritdoc IMarginFees

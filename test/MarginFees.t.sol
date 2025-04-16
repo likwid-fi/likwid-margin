@@ -55,11 +55,11 @@ contract MarginFeesTest is DeployHelper {
         console.log("rate:%s", rate);
         assertEq(rate, uint256(rateBase));
         mirrorReserve = 0.4 ether;
-        rate = marginFees.getBorrowRateByReserves(realReserve, mirrorReserve);
+        rate = marginFees.getBorrowRateByReserves(realReserve + mirrorReserve, mirrorReserve);
         console.log("rate:%s", rate);
         assertEq(rate, rateBase + useMiddleLevel * mLow / 100);
         realReserve = 0;
-        rate = marginFees.getBorrowRateByReserves(realReserve, mirrorReserve);
+        rate = marginFees.getBorrowRateByReserves(realReserve + mirrorReserve, mirrorReserve);
         assertEq(
             rate,
             rateBase + uint256(useMiddleLevel) * mLow / 100 + uint256(useHighLevel - useMiddleLevel) * mMiddle / 100
@@ -157,5 +157,32 @@ contract MarginFeesTest is DeployHelper {
         console.log("degree:%s", degree);
         uint256 dFee = Math.mulDiv((degree * 10) ** 3, status.key.fee, PerLibrary.ONE_MILLION ** 3);
         assertEq(dFee, _afterFee2);
+    }
+
+    function testUtilizationReserves() public {
+        PoolId poolId = nativeKey.toId();
+        (uint256 suppliedReserve0, uint256 suppliedReserve1, uint256 borrowedReserve0, uint256 borrowedReserve1) =
+            marginFees.getUtilizationReserves(address(pairPoolManager), poolId);
+        console.log("suppliedReserve0:%s,suppliedReserve1:%s", suppliedReserve0, suppliedReserve1);
+        console.log("borrowedReserve0:%s,borrowedReserve1:%s", borrowedReserve0, borrowedReserve1);
+        uint256 positionId;
+        uint256 borrowAmount;
+        uint256 payValue = 0.1 ether;
+        MarginParams memory params = MarginParams({
+            poolId: poolId,
+            marginForOne: false,
+            leverage: 1,
+            marginAmount: payValue,
+            borrowAmount: 0,
+            borrowMaxAmount: 0,
+            deadline: block.timestamp + 1000
+        });
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        MarginPosition memory position = marginPositionManager.getPosition(positionId);
+        assertGt(position.borrowAmount, 0);
+        (suppliedReserve0, suppliedReserve1, borrowedReserve0, borrowedReserve1) =
+            marginFees.getUtilizationReserves(address(pairPoolManager), poolId);
+        console.log("suppliedReserve0:%s,suppliedReserve1:%s", suppliedReserve0, suppliedReserve1);
+        console.log("borrowedReserve0:%s,borrowedReserve1:%s", borrowedReserve0, borrowedReserve1);
     }
 }

@@ -136,7 +136,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         bool borrowForOne = currency == status.key.currency1;
         uint256 mirrorReserve = borrowForOne ? status.totalMirrorReserve1() : status.totalMirrorReserve0();
-        uint256 borrowRate = pairPoolManager.marginFees().getBorrowRate(status, !borrowForOne);
+        uint256 borrowRate = pairPoolManager.marginFees().getBorrowRate(address(pairPoolManager), status, !borrowForOne);
         (uint256 reserve0, uint256 reserve1) =
             pairPoolManager.marginLiquidity().getInterestReserves(address(pairPoolManager), poolId, status);
         uint256 flowReserve = borrowForOne ? reserve1 : reserve0;

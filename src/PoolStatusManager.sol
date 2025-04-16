@@ -155,10 +155,11 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         uint256 lendingGrownAmount0;
         uint256 lendingGrownAmount1;
         if (_status.blockTimestampLast != blockTS) {
-            (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = marginFees.getBorrowRateCumulativeLast(_status);
             if (!interestClosed[poolId] && _status.totalMirrorReserves() > 0) {
                 (uint256 interestReserve0, uint256 interestReserve1) =
                     marginLiquidity.getInterestReserves(pairPoolManager, poolId, _status);
+                (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) =
+                    marginFees.getBorrowRateCumulativeLast(interestReserve0, interestReserve1, _status);
                 (InterestBalance memory interestStatus0,) =
                     _updateInterest0(poolId, _status, interestReserve0, rate0CumulativeLast);
                 if (interestStatus0.allInterest > 0) {
@@ -176,12 +177,12 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                     _status.lendingMirrorReserve1 += lendingAmount1.toUint112();
                     lendingGrownAmount1 = interestStatus1.lendingInterest;
                 }
+                _status.rate0CumulativeLast = rate0CumulativeLast;
+                _status.rate1CumulativeLast = rate1CumulativeLast;
             }
 
             (_status.truncatedReserve0, _status.truncatedReserve1) = _transform(_status);
             _status.blockTimestampLast = blockTS;
-            _status.rate0CumulativeLast = rate0CumulativeLast;
-            _status.rate1CumulativeLast = rate1CumulativeLast;
         }
         if (lendingIn) {
             uint256 id0 = _status.key.currency0.toTokenId(poolId);
@@ -315,10 +316,10 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
             uint256 allInterest0 = Math.mulDiv(
                 mirrorReserve0 * UQ112x112.Q112, rate0CumulativeLast, status.rate0CumulativeLast
             ) - mirrorReserve0 * UQ112x112.Q112 + interestX112Store0[poolId];
-            interestStatus.protocolInterest = marginFees.getProtocolFeeAmount(allInterest0);
-            if (interestStatus.protocolInterest > UQ112x112.Q112) {
+            uint256 protocolInterest = marginFees.getProtocolFeeAmount(allInterest0);
+            if (protocolInterest > UQ112x112.Q112) {
                 allInterest0 = allInterest0 / UQ112x112.Q112;
-                interestStatus.protocolInterest = interestStatus.protocolInterest / UQ112x112.Q112;
+                interestStatus.protocolInterest = protocolInterest / UQ112x112.Q112;
                 allInterest0 -= interestStatus.protocolInterest;
                 uint256 interest0 =
                     Math.mulDiv(allInterest0, interestReserve0, interestReserve0 + status.lendingReserve0());
@@ -344,10 +345,10 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
             uint256 allInterest1 = Math.mulDiv(
                 mirrorReserve1 * UQ112x112.Q112, rate1CumulativeLast, status.rate1CumulativeLast
             ) - mirrorReserve1 * UQ112x112.Q112 + interestX112Store1[poolId];
-            interestStatus.protocolInterest = marginFees.getProtocolFeeAmount(allInterest1);
-            if (interestStatus.protocolInterest > UQ112x112.Q112) {
+            uint256 protocolInterest = marginFees.getProtocolFeeAmount(allInterest1);
+            if (protocolInterest > UQ112x112.Q112) {
                 allInterest1 = allInterest1 / UQ112x112.Q112;
-                interestStatus.protocolInterest = interestStatus.protocolInterest / UQ112x112.Q112;
+                interestStatus.protocolInterest = protocolInterest / UQ112x112.Q112;
                 allInterest1 -= interestStatus.protocolInterest;
                 uint256 interest1 =
                     Math.mulDiv(allInterest1, interestReserve1, interestReserve1 + status.lendingReserve1());
@@ -367,10 +368,11 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         uint32 blockTS = uint32(block.timestamp % 2 ** 32);
         if (status.blockTimestampLast != blockTS) {
             PoolId poolId = key.toId();
-            (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = marginFees.getBorrowRateCumulativeLast(status);
             if (status.totalMirrorReserves() > 0) {
                 (uint256 interestReserve0, uint256 interestReserve1) =
                     marginLiquidity.getInterestReserves(pairPoolManager, poolId, status);
+                (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) =
+                    marginFees.getBorrowRateCumulativeLast(interestReserve0, interestReserve1, status);
                 (InterestBalance memory interestStatus0, uint256 interest0X112) =
                     _updateInterest0(poolId, status, interestReserve0, rate0CumulativeLast);
                 (InterestBalance memory interestStatus1, uint256 interest1X112) =
@@ -383,6 +385,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                         interestX112Store1[poolId] += interest1X112;
                     }
                     if (interestStatus0.allInterest > 0) {
+                        interestX112Store0[poolId] = 0;
                         uint256 cPoolId0 = status.key.currency0.toTokenId(poolId);
                         if (interestStatus0.pairInterest > 0) {
                             status.mirrorReserve0 += interestStatus0.pairInterest.toUint112();
@@ -411,6 +414,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                     }
 
                     if (interestStatus1.allInterest > 0) {
+                        interestX112Store1[poolId] = 0;
                         uint256 cPoolId1 = status.key.currency1.toTokenId(poolId);
                         if (interestStatus1.pairInterest > 0) {
                             status.mirrorReserve1 += interestStatus1.pairInterest.toUint112();
@@ -447,12 +451,13 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                         interestStatus1.pairInterest
                     );
                 }
+                status.rate0CumulativeLast = rate0CumulativeLast;
+                status.rate1CumulativeLast = rate1CumulativeLast;
             }
 
             (status.truncatedReserve0, status.truncatedReserve1) = _transform(status);
             status.blockTimestampLast = blockTS;
-            status.rate0CumulativeLast = rate0CumulativeLast;
-            status.rate1CumulativeLast = rate1CumulativeLast;
+
             lendingPoolManager.sync(poolId, status);
         }
     }
