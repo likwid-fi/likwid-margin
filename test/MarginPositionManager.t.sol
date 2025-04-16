@@ -268,7 +268,7 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256 rateCumulativeLast = marginFees.getBorrowRateCumulativeLast(address(pairPoolManager), poolId, false);
         console.log("rate:%s,rateCumulativeLast:%s", rate, rateCumulativeLast);
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
-        skip(3600 * 10);
+        skip(100);
         position = marginPositionManager.getPosition(positionId);
         console.log(
             "positionId:%s,position.borrowAmount:%s,rateCumulativeLast:%s",
@@ -282,7 +282,7 @@ contract MarginPositionManagerTest is DeployHelper {
         uint256 newRateCumulativeLast = marginFees.getBorrowRateCumulativeLast(address(pairPoolManager), poolId, false);
         assertEq(rateCumulativeLastAfter, newRateCumulativeLast);
         uint256 borrowAmountLast = borrowAmount;
-        payValue = 0.02e18;
+        payValue = 0.0002 ether;
         params = MarginParams({
             poolId: poolId,
             marginForOne: false,

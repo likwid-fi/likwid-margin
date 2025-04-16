@@ -122,6 +122,38 @@ contract MarginFees is IMarginFees, Owned {
         _reserve1 = status.realReserve1 + status.mirrorReserve1;
     }
 
+    function getAmountOut(address pairPoolManager, PoolId poolId, bool zeroForOne, uint256 amountIn, bool useDynamicFee)
+        external
+        view
+        returns (uint256 amountOut, uint24 fee, uint256 feeAmount)
+    {
+        PoolStatus memory status = IPairPoolManager(pairPoolManager).getStatus(poolId);
+        if (useDynamicFee) {
+            return IPairPoolManager(pairPoolManager).statusManager().getAmountOut(status, zeroForOne, amountIn);
+        }
+        (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
+        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
+        uint256 numerator = amountIn * reserveOut;
+        uint256 denominator = reserveIn + amountIn;
+        amountOut = numerator / denominator;
+    }
+
+    function getAmountIn(address pairPoolManager, PoolId poolId, bool zeroForOne, uint256 amountOut, bool useDynamicFee)
+        external
+        view
+        returns (uint256 amountIn, uint24 fee, uint256 feeAmount)
+    {
+        PoolStatus memory status = IPairPoolManager(pairPoolManager).getStatus(poolId);
+        if (useDynamicFee) {
+            return IPairPoolManager(pairPoolManager).statusManager().getAmountIn(status, zeroForOne, amountOut);
+        }
+        (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
+        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
+        uint256 numerator = reserveIn * amountOut;
+        uint256 denominator = (reserveOut - amountOut);
+        amountIn = (numerator / denominator) + 1;
+    }
+
     function computeDiff(address pairPoolManager, PoolStatus memory status, bool marginForOne, int256 diff)
         external
         view

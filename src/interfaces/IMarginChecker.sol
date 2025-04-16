@@ -60,10 +60,13 @@ interface IMarginChecker {
         view
         returns (MarginPosition memory);
 
-    function checkMinMarginLevel(MarginParamsVo memory paramsVo, PoolStatus memory _status)
-        external
-        view
-        returns (bool valid);
+    function checkMinMarginLevel(
+        PoolStatus memory _status,
+        bool marginForOne,
+        uint256 leverage,
+        uint256 assetsAmount,
+        uint256 debtAmount
+    ) external view returns (bool valid);
 
     /// @notice Get the maximum marginAmount for the given pool, leverage
     /// @param poolManager The manager of the pool

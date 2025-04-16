@@ -143,19 +143,17 @@ contract MarginChecker is IMarginChecker, Owned {
         pnlAmount = int256(releaseTotal) - int256(releaseAmount);
     }
 
-    function checkMinMarginLevel(MarginParamsVo memory paramsVo, PoolStatus memory _status)
-        external
-        view
-        returns (bool valid)
-    {
-        MarginParams memory params = paramsVo.params;
-        (uint256 reserveBorrow, uint256 reserveMargin) = _getReserves(_status, params.marginForOne);
+    function checkMinMarginLevel(
+        PoolStatus memory _status,
+        bool marginForOne,
+        uint256 leverage,
+        uint256 assetsAmount,
+        uint256 debtAmount
+    ) external view returns (bool valid) {
         uint256 repayAmount;
-        IPairPoolManager pairPoolManager = IPairPoolManager(IStatusBase(msg.sender).pairPoolManager());
-        uint256 assetsAmount = pairPoolManager.lendingPoolManager().computeRealAmount(
-            params.poolId, paramsVo.marginCurrency, params.marginAmount + paramsVo.marginTotal
-        );
-        if (params.leverage > 0) {
+        (uint256 reserveBorrow, uint256 reserveMargin) = _getReserves(_status, marginForOne);
+
+        if (leverage > 0) {
             repayAmount = Math.mulDiv(reserveBorrow, assetsAmount, reserveMargin);
             repayAmount = repayAmount.mulMillionDiv(minMarginLevel);
         } else {
@@ -164,7 +162,7 @@ contract MarginChecker is IMarginChecker, Owned {
             repayAmount = numerator / denominator;
             repayAmount = repayAmount.mulMillionDiv(minBorrowLevel);
         }
-        valid = params.borrowAmount <= repayAmount;
+        valid = debtAmount <= repayAmount;
     }
 
     function updatePosition(IMarginPositionManager positionManager, MarginPosition memory _position)

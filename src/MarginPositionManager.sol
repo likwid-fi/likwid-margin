@@ -198,9 +198,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         if (params.borrowMaxAmount > 0 && params.borrowAmount > params.borrowMaxAmount) {
             revert InsufficientBorrowReceived();
         }
-        if (!checker.checkMinMarginLevel(paramsVo, _status)) {
-            revert InsufficientAmount(params.marginAmount);
-        }
+        uint256 assetsAmount;
+        uint256 debtAmount;
         if (positionId == 0) {
             _mint(msg.sender, (positionId = nextId++));
             emit Mint(params.poolId, msg.sender, msg.sender, positionId);
@@ -220,6 +219,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
                 _borrowPositionIds[params.poolId][params.marginForOne][msg.sender] = positionId;
             }
             _positions[positionId] = _position;
+            debtAmount = _position.borrowAmount;
+            assetsAmount = _position.marginAmount + _position.marginTotal;
         } else {
             require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
             MarginPosition storage _position = _positions[positionId];
@@ -230,23 +231,20 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             }
             _position.rawBorrowAmount += params.borrowAmount.toUint112();
             _position.borrowAmount = _position.borrowAmount + params.borrowAmount.toUint112();
+            debtAmount = _position.borrowAmount;
+            assetsAmount = _position.marginAmount + _position.marginTotal;
         }
-        {
-            uint256 marginAmount =
-                lendingPoolManager.computeRealAmount(params.poolId, paramsVo.marginCurrency, params.marginAmount);
-            uint256 marginTotal =
-                lendingPoolManager.computeRealAmount(params.poolId, paramsVo.marginCurrency, paramsVo.marginTotal);
-            emit Margin(
-                params.poolId,
-                msg.sender,
-                positionId,
-                marginAmount,
-                marginTotal,
-                params.borrowAmount,
-                params.marginForOne
-            );
+        uint256 marginTokenId = paramsVo.marginCurrency.toTokenId(params.poolId);
+        uint256 accruesRatioX112 = lendingPoolManager.accruesRatioX112Of(marginTokenId);
+        assetsAmount = assetsAmount.mulRatioX112(accruesRatioX112);
+        if (!checker.checkMinMarginLevel(_status, params.marginForOne, params.leverage, assetsAmount, debtAmount)) {
+            revert InsufficientAmount(params.marginAmount);
         }
-
+        uint256 marginAmount = params.marginAmount.mulRatioX112(accruesRatioX112);
+        uint256 marginTotal = paramsVo.marginTotal.mulRatioX112(accruesRatioX112);
+        emit Margin(
+            params.poolId, msg.sender, positionId, marginAmount, marginTotal, params.borrowAmount, params.marginForOne
+        );
         return (positionId, params.borrowAmount);
     }
 
