@@ -21,6 +21,7 @@ contract MarginHook is BaseHook, Owned {
     using CurrencyPoolLibrary for Currency;
 
     error InvalidInitialization();
+    error FeeTooLow();
 
     IPairPoolManager public immutable pairPoolManager;
 
@@ -46,6 +47,7 @@ contract MarginHook is BaseHook, Owned {
         returns (bytes4)
     {
         if (address(key.hooks) != address(this)) revert InvalidInitialization();
+        if (key.fee < 3000) revert FeeTooLow();
         pairPoolManager.initialize(key);
         return BaseHook.beforeInitialize.selector;
     }

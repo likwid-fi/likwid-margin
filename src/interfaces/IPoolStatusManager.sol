@@ -36,7 +36,9 @@ interface IPoolStatusManager is IStatusBase {
 
     function update(PoolId poolId) external;
 
-    function updateProtocolFees(Currency currency, uint256 amount) external returns (uint256 restAmount);
+    function updateSwapProtocolFees(Currency currency, uint256 amount) external returns (uint256 restAmount);
+
+    function updateMarginProtocolFees(Currency currency, uint256 amount) external returns (uint256 restAmount);
 
     function collectProtocolFees(Currency currency, uint256 amount) external returns (uint256 amountCollected);
 

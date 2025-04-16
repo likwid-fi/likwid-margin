@@ -103,10 +103,10 @@ contract MarginFeesTest is DeployHelper {
         status = pairPoolManager.getStatus(poolId);
         printPoolStatus(status);
         (uint24 _afterFee,) = marginFees.getPoolFees(address(pairPoolManager), poolId, true, 0, 0);
-        assertEq(_afterFee, 41044);
+        assertEq(_afterFee, 41076);
         skip(10);
         (_afterFee,) = marginFees.getPoolFees(address(pairPoolManager), poolId, true, 0, 0);
-        assertLe(_afterFee, 41044);
+        assertLe(_afterFee, 41076);
         status = pairPoolManager.getStatus(poolId);
         printPoolStatus(status);
         console.log("_afterFee:", _afterFee);

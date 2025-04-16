@@ -316,7 +316,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
             uint256 allInterest0 = Math.mulDiv(
                 mirrorReserve0 * UQ112x112.Q112, rate0CumulativeLast, status.rate0CumulativeLast
             ) - mirrorReserve0 * UQ112x112.Q112 + interestX112Store0[poolId];
-            uint256 protocolInterest = marginFees.getProtocolFeeAmount(allInterest0);
+            uint256 protocolInterest = marginFees.getProtocolInterestFeeAmount(allInterest0);
             if (protocolInterest > UQ112x112.Q112) {
                 allInterest0 = allInterest0 / UQ112x112.Q112;
                 interestStatus.protocolInterest = protocolInterest / UQ112x112.Q112;
@@ -345,7 +345,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
             uint256 allInterest1 = Math.mulDiv(
                 mirrorReserve1 * UQ112x112.Q112, rate1CumulativeLast, status.rate1CumulativeLast
             ) - mirrorReserve1 * UQ112x112.Q112 + interestX112Store1[poolId];
-            uint256 protocolInterest = marginFees.getProtocolFeeAmount(allInterest1);
+            uint256 protocolInterest = marginFees.getProtocolInterestFeeAmount(allInterest1);
             if (protocolInterest > UQ112x112.Q112) {
                 allInterest1 = allInterest1 / UQ112x112.Q112;
                 interestStatus.protocolInterest = protocolInterest / UQ112x112.Q112;
@@ -558,12 +558,22 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         _callUpdate();
     }
 
-    function updateProtocolFees(Currency currency, uint256 amount)
+    function updateSwapProtocolFees(Currency currency, uint256 amount)
         external
         onlyPoolManager
         returns (uint256 restAmount)
     {
-        uint256 protocolFees = marginFees.getProtocolFeeAmount(amount);
+        uint256 protocolFees = marginFees.getProtocolSwapFeeAmount(amount);
+        protocolFeesAccrued[currency] += protocolFees;
+        restAmount = amount - protocolFees;
+    }
+
+    function updateMarginProtocolFees(Currency currency, uint256 amount)
+        external
+        onlyPoolManager
+        returns (uint256 restAmount)
+    {
+        uint256 protocolFees = marginFees.getProtocolMarginFeeAmount(amount);
         protocolFeesAccrued[currency] += protocolFees;
         restAmount = amount - protocolFees;
     }

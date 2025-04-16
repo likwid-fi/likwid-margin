@@ -102,7 +102,9 @@ interface IMarginFees {
     /// @notice Get the protocol part of the totalFee
     /// @param totalFee Total fee amount
     /// @return feeAmount The protocol part fee amount
-    function getProtocolFeeAmount(uint256 totalFee) external view returns (uint256 feeAmount);
+    function getProtocolSwapFeeAmount(uint256 totalFee) external view returns (uint256 feeAmount);
+    function getProtocolMarginFeeAmount(uint256 totalFee) external view returns (uint256 feeAmount);
+    function getProtocolInterestFeeAmount(uint256 totalFee) external view returns (uint256 feeAmount);
 
     /// @notice Collects the protocol fees for a given recipient and currency, returning the amount collected
     /// @param poolManager The address of pool manager

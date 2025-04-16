@@ -30,7 +30,9 @@ contract MarginFees is IMarginFees, Owned {
     using PoolStatusLibrary for PoolStatus;
 
     uint24 public marginFee = 3000; // 0.3%
-    uint24 public protocolFee = 50000; // 5%
+    uint24 public protocolSwapFee = 100000; // 10%
+    uint24 public protocolMarginFee = 200000; // 20%
+    uint24 public protocolInterestFee = 50000; // 5%
     uint24 public dynamicFeeMinDegree = 100000; // 10%
 
     address public feeTo;
@@ -320,9 +322,16 @@ contract MarginFees is IMarginFees, Owned {
         }
     }
 
-    /// @inheritdoc IMarginFees
-    function getProtocolFeeAmount(uint256 totalFee) external view returns (uint256 feeAmount) {
-        feeAmount = protocolFee.part(totalFee);
+    function getProtocolSwapFeeAmount(uint256 totalFee) external view returns (uint256 feeAmount) {
+        feeAmount = protocolSwapFee.part(totalFee);
+    }
+
+    function getProtocolMarginFeeAmount(uint256 totalFee) external view returns (uint256 feeAmount) {
+        feeAmount = protocolMarginFee.part(totalFee);
+    }
+
+    function getProtocolInterestFeeAmount(uint256 totalFee) external view returns (uint256 feeAmount) {
+        feeAmount = protocolInterestFee.part(totalFee);
     }
 
     // ******************** OWNER CALL ********************
@@ -331,8 +340,16 @@ contract MarginFees is IMarginFees, Owned {
         feeTo = _feeTo;
     }
 
-    function setProtocolFee(uint24 _protocolFee) external onlyOwner {
-        protocolFee = _protocolFee;
+    function setProtocolSwapFee(uint24 _protocolSwapFee) external onlyOwner {
+        protocolSwapFee = _protocolSwapFee;
+    }
+
+    function setProtocolMarginFee(uint24 _protocolMarginFee) external onlyOwner {
+        protocolMarginFee = _protocolMarginFee;
+    }
+
+    function setProtocolInterestFee(uint24 _protocolInterestFee) external onlyOwner {
+        protocolInterestFee = _protocolInterestFee;
     }
 
     function setRateStatus(RateStatus calldata _status) external onlyOwner {

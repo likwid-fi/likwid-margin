@@ -185,7 +185,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         }
         if (feeAmount > 0) {
             Currency feeCurrency = params.zeroForOne ? key.currency0 : key.currency1;
-            feeAmount = statusManager.updateProtocolFees(feeCurrency, feeAmount);
+            feeAmount = statusManager.updateSwapProtocolFees(feeCurrency, feeAmount);
             emit Fees(key.toId(), feeCurrency, sender, uint8(FeeType.SWAP), feeAmount);
         }
     }
@@ -367,7 +367,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         }
 
         if (marginFeeAmount > 0) {
-            uint256 feeAmount = statusManager.updateProtocolFees(marginCurrency, marginFeeAmount);
+            uint256 feeAmount = statusManager.updateMarginProtocolFees(marginCurrency, marginFeeAmount);
             emit Fees(params.poolId, marginCurrency, sender, uint8(FeeType.MARGIN), feeAmount);
         }
 
@@ -504,7 +504,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         poolManager.unlock(abi.encodeCall(this.handleSwapMirror, (sender, inputCurrency, amountIn)));
         lendingPoolManager.mirrorIn(sender, recipient, poolId, outputCurrency, amountOut);
         if (feeAmount > 0) {
-            feeAmount = statusManager.updateProtocolFees(inputCurrency, feeAmount);
+            feeAmount = statusManager.updateSwapProtocolFees(inputCurrency, feeAmount);
             emit Fees(poolId, inputCurrency, sender, uint8(FeeType.SWAP), feeAmount);
         }
         statusManager.update(poolId);
