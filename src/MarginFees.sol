@@ -33,7 +33,6 @@ contract MarginFees is IMarginFees, Owned {
     uint24 public protocolSwapFee = 100000; // 10%
     uint24 public protocolMarginFee = 200000; // 20%
     uint24 public protocolInterestFee = 50000; // 5%
-    uint24 public dynamicFeeMinDegree = 100000; // 10%
 
     address public feeTo;
 
@@ -102,14 +101,14 @@ contract MarginFees is IMarginFees, Owned {
     /// @inheritdoc IMarginFees
     function dynamicFee(PoolStatus memory status, bool zeroForOne, uint256 amountIn, uint256 amountOut)
         public
-        view
+        pure
         returns (uint24 _fee)
     {
         _fee = status.key.fee;
         uint256 degree = _getPriceDegree(status, zeroForOne, amountIn, amountOut);
         if (degree > PerLibrary.ONE_MILLION) {
             _fee = uint24(PerLibrary.ONE_MILLION) - 10000;
-        } else if (degree > dynamicFeeMinDegree) {
+        } else if (degree > 100000) {
             uint256 dFee = Math.mulDiv((degree * 10) ** 3, _fee, PerLibrary.ONE_MILLION ** 3);
             if (dFee >= PerLibrary.ONE_MILLION) {
                 _fee = uint24(PerLibrary.ONE_MILLION) - 10000;
@@ -340,6 +339,10 @@ contract MarginFees is IMarginFees, Owned {
         feeTo = _feeTo;
     }
 
+    function setMarginFee(uint24 _marginFee) external onlyOwner {
+        marginFee = _marginFee;
+    }
+
     function setProtocolSwapFee(uint24 _protocolSwapFee) external onlyOwner {
         protocolSwapFee = _protocolSwapFee;
     }
@@ -354,10 +357,6 @@ contract MarginFees is IMarginFees, Owned {
 
     function setRateStatus(RateStatus calldata _status) external onlyOwner {
         rateStatus = _status;
-    }
-
-    function setDynamicFeeMinDegree(uint24 _dynamicFeeMinDegree) external onlyOwner {
-        dynamicFeeMinDegree = _dynamicFeeMinDegree;
     }
 
     /// @inheritdoc IMarginFees
