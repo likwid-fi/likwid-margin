@@ -30,9 +30,9 @@ contract MarginFees is IMarginFees, Owned {
     using PoolStatusLibrary for PoolStatus;
 
     uint24 public marginFee = 3000; // 0.3%
-    uint24 public protocolSwapFee = 100000; // 10%
-    uint24 public protocolMarginFee = 200000; // 20%
-    uint24 public protocolInterestFee = 50000; // 5%
+    uint24 public protocolSwapFee = 100000; // LP receive 90% of the SwapFee, while 10% goes to the treasury.
+    uint24 public protocolMarginFee = 200000; // LP receive 80% of the MarginFee, while 20% goes to the treasury.
+    uint24 public protocolInterestFee = 50000; // LP receive 95% of the Interest, while 5% goes to the treasury.
 
     address public feeTo;
 
