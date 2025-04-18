@@ -58,6 +58,8 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         uint256 lendingMirrorReserve1
     );
 
+    event MarginFeesChanged(address indexed oldMarginFees, address indexed newMarginFees);
+
     IPoolManager public immutable poolManager;
     IMirrorTokenManager public immutable mirrorTokenManager;
     ILendingPoolManager public immutable lendingPoolManager;
@@ -470,6 +472,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
 
     function setMarginFees(address _marginFees) external onlyOwner {
         if (_marginFees != address(0)) {
+            emit MarginFeesChanged(address(marginFees), _marginFees);
             marginFees = IMarginFees(_marginFees);
         }
     }

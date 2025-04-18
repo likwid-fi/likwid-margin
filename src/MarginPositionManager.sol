@@ -78,6 +78,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         uint256 statusReserves
     );
 
+    event CheckerChanged(address indexed oldChecker, address indexed newChecker);
+
     enum BurnType {
         CLOSE,
         LIQUIDATE
@@ -571,6 +573,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
 
     // ******************** OWNER CALL ********************
     function setMarginChecker(address _checker) external onlyOwner {
-        checker = IMarginChecker(_checker);
+        if (_checker != address(0)) {
+            emit CheckerChanged(address(checker), _checker);
+            checker = IMarginChecker(_checker);
+        }
     }
 }
