@@ -157,28 +157,32 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         uint256 lendingGrownAmount0;
         uint256 lendingGrownAmount1;
         if (_status.blockTimestampLast != blockTS) {
-            if (!interestClosed[poolId] && _status.totalMirrorReserves() > 0) {
+            if (_status.totalMirrorReserves() > 0) {
                 (uint256 interestReserve0, uint256 interestReserve1) =
                     marginLiquidity.getInterestReserves(pairPoolManager, poolId, _status);
                 (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) =
                     marginFees.getBorrowRateCumulativeLast(interestReserve0, interestReserve1, _status);
-                (InterestBalance memory interestStatus0,) =
-                    _updateInterest0(poolId, _status, interestReserve0, rate0CumulativeLast);
-                if (interestStatus0.allInterest > 0) {
-                    _status.mirrorReserve0 += interestStatus0.pairInterest.toUint112();
-                    uint256 lendingAmount0 = interestStatus0.lendingInterest + interestStatus0.protocolInterest;
-                    _status.lendingMirrorReserve0 += lendingAmount0.toUint112();
-                    lendingGrownAmount0 = interestStatus0.lendingInterest;
+
+                if (!interestClosed[poolId]) {
+                    (InterestBalance memory interestStatus0,) =
+                        _updateInterest0(poolId, _status, interestReserve0, rate0CumulativeLast);
+                    if (interestStatus0.allInterest > 0) {
+                        _status.mirrorReserve0 += interestStatus0.pairInterest.toUint112();
+                        uint256 lendingAmount0 = interestStatus0.lendingInterest + interestStatus0.protocolInterest;
+                        _status.lendingMirrorReserve0 += lendingAmount0.toUint112();
+                        lendingGrownAmount0 = interestStatus0.lendingInterest;
+                    }
+
+                    (InterestBalance memory interestStatus1,) =
+                        _updateInterest1(poolId, _status, interestReserve1, rate1CumulativeLast);
+                    if (interestStatus1.allInterest > 0) {
+                        _status.mirrorReserve1 += interestStatus1.pairInterest.toUint112();
+                        uint256 lendingAmount1 = interestStatus1.lendingInterest + interestStatus1.protocolInterest;
+                        _status.lendingMirrorReserve1 += lendingAmount1.toUint112();
+                        lendingGrownAmount1 = interestStatus1.lendingInterest;
+                    }
                 }
 
-                (InterestBalance memory interestStatus1,) =
-                    _updateInterest1(poolId, _status, interestReserve1, rate1CumulativeLast);
-                if (interestStatus1.allInterest > 0) {
-                    _status.mirrorReserve1 += interestStatus1.pairInterest.toUint112();
-                    uint256 lendingAmount1 = interestStatus1.lendingInterest + interestStatus1.protocolInterest;
-                    _status.lendingMirrorReserve1 += lendingAmount1.toUint112();
-                    lendingGrownAmount1 = interestStatus1.lendingInterest;
-                }
                 _status.rate0CumulativeLast = rate0CumulativeLast;
                 _status.rate1CumulativeLast = rate1CumulativeLast;
             }
