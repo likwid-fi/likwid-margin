@@ -32,10 +32,10 @@ contract MarginHook is BaseHook, Owned {
         pairPoolManager = _pairPoolManager;
     }
 
-    modifier updatePoolStatus(PoolKey calldata key) {
-        pairPoolManager.statusManager().setBalances(msg.sender, key);
+    modifier updatePoolStatus(PoolId poolId) {
+        pairPoolManager.statusManager().setBalances(msg.sender, poolId);
         _;
-        pairPoolManager.statusManager().updateBalances(key);
+        pairPoolManager.statusManager().update(poolId);
     }
 
     // ******************** HOOK FUNCTIONS ********************
@@ -59,7 +59,7 @@ contract MarginHook is BaseHook, Owned {
         external
         override
         onlyPoolManager
-        updatePoolStatus(key)
+        updatePoolStatus(key.toId())
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         (Currency specified, Currency unspecified, uint256 specifiedAmount, uint256 unspecifiedAmount, uint24 swapFee) =

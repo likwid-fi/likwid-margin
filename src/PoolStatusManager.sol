@@ -109,11 +109,6 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         _;
     }
 
-    modifier onlyHooks() {
-        require(msg.sender == address(hooks()), "UNAUTHORIZED");
-        _;
-    }
-
     function hooks() public view returns (IHooks hook) {
         return IPairPoolManager(pairPoolManager).hooks();
     }
@@ -491,17 +486,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         interestClosed[poolId] = _closed;
     }
 
-    // ******************** HOOK CALL ********************
-
-    function setBalances(address sender, PoolKey calldata key) external onlyHooks {
-        setBalances(sender, key.toId());
-    }
-
-    function updateBalances(PoolKey calldata key) external onlyHooks {
-        update(key.toId());
-    }
-
-    // ******************** PAIR_POOL_MANAGER CALL ********************
+    // ******************** POOL_MANAGER CALL ********************
 
     function initialize(PoolKey calldata key) external onlyPoolManager {
         PoolId id = key.toId();
