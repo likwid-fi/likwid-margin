@@ -22,7 +22,7 @@ library CurrencyExtLibrary {
     function checkAmount(Currency currency, uint256 amount) internal returns (uint256 sendValue) {
         if (currency.isAddressZero()) {
             if (msg.value < amount) revert InsufficientValue();
-            sendValue = amount < msg.value ? amount : msg.value;
+            sendValue = amount;
         }
     }
 

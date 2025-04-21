@@ -68,6 +68,11 @@ interface IMarginChecker {
         uint256 debtAmount
     ) external view returns (bool valid);
 
+    function getLiquidateRepayAmount(PoolStatus memory _status, bool marginForOne, uint256 assetsAmount)
+        external
+        view
+        returns (uint256 repayAmount);
+
     /// @notice Get the maximum marginAmount for the given pool, leverage
     /// @param poolManager The manager of the pool
     /// @param poolId The ID of the pool

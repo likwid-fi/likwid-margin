@@ -30,6 +30,7 @@ contract MarginChecker is IMarginChecker, Owned {
     uint24 public liquidationMarginLevel = 1100000; // 110%
     uint24 public minMarginLevel = 1170000; // 117%
     uint24 public minBorrowLevel = 1400000; // 140%
+    uint24 public liquidationRatio = 950000; // 95%
     uint24 callerProfit = 10 ** 4;
     uint24 protocolProfit = 0;
     uint24[] leverageThousandths = [150, 120, 90, 50, 10];
@@ -51,6 +52,10 @@ contract MarginChecker is IMarginChecker, Owned {
 
     function setMinMarginLevel(uint24 _minMarginLevel) external onlyOwner {
         minMarginLevel = _minMarginLevel;
+    }
+
+    function setLiquidationRatio(uint24 _liquidationRatio) external onlyOwner {
+        liquidationRatio = _liquidationRatio;
     }
 
     function setMinBorrowLevel(uint24 _minBorrowLevel) external onlyOwner {
@@ -163,6 +168,24 @@ contract MarginChecker is IMarginChecker, Owned {
             repayAmount = repayAmount.mulMillionDiv(minBorrowLevel);
         }
         valid = debtAmount <= repayAmount;
+    }
+
+    function getLiquidateRepayAmount(PoolStatus memory _status, bool marginForOne, uint256 assetsAmount)
+        public
+        view
+        returns (uint256 repayAmount)
+    {
+        (uint256 reserveBorrow, uint256 reserveMargin) = _getReserves(_status, marginForOne);
+        repayAmount = Math.mulDiv(reserveBorrow, assetsAmount, reserveMargin);
+        repayAmount = repayAmount.mulDivMillion(liquidationRatio);
+    }
+
+    function getLiquidateRepayAmount(address manager, uint256 positionId) external view returns (uint256 repayAmount) {
+        IMarginPositionManager positionManager = IMarginPositionManager(manager);
+        MarginPosition memory _position = positionManager.getPosition(positionId);
+        IPairPoolManager pairPoolManager = IPairPoolManager(IStatusBase(manager).pairPoolManager());
+        PoolStatus memory _status = pairPoolManager.statusManager().getStatus(_position.poolId);
+        return getLiquidateRepayAmount(_status, _position.marginForOne, _position.marginAmount + _position.marginTotal);
     }
 
     function updatePosition(IMarginPositionManager positionManager, MarginPosition memory _position)

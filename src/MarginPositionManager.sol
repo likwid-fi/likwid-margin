@@ -226,7 +226,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         } else {
             require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
             MarginPosition storage _position = _positions[positionId];
-            _updatePosition(_position, _status);
+            _updateBorrow(_position, _status);
             _position.marginAmount += params.marginAmount.toUint112();
             if (paramsVo.marginTotal > 0) {
                 _position.marginTotal += paramsVo.marginTotal.toUint112();
@@ -260,8 +260,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
         MarginPosition storage _position = _positions[positionId];
         PoolStatus memory _status = pairPoolManager.setBalances(msg.sender, _position.poolId);
+        _updateBorrow(_position, _status);
         (bool liquidated,) = checker.checkLiquidate(pairPoolManager, _status, _position);
-        _updatePosition(_position, _status);
         if (liquidated) revert PositionLiquidated();
         (Currency borrowCurrency, Currency marginCurrency) = _position.marginForOne
             ? (_status.key.currency0, _status.key.currency1)
@@ -334,7 +334,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         MarginPosition storage _position = _positions[positionId];
         require(_position.marginTotal > 0, "BORROW_DISABLE_CLOSE");
         PoolStatus memory _status = pairPoolManager.setBalances(msg.sender, _position.poolId);
-        _updatePosition(_position, _status);
+        _updateBorrow(_position, _status);
         Currency marginCurrency = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;
         ReleaseParams memory params = ReleaseParams({
             poolId: _position.poolId,
@@ -414,6 +414,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         if (!liquidated) {
             return (profit, repayAmount);
         }
+        _position = _updateMargin(_position, _status);
         Currency marginCurrency = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;
         uint256 statusReserves = _getReservesX224(_status);
         uint256 oracleReserves = _getTruncatedReservesX224(_status);
@@ -427,16 +428,12 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             rawBorrowAmount: _position.rawBorrowAmount,
             deadline: block.timestamp + 1000
         });
-        uint256 marginTokenId = marginCurrency.toTokenId(_position.poolId);
-        uint256 accruesRatioX112 = lendingPoolManager.accruesRatioX112Of(marginTokenId);
-        uint256 realMarginAmount = uint256(_position.marginAmount).mulRatioX112(accruesRatioX112);
-        uint256 realMarginTotal = uint256(_position.marginTotal).mulRatioX112(accruesRatioX112);
 
         (uint24 callerProfitMillion, uint24 protocolProfitMillion) = checker.getProfitMillions();
 
         address feeTo;
         uint256 protocolProfit;
-        uint256 assetsAmount = realMarginAmount + realMarginTotal;
+        uint256 assetsAmount = _position.marginAmount + _position.marginTotal;
         if (callerProfitMillion > 0) {
             profit = assetsAmount.mulDivMillion(callerProfitMillion);
         }
@@ -446,49 +443,55 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
                 protocolProfit = assetsAmount.mulDivMillion(protocolProfitMillion);
             }
         }
-        if (profit > 0) {
-            lendingPoolManager.transfer(msg.sender, marginTokenId, profit);
-        }
-        if (protocolProfit > 0) {
-            lendingPoolManager.transfer(feeTo, marginTokenId, protocolProfit);
+        if (profit > 0 || protocolProfit > 0) {
+            uint256 marginTokenId = marginCurrency.toTokenId(_position.poolId);
+            if (profit > 0) {
+                lendingPoolManager.transfer(msg.sender, marginTokenId, profit);
+            }
+            if (protocolProfit > 0) {
+                lendingPoolManager.transfer(feeTo, marginTokenId, protocolProfit);
+            }
         }
         params.releaseAmount = assetsAmount - profit - protocolProfit;
         repayAmount = pairPoolManager.release(msg.sender, _status, params);
-        _burnPosition(positionId, BurnType.LIQUIDATE);
 
         emit Liquidate(
             _position.poolId,
             msg.sender,
             positionId,
-            realMarginAmount,
-            realMarginTotal,
+            _position.marginAmount,
+            _position.marginTotal,
             borrowAmount,
             oracleReserves,
             statusReserves
         );
+        _burnPosition(positionId, BurnType.LIQUIDATE);
     }
 
-    function liquidateCall(uint256 positionId) external payable returns (uint256 profit) {
+    function liquidateCall(uint256 positionId) external payable returns (uint256 profit, uint256 repayAmount) {
         require(checker.checkValidity(msg.sender, positionId), "AUTH_ERROR");
         MarginPosition memory _position = _positions[positionId];
         // nonReentrant with pairPoolManager.release
         PoolStatus memory _status = pairPoolManager.setBalances(msg.sender, _position.poolId);
         (bool liquidated, uint256 borrowAmount) = checker.checkLiquidate(pairPoolManager, _status, _position);
         if (!liquidated) {
-            return profit;
+            return (profit, repayAmount);
         }
+        _position = _updateMargin(_position, _status);
+        profit = _position.marginAmount + _position.marginTotal;
         (Currency borrowCurrency, Currency marginCurrency) = _position.marginForOne
             ? (_status.key.currency0, _status.key.currency1)
             : (_status.key.currency1, _status.key.currency0);
         uint256 statusReserves = _getReservesX224(_status);
         uint256 oracleReserves = _getTruncatedReservesX224(_status);
-        uint256 sendValue = borrowCurrency.checkAmount(borrowAmount);
+        repayAmount = checker.getLiquidateRepayAmount(_status, _position.marginForOne, profit);
+        uint256 sendValue = borrowCurrency.checkAmount(repayAmount);
         ReleaseParams memory params = ReleaseParams({
             poolId: _position.poolId,
             marginForOne: _position.marginForOne,
             payer: msg.sender,
             debtAmount: borrowAmount,
-            repayAmount: borrowAmount,
+            repayAmount: repayAmount,
             releaseAmount: 0,
             rawBorrowAmount: _position.rawBorrowAmount,
             deadline: block.timestamp + 1000
@@ -500,15 +503,11 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         }
         _burnPosition(positionId, BurnType.LIQUIDATE);
 
-        uint256 marginTokenId = marginCurrency.toTokenId(_position.poolId);
-        uint256 accruesRatioX112 = lendingPoolManager.accruesRatioX112Of(marginTokenId);
-        uint256 realMarginAmount = uint256(_position.marginAmount).mulRatioX112(accruesRatioX112);
-        uint256 realMarginTotal = uint256(_position.marginTotal).mulRatioX112(accruesRatioX112);
-        profit = realMarginAmount + realMarginTotal;
         if (_checkAmount(_status, marginCurrency, profit)) {
             // withdraw original
             lendingPoolManager.withdraw(msg.sender, params.poolId, marginCurrency, profit);
         } else {
+            uint256 marginTokenId = marginCurrency.toTokenId(_position.poolId);
             lendingPoolManager.transfer(msg.sender, marginTokenId, profit);
         }
 
@@ -516,8 +515,8 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             _position.poolId,
             msg.sender,
             positionId,
-            realMarginAmount,
-            realMarginTotal,
+            _position.marginAmount,
+            _position.marginTotal,
             borrowAmount,
             oracleReserves,
             statusReserves
@@ -529,7 +528,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
         MarginPosition storage _position = _positions[positionId];
         PoolStatus memory _status = pairPoolManager.getStatus(_position.poolId);
-        _updatePosition(_position, _status);
+        _updateBorrow(_position, _status);
         Currency marginCurrency = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;
         uint256 amount = changeAmount < 0 ? uint256(-changeAmount) : uint256(changeAmount);
         if (changeAmount > 0) {
@@ -558,12 +557,25 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
 
     // ******************** INTERNAL CALL ********************
 
-    function _updatePosition(MarginPosition storage _position, PoolStatus memory _status)
+    function _updateBorrow(MarginPosition storage _position, PoolStatus memory _status)
         internal
         returns (uint256 rateCumulativeLast)
     {
         rateCumulativeLast = _position.marginForOne ? _status.rate0CumulativeLast : _status.rate1CumulativeLast;
         _position.update(rateCumulativeLast);
+    }
+
+    function _updateMargin(MarginPosition memory _position, PoolStatus memory _status)
+        internal
+        view
+        returns (MarginPosition memory)
+    {
+        Currency marginCurrency = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;
+        uint256 marginTokenId = marginCurrency.toTokenId(_position.poolId);
+        uint256 accruesRatioX112 = lendingPoolManager.accruesRatioX112Of(marginTokenId);
+        _position.marginAmount = uint256(_position.marginAmount).mulRatioX112(accruesRatioX112).toUint112();
+        _position.marginTotal = uint256(_position.marginTotal).mulRatioX112(accruesRatioX112).toUint112();
+        return _position;
     }
 
     function transferNative(address to, uint256 amount) internal {
