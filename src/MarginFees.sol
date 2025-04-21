@@ -225,8 +225,7 @@ contract MarginFees is IMarginFees, Owned {
         uint256 minMarginLevel
     ) external view returns (uint256 borrowMaxAmount) {
         {
-            (borrowMaxAmount,,) =
-                IPairPoolManager(msg.sender).statusManager().getAmountOut(status, !marginForOne, marginAmount);
+            borrowMaxAmount = status.getAmountOut(!marginForOne, marginAmount);
             uint256 flowMaxAmount = (marginForOne ? status.realReserve0 : status.realReserve1) * 20 / 100;
             borrowMaxAmount = borrowMaxAmount.mulMillionDiv(minMarginLevel);
             borrowMaxAmount = Math.min(borrowMaxAmount, flowMaxAmount);
