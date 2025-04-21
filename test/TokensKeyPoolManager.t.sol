@@ -82,7 +82,6 @@ contract TokensKeyPoolManagerTest is DeployHelper {
         uint256 positionId;
         uint256 borrowAmount;
         uint256 payValue = 0.001 ether;
-        address user0 = address(this);
         MarginParams memory params = MarginParams({
             poolId: tokensKey.toId(),
             marginForOne: false,
@@ -133,7 +132,6 @@ contract TokensKeyPoolManagerTest is DeployHelper {
         uint256 positionId;
         uint256 borrowAmount;
         uint256 payValue = 0.001 ether;
-        address user0 = address(this);
         MarginParams memory params = MarginParams({
             poolId: usdtKey.toId(),
             marginForOne: false,

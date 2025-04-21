@@ -38,6 +38,11 @@ contract MarginFees is IMarginFees, Owned {
 
     RateStatus public rateStatus;
 
+    modifier onlyFeeTo() {
+        require(msg.sender == feeTo, "UNAUTHORIZED");
+        _;
+    }
+
     constructor(address initialOwner) Owned(initialOwner) {
         rateStatus = RateStatus({
             rateBase: 50000,
@@ -359,10 +364,12 @@ contract MarginFees is IMarginFees, Owned {
         rateStatus = _status;
     }
 
+    // ******************** FEE CALL ********************
+
     /// @inheritdoc IMarginFees
     function collectProtocolFees(address poolManager, address recipient, Currency currency, uint256 amount)
         external
-        onlyOwner
+        onlyFeeTo
         returns (uint256)
     {
         return IPairPoolManager(poolManager).collectProtocolFees(recipient, currency, amount);
