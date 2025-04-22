@@ -89,7 +89,6 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     ILendingPoolManager public immutable lendingPoolManager;
     IMarginLiquidity public immutable marginLiquidity;
     IHooks public hooks;
-    IMarginFees public marginFees;
     IPoolStatusManager public statusManager;
 
     mapping(address => bool) public positionManagers;
@@ -99,15 +98,17 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         IPoolManager _manager,
         IMirrorTokenManager _mirrorTokenManager,
         ILendingPoolManager _lendingPoolManager,
-        IMarginLiquidity _marginLiquidity,
-        IMarginFees _marginFees
+        IMarginLiquidity _marginLiquidity
     ) BasePoolManager(initialOwner, _manager) {
         mirrorTokenManager = _mirrorTokenManager;
         lendingPoolManager = _lendingPoolManager;
         marginLiquidity = _marginLiquidity;
-        marginFees = _marginFees;
         poolManager.setOperator(address(lendingPoolManager), true);
         mirrorTokenManager.setOperator(address(lendingPoolManager), true);
+    }
+
+    function marginFees() public view returns (IMarginFees) {
+        return statusManager.marginFees();
     }
 
     modifier onlyPosition() {
@@ -116,7 +117,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     }
 
     modifier onlyFees() {
-        require(msg.sender == address(marginFees), "UNAUTHORIZED");
+        require(msg.sender == address(marginFees()), "UNAUTHORIZED");
         _;
     }
 
@@ -303,10 +304,6 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         delete positionManagers[_marginPositionManager];
     }
 
-    function setMarginFees(address _marginFees) external onlyOwner {
-        marginFees = IMarginFees(_marginFees);
-    }
-
     // ******************** MARGIN FUNCTIONS ********************
 
     function setBalances(address sender, PoolId poolId) external onlyPosition returns (PoolStatus memory _status) {
@@ -340,23 +337,39 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         // transfer marginAmount to lendingPoolManager
         marginCurrency.settle(poolManager, sender, params.marginAmount, false);
         marginCurrency.take(poolManager, address(this), params.marginAmount, true);
-        marginAmount =
-            lendingPoolManager.realIn(sender, _positionManager, params.poolId, marginCurrency, params.marginAmount);
+
         if (params.leverage > 0) {
-            (marginWithoutFee, marginFeeAmount, borrowAmount) = marginFees.getMarginBorrow(status, params);
+            (uint256 marginReserve0, uint256 marginReserve1, uint256 incrementMaxMirror0, uint256 incrementMaxMirror1) =
+                marginLiquidity.getMarginReserves(address(this), params.poolId, status);
+            uint256 marginReserves = params.marginForOne ? marginReserve1 : marginReserve0;
+            uint256 incrementMaxMirror = params.marginForOne ? incrementMaxMirror0 : incrementMaxMirror1;
+
+            uint256 marginTotal = params.marginAmount * params.leverage;
+            require(marginReserves >= marginTotal, "MARGIN_NOT_ENOUGH");
+            (borrowAmount,,) = statusManager.getAmountIn(status, params.marginForOne, marginTotal);
+            require(incrementMaxMirror >= borrowAmount, "MIRROR_TOO_MUCH");
+
+            uint24 _marginFeeRate = status.marginFee == 0 ? statusManager.marginFees().marginFee() : status.marginFee;
+            (marginWithoutFee, marginFeeAmount) = _marginFeeRate.deduct(marginTotal);
             // transfer marginTotal to lendingPoolManager
             marginWithoutFee =
                 lendingPoolManager.realIn(sender, _positionManager, params.poolId, marginCurrency, marginWithoutFee);
         } else {
             {
-                uint256 borrowMaxAmount = marginFees.getBorrowMaxAmount(
-                    status, params.marginAmount, params.marginForOne, paramsVo.minMarginLevel
-                );
+                uint256 borrowMaxAmount = status.getAmountOut(!params.marginForOne, params.marginAmount);
+                uint256 flowMaxAmount = (params.marginForOne ? status.realReserve0 : status.realReserve1) * 20 / 100;
+                borrowMaxAmount = borrowMaxAmount.mulMillionDiv(paramsVo.minMarginLevel);
+                borrowMaxAmount = Math.min(borrowMaxAmount, flowMaxAmount);
+
                 if (params.borrowAmount > 0) {
                     borrowAmount = Math.min(borrowMaxAmount, params.borrowAmount);
                 } else {
                     borrowAmount = borrowMaxAmount;
                 }
+                (uint256 flowReserve0, uint256 flowReserve1) =
+                    marginLiquidity.getFlowReserves(address(this), params.poolId, status);
+                uint256 borrowReserves = (params.marginForOne ? flowReserve0 : flowReserve1);
+                require(borrowReserves >= borrowAmount, "MIRROR_TOO_MUCH");
             }
             if (borrowAmount > 0) {
                 // transfer borrowAmount to user
@@ -370,7 +383,8 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             uint256 feeAmount = statusManager.updateMarginProtocolFees(marginCurrency, marginFeeAmount);
             emit Fees(params.poolId, marginCurrency, sender, uint8(FeeType.MARGIN), feeAmount);
         }
-
+        marginAmount =
+            lendingPoolManager.realIn(sender, _positionManager, params.poolId, marginCurrency, params.marginAmount);
         // mint mirror token
         mirrorTokenManager.mint(borrowCurrency.toTokenId(params.poolId), borrowAmount);
         (uint256 mirrorBalance0, uint256 mirrorBalance1) = borrowCurrency == status.key.currency0
@@ -398,8 +412,31 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         uint256 burnAmount = pairAmount + lendingAmount;
         int256 diff = repayAmount.toInt256() - params.debtAmount.toInt256();
         if (diff != 0) {
-            (int256 interest0, int256 interest1, int256 lendingInterest) =
-                marginFees.computeDiff(address(this), status, params.marginForOne, diff);
+            int256 interest0;
+            int256 interest1;
+            int256 lendingInterest;
+            uint256 diffUint = diff > 0 ? uint256(diff) : uint256(-diff);
+            (uint256 interestReserve0, uint256 interestReserve1) =
+                marginLiquidity.getInterestReserves(address(this), params.poolId, status);
+            uint256 pairReserve = params.marginForOne ? interestReserve0 : interestReserve1;
+            uint256 lendingReserve = params.marginForOne ? status.lendingReserve0() : status.lendingReserve1();
+            uint256 lendingDiff = Math.mulDiv(diffUint, lendingReserve, pairReserve + lendingReserve);
+            uint256 pairDiff = diffUint - lendingDiff;
+            if (diff > 0) {
+                if (params.marginForOne) {
+                    interest0 = pairDiff.toInt256();
+                } else {
+                    interest1 = pairDiff.toInt256();
+                }
+                lendingInterest = lendingDiff.toInt256();
+            } else {
+                if (params.marginForOne) {
+                    interest0 = -(pairDiff.toInt256());
+                } else {
+                    interest1 = -(pairDiff.toInt256());
+                }
+                lendingInterest = -(lendingDiff.toInt256());
+            }
             if (interest0 != 0 || interest1 != 0) {
                 marginLiquidity.changeLiquidity(
                     params.poolId, status.reserve0(), status.reserve1(), interest0, interest1

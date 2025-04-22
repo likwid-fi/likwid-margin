@@ -7,12 +7,16 @@ import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 
 import {IStatusBase} from "./IStatusBase.sol";
+import {IMarginFees} from "./IMarginFees.sol";
 import {BalanceStatus} from "../types/BalanceStatus.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
 import {GlobalStatus} from "../types/GlobalStatus.sol";
 
 interface IPoolStatusManager is IStatusBase {
     function hooks() external view returns (IHooks hook);
+
+    /// @notice Get current IMarginFees
+    function marginFees() external view returns (IMarginFees hook);
 
     function initialize(PoolKey calldata key) external;
 

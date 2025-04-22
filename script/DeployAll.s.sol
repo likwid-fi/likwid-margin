@@ -64,9 +64,8 @@ contract DeployAllScript is Script {
         lendingPoolManager = new LendingPoolManager(owner, IPoolManager(manager), mirrorTokenManager);
         console2.log("lendingPoolManager:", address(lendingPoolManager));
 
-        pairPoolManager = new PairPoolManager(
-            owner, IPoolManager(manager), mirrorTokenManager, lendingPoolManager, marginLiquidity, marginFees
-        );
+        pairPoolManager =
+            new PairPoolManager(owner, IPoolManager(manager), mirrorTokenManager, lendingPoolManager, marginLiquidity);
         console2.log("pairPoolManager:", address(pairPoolManager));
 
         marginPositionManager = new MarginPositionManager(owner, pairPoolManager, marginChecker);

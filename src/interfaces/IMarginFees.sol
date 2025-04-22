@@ -14,6 +14,8 @@ interface IMarginFees {
     /// @return feeTo The address of the fee receiver
     function feeTo() external view returns (address);
 
+    function marginFee() external view returns (uint24);
+
     /// @notice Get the dynamic swap fee from the status of pool
     /// @param status The status of the pool
     /// @param zeroForOne if true amountIn is currency0,else amountIn is currency1
@@ -37,23 +39,6 @@ interface IMarginFees {
         external
         view
         returns (uint24 _fee, uint24 _marginFee);
-
-    function computeDiff(address pairPoolManager, PoolStatus memory status, bool marginForOne, int256 diff)
-        external
-        view
-        returns (int256 interest0, int256 interest1, int256 lendingInterest);
-
-    function getMarginBorrow(PoolStatus memory status, MarginParams memory params)
-        external
-        view
-        returns (uint256 marginWithoutFee, uint256 marginFeeAmount, uint256 borrowAmount);
-
-    function getBorrowMaxAmount(
-        PoolStatus memory status,
-        uint256 marginAmount,
-        bool marginForOne,
-        uint256 minMarginLevel
-    ) external view returns (uint256 borrowMaxAmount);
 
     /// @notice Get the borrow rate from the reserves
     /// @param realReserve The real reserve of the pool

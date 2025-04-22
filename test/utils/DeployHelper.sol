@@ -88,9 +88,8 @@ contract DeployHelper is Test {
                 | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
         );
 
-        pairPoolManager = new PairPoolManager(
-            address(this), manager, mirrorTokenManager, lendingPoolManager, marginLiquidity, marginFees
-        );
+        pairPoolManager =
+            new PairPoolManager(address(this), manager, mirrorTokenManager, lendingPoolManager, marginLiquidity);
 
         poolStatusManager = new PoolStatusManager(
             address(this), manager, mirrorTokenManager, lendingPoolManager, marginLiquidity, pairPoolManager, marginFees
