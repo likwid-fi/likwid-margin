@@ -85,6 +85,16 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         uint256 rawBorrowAmount
     );
 
+    event Swap(
+        PoolId indexed poolId,
+        address indexed sender,
+        uint256 amount0,
+        uint256 amount1,
+        uint24 fee,
+        bool zeroForOne,
+        uint256 feeAmount
+    );
+
     IMirrorTokenManager public immutable mirrorTokenManager;
     ILendingPoolManager public immutable lendingPoolManager;
     IMarginLiquidity public immutable marginLiquidity;
@@ -168,7 +178,8 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             uint24 swapFee
         )
     {
-        PoolStatus memory _status = statusManager.getStatus(key.toId());
+        PoolId poolId = key.toId();
+        PoolStatus memory _status = statusManager.getStatus(poolId);
         bool exactInput = params.amountSpecified < 0;
         (specified, unspecified) =
             (params.zeroForOne == exactInput) ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
@@ -187,8 +198,12 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         if (feeAmount > 0) {
             Currency feeCurrency = params.zeroForOne ? key.currency0 : key.currency1;
             feeAmount = statusManager.updateSwapProtocolFees(feeCurrency, feeAmount);
-            emit Fees(key.toId(), feeCurrency, sender, uint8(FeeType.SWAP), feeAmount);
+            emit Fees(poolId, feeCurrency, sender, uint8(FeeType.SWAP), feeAmount);
         }
+        (uint256 amount0, uint256 amount1) = (params.zeroForOne == exactInput)
+            ? (specifiedAmount, unspecifiedAmount)
+            : (unspecifiedAmount, specifiedAmount);
+        emit Swap(poolId, sender, amount0, amount1, swapFee, params.zeroForOne, feeAmount);
     }
 
     // ******************** SELF CALL ********************
