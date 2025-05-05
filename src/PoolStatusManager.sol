@@ -366,101 +366,87 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
 
     function _updateInterests(address sender, PoolStatus storage status) internal {
         PoolKey memory key = status.key;
-        uint32 blockTS = uint32(block.timestamp % 2 ** 32);
-        if (status.blockTimestampLast != blockTS) {
-            PoolId poolId = key.toId();
-            if (status.totalMirrorReserves() > 0) {
-                (uint256 interestReserve0, uint256 interestReserve1) =
-                    marginLiquidity.getInterestReserves(pairPoolManager, poolId, status);
-                (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) =
-                    marginFees.getBorrowRateCumulativeLast(interestReserve0, interestReserve1, status);
-                (InterestBalance memory interestStatus0, uint256 interest0X112) =
-                    _updateInterest0(poolId, status, interestReserve0, rate0CumulativeLast);
-                (InterestBalance memory interestStatus1, uint256 interest1X112) =
-                    _updateInterest1(poolId, status, interestReserve1, rate1CumulativeLast);
-                {
-                    if (interest0X112 > 0) {
-                        interestX112Store0[poolId] += interest0X112;
+        PoolId poolId = key.toId();
+        if (status.totalMirrorReserves() > 0) {
+            (uint256 interestReserve0, uint256 interestReserve1) =
+                marginLiquidity.getInterestReserves(pairPoolManager, poolId, status);
+            (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) =
+                marginFees.getBorrowRateCumulativeLast(interestReserve0, interestReserve1, status);
+            (InterestBalance memory interestStatus0, uint256 interest0X112) =
+                _updateInterest0(poolId, status, interestReserve0, rate0CumulativeLast);
+            (InterestBalance memory interestStatus1, uint256 interest1X112) =
+                _updateInterest1(poolId, status, interestReserve1, rate1CumulativeLast);
+            {
+                if (interest0X112 > 0) {
+                    interestX112Store0[poolId] += interest0X112;
+                }
+                if (interest1X112 > 0) {
+                    interestX112Store1[poolId] += interest1X112;
+                }
+                if (interestStatus0.allInterest > 0) {
+                    interestX112Store0[poolId] = 0;
+                    uint256 cPoolId0 = status.key.currency0.toTokenId(poolId);
+                    if (interestStatus0.pairInterest > 0) {
+                        status.mirrorReserve0 += interestStatus0.pairInterest.toUint112();
+                        mirrorTokenManager.mintInStatus(pairPoolManager, cPoolId0, interestStatus0.pairInterest);
+                        emit Fees(
+                            poolId, key.currency0, address(this), uint8(FeeType.INTERESTS), interestStatus0.pairInterest
+                        );
                     }
-                    if (interest1X112 > 0) {
-                        interestX112Store1[poolId] += interest1X112;
+                    if (interestStatus0.lendingInterest > 0) {
+                        status.lendingMirrorReserve0 += interestStatus0.lendingInterest.toUint112();
+                        lendingPoolManager.updateInterests(cPoolId0, interestStatus0.lendingInterest.toInt256());
+                        mirrorTokenManager.mintInStatus(
+                            address(lendingPoolManager), cPoolId0, interestStatus0.lendingInterest
+                        );
                     }
-                    if (interestStatus0.allInterest > 0) {
-                        interestX112Store0[poolId] = 0;
-                        uint256 cPoolId0 = status.key.currency0.toTokenId(poolId);
-                        if (interestStatus0.pairInterest > 0) {
-                            status.mirrorReserve0 += interestStatus0.pairInterest.toUint112();
-                            mirrorTokenManager.mintInStatus(pairPoolManager, cPoolId0, interestStatus0.pairInterest);
-                            emit Fees(
-                                poolId,
-                                key.currency0,
-                                address(this),
-                                uint8(FeeType.INTERESTS),
-                                interestStatus0.pairInterest
-                            );
-                        }
-                        if (interestStatus0.lendingInterest > 0) {
-                            status.lendingMirrorReserve0 += interestStatus0.lendingInterest.toUint112();
-                            lendingPoolManager.updateInterests(cPoolId0, interestStatus0.lendingInterest.toInt256());
-                            mirrorTokenManager.mintInStatus(
-                                address(lendingPoolManager), cPoolId0, interestStatus0.lendingInterest
-                            );
-                        }
-                        if (interestStatus0.protocolInterest > 0) {
-                            status.lendingMirrorReserve0 += interestStatus0.protocolInterest.toUint112();
-                            lendingPoolManager.updateProtocolInterests(
-                                sender, poolId, key.currency0, interestStatus0.protocolInterest
-                            );
-                        }
+                    if (interestStatus0.protocolInterest > 0) {
+                        status.lendingMirrorReserve0 += interestStatus0.protocolInterest.toUint112();
+                        lendingPoolManager.updateProtocolInterests(
+                            sender, poolId, key.currency0, interestStatus0.protocolInterest
+                        );
                     }
+                }
 
-                    if (interestStatus1.allInterest > 0) {
-                        interestX112Store1[poolId] = 0;
-                        uint256 cPoolId1 = status.key.currency1.toTokenId(poolId);
-                        if (interestStatus1.pairInterest > 0) {
-                            status.mirrorReserve1 += interestStatus1.pairInterest.toUint112();
-                            mirrorTokenManager.mintInStatus(pairPoolManager, cPoolId1, interestStatus1.pairInterest);
-                            emit Fees(
-                                poolId,
-                                key.currency1,
-                                address(this),
-                                uint8(FeeType.INTERESTS),
-                                interestStatus1.pairInterest
-                            );
-                        }
-                        if (interestStatus1.lendingInterest > 0) {
-                            status.lendingMirrorReserve1 += interestStatus1.lendingInterest.toUint112();
-                            lendingPoolManager.updateInterests(cPoolId1, interestStatus1.lendingInterest.toInt256());
-                            mirrorTokenManager.mintInStatus(
-                                address(lendingPoolManager), cPoolId1, interestStatus1.lendingInterest
-                            );
-                        }
-                        if (interestStatus1.protocolInterest > 0) {
-                            status.lendingMirrorReserve1 += interestStatus1.protocolInterest.toUint112();
-                            lendingPoolManager.updateProtocolInterests(
-                                sender, poolId, key.currency1, interestStatus1.protocolInterest
-                            );
-                        }
+                if (interestStatus1.allInterest > 0) {
+                    interestX112Store1[poolId] = 0;
+                    uint256 cPoolId1 = status.key.currency1.toTokenId(poolId);
+                    if (interestStatus1.pairInterest > 0) {
+                        status.mirrorReserve1 += interestStatus1.pairInterest.toUint112();
+                        mirrorTokenManager.mintInStatus(pairPoolManager, cPoolId1, interestStatus1.pairInterest);
+                        emit Fees(
+                            poolId, key.currency1, address(this), uint8(FeeType.INTERESTS), interestStatus1.pairInterest
+                        );
+                    }
+                    if (interestStatus1.lendingInterest > 0) {
+                        status.lendingMirrorReserve1 += interestStatus1.lendingInterest.toUint112();
+                        lendingPoolManager.updateInterests(cPoolId1, interestStatus1.lendingInterest.toInt256());
+                        mirrorTokenManager.mintInStatus(
+                            address(lendingPoolManager), cPoolId1, interestStatus1.lendingInterest
+                        );
+                    }
+                    if (interestStatus1.protocolInterest > 0) {
+                        status.lendingMirrorReserve1 += interestStatus1.protocolInterest.toUint112();
+                        lendingPoolManager.updateProtocolInterests(
+                            sender, poolId, key.currency1, interestStatus1.protocolInterest
+                        );
                     }
                 }
-                if (interestStatus0.pairInterest + interestStatus1.pairInterest > 0) {
-                    marginLiquidity.addInterests(
-                        poolId,
-                        status.reserve0() - interestStatus0.pairInterest,
-                        status.reserve1() - interestStatus1.pairInterest,
-                        interestStatus0.pairInterest,
-                        interestStatus1.pairInterest
-                    );
-                }
-                status.rate0CumulativeLast = rate0CumulativeLast;
-                status.rate1CumulativeLast = rate1CumulativeLast;
             }
-
-            (status.truncatedReserve0, status.truncatedReserve1) = _transform(status);
-            status.blockTimestampLast = blockTS;
-
-            lendingPoolManager.sync(poolId, status);
+            if (interestStatus0.pairInterest + interestStatus1.pairInterest > 0) {
+                marginLiquidity.addInterests(
+                    poolId,
+                    status.reserve0() - interestStatus0.pairInterest,
+                    status.reserve1() - interestStatus1.pairInterest,
+                    interestStatus0.pairInterest,
+                    interestStatus1.pairInterest
+                );
+            }
+            status.rate0CumulativeLast = rate0CumulativeLast;
+            status.rate1CumulativeLast = rate1CumulativeLast;
         }
+
+        lendingPoolManager.sync(poolId, status);
     }
 
     // ******************** OWNER CALL ********************
@@ -502,9 +488,16 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     function setBalances(address sender, PoolId poolId) public onlyPoolManager returns (PoolStatus memory) {
         _callSet();
         PoolStatus storage status = statusStore[poolId];
-        if (!interestClosed[poolId]) {
-            _updateInterests(sender, status);
+        uint32 blockTS = uint32(block.timestamp % 2 ** 32);
+        if (status.blockTimestampLast != blockTS) {
+            if (!interestClosed[poolId]) {
+                _updateInterests(sender, status);
+            }
+
+            (status.truncatedReserve0, status.truncatedReserve1) = _transform(status);
+            status.blockTimestampLast = blockTS;
         }
+
         BalanceStatus memory balanceStatus = _getRealBalances(status.key);
         BALANCE_0_SLOT.asUint256().tstore(balanceStatus.balance0);
         BALANCE_1_SLOT.asUint256().tstore(balanceStatus.balance1);
