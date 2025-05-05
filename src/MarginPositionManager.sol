@@ -299,7 +299,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             : (_status.truncatedReserve1, _status.truncatedReserve0);
         int256 pnlAmount;
         if (reserveBorrow > 0) {
-            pnlAmount = int256(realReleaseTotal) - int256(Math.mulDiv(reserveMargin, reserveBorrow, params.repayAmount));
+            pnlAmount = int256(realReleaseTotal) - int256(Math.mulDiv(reserveMargin, params.repayAmount, reserveBorrow));
         }
 
         emit RepayClose(
