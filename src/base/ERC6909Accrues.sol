@@ -21,6 +21,7 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
     /*//////////////////////////////////////////////////////////////
                              EXTEND STORAGE
     //////////////////////////////////////////////////////////////*/
+    error ErrorReceiver();
 
     mapping(uint256 => uint256) public accruesRatioX112Of;
     mapping(uint256 => int256) public deviationOf;
@@ -40,6 +41,7 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
     }
 
     function transfer(address receiver, uint256 id, uint256 amount) public virtual returns (bool) {
+        if (receiver == address(this)) revert ErrorReceiver();
         amount = amount.divRatioX112(accruesRatioX112Of[id]);
 
         balanceOriginal[msg.sender][id] -= amount;
@@ -52,6 +54,7 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
     }
 
     function transferFrom(address sender, address receiver, uint256 id, uint256 amount) public virtual returns (bool) {
+        if (receiver == address(this)) revert ErrorReceiver();
         amount = amount.divRatioX112(accruesRatioX112Of[id]);
 
         if (msg.sender != sender && !isOperator[sender][msg.sender]) {
