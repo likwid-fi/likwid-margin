@@ -13,6 +13,7 @@ import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition, MarginPositionVo} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
 import {TimeLibrary} from "../src/libraries/TimeLibrary.sol";
+import {PerLibrary} from "../src/libraries/PerLibrary.sol";
 import {LiquidityLevel} from "../src/libraries/LiquidityLevel.sol";
 import {CurrencyPoolLibrary} from "../src/libraries/CurrencyPoolLibrary.sol";
 // Solmate
@@ -40,6 +41,7 @@ contract MarginPositionManagerTest is DeployHelper {
     using LiquidityLevel for uint8;
     using CurrencyPoolLibrary for Currency;
     using PoolStatusLibrary for PoolStatus;
+    using PerLibrary for uint256;
 
     function setUp() public {
         deployHookAndRouter();
@@ -572,7 +574,7 @@ contract MarginPositionManagerTest is DeployHelper {
             position.borrowAmount,
             position.rateCumulativeLast
         );
-        (payValue, borrowAmount) = marginChecker.getMarginMax(address(pairPoolManager), nativeKey.toId(), false, 3);
+        (payValue, borrowAmount) = getMarginMax(nativeKey.toId(), false, 3);
         console.log("maxPayValue:%s", payValue);
         params = MarginParams({
             poolId: nativeKey.toId(),
@@ -993,8 +995,7 @@ contract MarginPositionManagerTest is DeployHelper {
         PoolId poolId1 = nativeKey.toId();
         uint256 positionId;
         uint256 borrowAmount;
-        (uint256 payValue, uint256 borrowAmountEstimate) =
-            marginChecker.getMarginMax(address(pairPoolManager), poolId1, marginForOne, leverage);
+        (uint256 payValue, uint256 borrowAmountEstimate) = getMarginMax(poolId1, marginForOne, leverage);
         MarginParams memory params = MarginParams({
             poolId: poolId1,
             marginForOne: marginForOne,
@@ -1039,11 +1040,10 @@ contract MarginPositionManagerTest is DeployHelper {
         leverageMax(false, 5);
     }
 
-    function testGetPositionsZero() public {
+    function testGetPositionsZero() public view {
         uint256[] memory positionIds = new uint256[](2);
         positionIds[0] = 1;
         positionIds[1] = 2;
-        vm.expectRevert(PoolStatusManager.PairNotExists.selector);
         marginChecker.getPositions(marginPositionManager, positionIds);
     }
 
@@ -1084,6 +1084,67 @@ contract MarginPositionManagerTest is DeployHelper {
         vm.stopPrank();
     }
 
+    uint24 minBorrowLevel = 1400000;
+    uint24[] leverageThousandths = [150, 120, 90, 50, 10];
+
+    function getBorrowMax(PoolId poolId, bool marginForOne, uint256 marginAmount)
+        internal
+        view
+        returns (uint256 marginAmountIn, uint256 borrowMax)
+    {
+        (uint256 reserveBorrow, uint256 reserveMargin) =
+            marginChecker.getReserves(address(pairPoolManager), poolId, marginForOne);
+        marginAmountIn = marginAmount.mulMillionDiv(minBorrowLevel);
+        borrowMax = Math.mulDiv(marginAmountIn, reserveBorrow, reserveMargin);
+    }
+
+    function getMarginMax(PoolId poolId, bool marginForOne, uint24 leverage)
+        internal
+        view
+        returns (uint256 marginMax, uint256 borrowAmount)
+    {
+        PoolStatus memory status = pairPoolManager.getStatus(poolId);
+
+        if (leverage > 0) {
+            (uint256 marginReserve0, uint256 marginReserve1, uint256 incrementMaxMirror0, uint256 incrementMaxMirror1) =
+                marginLiquidity.getMarginReserves(address(pairPoolManager), poolId, status);
+            uint256 borrowMaxAmount = marginForOne ? incrementMaxMirror0 : incrementMaxMirror1;
+            uint256 marginMaxTotal = (marginForOne ? marginReserve1 : marginReserve0);
+            if (marginMaxTotal > 1000 && borrowMaxAmount > 1000) {
+                borrowMaxAmount -= 1000;
+                uint256 marginBorrowMax = status.getAmountOut(marginForOne, borrowMaxAmount);
+                if (marginMaxTotal > marginBorrowMax) {
+                    marginMaxTotal = marginBorrowMax;
+                }
+                {
+                    uint256 marginMaxReserve = (marginForOne ? status.reserve1() : status.reserve0());
+                    uint256 part = leverageThousandths[leverage - 1];
+                    marginMaxReserve = Math.mulDiv(marginMaxReserve, part, 1000);
+                    marginMaxTotal = Math.min(marginMaxTotal, marginMaxReserve);
+                }
+                borrowAmount = pairPoolManager.getAmountIn(poolId, marginForOne, marginMaxTotal);
+            }
+            marginMax = marginMaxTotal / leverage;
+        } else {
+            (uint256 interestReserve0, uint256 interestReserve1) =
+                marginLiquidity.getFlowReserves(address(pairPoolManager), poolId, status);
+            uint256 borrowMaxAmount = (marginForOne ? interestReserve0 : interestReserve1);
+            uint256 flowMaxAmount = (marginForOne ? status.realReserve0 : status.realReserve1) * 20 / 100;
+            borrowMaxAmount = Math.min(borrowMaxAmount, flowMaxAmount);
+            if (borrowMaxAmount > 1000) {
+                borrowAmount = borrowMaxAmount - 1000;
+            } else {
+                borrowAmount = 0;
+            }
+            if (borrowAmount > 0) {
+                (uint256 reserve0, uint256 reserve1) = (status.reserve0(), status.reserve1());
+                (uint256 reserveBorrow, uint256 reserveMargin) =
+                    marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+                marginMax = Math.mulDiv(reserveMargin, borrowAmount, reserveBorrow);
+            }
+        }
+    }
+
     function testBorrowMax() public {
         uint256 positionId;
         uint256 borrowAmount;
@@ -1091,7 +1152,7 @@ contract MarginPositionManagerTest is DeployHelper {
         address user = vm.addr(1);
         (bool success,) = user.call{value: 1 ether}("");
         assertTrue(success);
-        (, uint256 borrowMax) = marginChecker.getBorrowMax(address(pairPoolManager), nativeKey.toId(), false, payValue);
+        (, uint256 borrowMax) = getBorrowMax(nativeKey.toId(), false, payValue);
         MarginParams memory params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
@@ -1151,14 +1212,13 @@ contract MarginPositionManagerTest is DeployHelper {
     }
 
     function testGetMarginMax() public view {
-        (uint256 marginMax, uint256 borrowAmount) =
-            marginChecker.getMarginMax(address(pairPoolManager), nativeKey.toId(), true, 0);
+        (uint256 marginMax, uint256 borrowAmount) = getMarginMax(nativeKey.toId(), true, 0);
         console.log("marginMax:%s,borrowAmount:%s", marginMax, borrowAmount);
         assertGt(marginMax, borrowAmount);
-        (marginMax, borrowAmount) = marginChecker.getMarginMax(address(pairPoolManager), nativeKey.toId(), false, 0);
+        (marginMax, borrowAmount) = getMarginMax(nativeKey.toId(), false, 0);
         console.log("marginMax:%s,borrowAmount:%s", marginMax, borrowAmount);
         assertLt(marginMax, borrowAmount);
-        (marginMax, borrowAmount) = marginChecker.getMarginMax(address(pairPoolManager), nativeKey.toId(), false, 1);
+        (marginMax, borrowAmount) = getMarginMax(nativeKey.toId(), false, 1);
         console.log("marginMax:%s,borrowAmount:%s", marginMax, borrowAmount);
     }
 

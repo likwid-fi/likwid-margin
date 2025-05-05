@@ -28,22 +28,11 @@ interface IMarginChecker {
     /// @return protocolProfitMillion The profit of the protocol in millions
     function getProfitMillions() external view returns (uint24 callerProfitMillion, uint24 protocolProfitMillion);
 
-    /// @notice Get the leverage thousandths
-    /// @return leverageThousandths The leverage thousandths
-    function getThousandthsByLeverage() external view returns (uint24[] memory leverageThousandths);
-
     /// @notice Check the validity of the signature
     /// @param sender The address of the sender
     /// @param positionId The id of the position
     /// @return valid The validity of the signature
     function checkValidity(address sender, uint256 positionId) external view returns (bool valid);
-
-    function estimatePNL(
-        IPairMarginManager poolManager,
-        PoolStatus memory _status,
-        MarginPosition memory _position,
-        uint256 closeMillionth
-    ) external view returns (int256 pnlAmount);
 
     /// @notice Return the PNL amount of the position with the given ID and repayment ratio
     /// @param positionManager The address of manager
@@ -72,18 +61,6 @@ interface IMarginChecker {
         external
         view
         returns (uint256 repayAmount);
-
-    /// @notice Get the maximum marginAmount for the given pool, leverage
-    /// @param poolManager The manager of the pool
-    /// @param poolId The ID of the pool
-    /// @param marginForOne If true, currency1 is marginToken, otherwise currency2 is marginToken
-    /// @param leverage The leverage ratio
-    /// @return marginMax The maximum margin amount
-    /// @return borrowAmount The borrow amount
-    function getMarginMax(address poolManager, PoolId poolId, bool marginForOne, uint24 leverage)
-        external
-        view
-        returns (uint256 marginMax, uint256 borrowAmount);
 
     /// @notice Get the maximum decrease amount of the position
     /// @param poolManager The manager of the pool

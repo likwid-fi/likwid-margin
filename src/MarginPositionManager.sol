@@ -286,15 +286,22 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             transferNative(msg.sender, msg.value - sendValue);
         }
         PoolId poolId = _position.poolId;
-        int256 pnlAmount = checker.estimatePNL(
-            pairPoolManager, _status, _position, params.repayAmount.mulMillionDiv(_position.borrowAmount)
-        );
+
         uint128 borrowAmount = _position.borrowAmount;
         uint256 releaseMargin = Math.mulDiv(_position.marginAmount, params.repayAmount, borrowAmount);
         uint256 releaseTotal = Math.mulDiv(_position.marginTotal, params.repayAmount, borrowAmount);
         uint256 realReleaseMargin =
             lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, releaseMargin);
         uint256 realReleaseTotal = lendingPoolManager.computeRealAmount(_position.poolId, marginCurrency, releaseTotal);
+
+        (uint256 reserveBorrow, uint256 reserveMargin) = _position.marginForOne
+            ? (_status.truncatedReserve0, _status.truncatedReserve1)
+            : (_status.truncatedReserve1, _status.truncatedReserve0);
+        int256 pnlAmount;
+        if (reserveBorrow > 0) {
+            pnlAmount = int256(realReleaseTotal) - int256(Math.mulDiv(reserveMargin, reserveBorrow, params.repayAmount));
+        }
+
         emit RepayClose(
             _position.poolId,
             msg.sender,
@@ -305,6 +312,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             params.rawBorrowAmount,
             pnlAmount
         );
+
         _position.borrowAmount = borrowAmount - params.repayAmount.toUint112();
         if (_position.borrowAmount == 0) {
             _burnPosition(positionId, BurnType.CLOSE);

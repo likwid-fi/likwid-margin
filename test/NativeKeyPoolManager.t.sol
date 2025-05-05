@@ -712,16 +712,16 @@ contract NativeKeyPoolManagerTest is DeployHelper {
     }
 
     function testNativeProtocolInterests() public {
-        address owner = vm.addr(8);
+        address feeTo = vm.addr(8);
         PoolId poolId = nativeKey.toId();
-        lendingPoolManager.transferOwnership(owner);
+        marginFees.setFeeTo(feeTo);
         for (uint256 i = 0; i < 5; i++) {
             testNativeBurnTwoBorrow();
         }
         PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
         printPoolStatus(status);
-        uint256 protocolInterests0 = lendingPoolManager.balanceOf(owner, nativeKey.currency0.toTokenId(poolId));
-        uint256 protocolInterests1 = lendingPoolManager.balanceOf(owner, nativeKey.currency1.toTokenId(poolId));
+        uint256 protocolInterests0 = lendingPoolManager.balanceOf(feeTo, nativeKey.currency0.toTokenId(poolId));
+        uint256 protocolInterests1 = lendingPoolManager.balanceOf(feeTo, nativeKey.currency1.toTokenId(poolId));
         assertGt(protocolInterests0, 0);
         assertGt(protocolInterests1, 0);
         console.log("protocolInterests0:%s,protocolInterests1:%s", protocolInterests0, protocolInterests1);
