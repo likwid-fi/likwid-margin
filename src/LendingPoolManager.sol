@@ -184,8 +184,12 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         }
         uint256 id = currency.toTokenId(poolId);
         mirrorTokenManager.mintInStatus(address(this), id, interest);
-        originalAmount = _mint(msg.sender, owner, id, interest);
-        emit Deposit(poolId, currency, caller, id, owner, interest, originalAmount, accruesRatioX112Of[id]);
+        address feeTo = pairPoolManager.marginFees().feeTo();
+        if (feeTo == address(0)) {
+            feeTo = owner;
+        }
+        originalAmount = _mint(msg.sender, feeTo, id, interest);
+        emit Deposit(poolId, currency, caller, id, feeTo, interest, originalAmount, accruesRatioX112Of[id]);
     }
 
     function sync(PoolId poolId, PoolStatus memory status) external onlyStatusManager {
