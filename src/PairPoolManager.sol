@@ -217,7 +217,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         returns (uint256 liquidity)
     {
         PoolStatus memory status = statusManager.setBalances(msg.sender, params.poolId);
-        if (params.level > 1 && status.key.fee < 3000) revert LowFeePoolOnlyOneLevel();
+        if (params.level > LiquidityLevel.RETAIN_BOTH && status.key.fee < 3000) revert LowFeePoolOnlyOneLevel();
         if (status.key.currency0.isAddressZero() && params.amount0 != msg.value) revert InsufficientValue();
         uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
         uint256 _totalSupply = marginLiquidity.balanceOf(address(this), uPoolId);
