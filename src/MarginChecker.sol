@@ -31,8 +31,8 @@ contract MarginChecker is IMarginChecker, Owned {
     uint24 public minMarginLevel = 1170000; // 117%
     uint24 public minBorrowLevel = 1400000; // 140%
     uint24 public liquidationRatio = 950000; // 95%
-    uint24 callerProfit = 10 ** 4;
-    uint24 protocolProfit = 0;
+    uint24 callerProfit = 10000;
+    uint24 protocolProfit = 5000;
 
     constructor(address initialOwner) Owned(initialOwner) {}
 
