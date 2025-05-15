@@ -91,7 +91,7 @@ interface IPairPoolManager is IPairMarginManager {
         external
         returns (bool success);
 
-    function swapMirror(address sender, address recipient, PoolId poolId, bool zeroForOne, uint256 amountIn)
+    function swapMirror(address recipient, PoolId poolId, bool zeroForOne, uint256 amountIn, uint256 amountOutMin)
         external
         payable
         returns (uint256 amountOut);

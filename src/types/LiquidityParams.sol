@@ -28,6 +28,10 @@ struct RemoveLiquidityParams {
     uint8 level;
     /// @notice LP amount to remove
     uint256 liquidity;
+    /// @notice The token0 min amount to get
+    uint256 amount0Min;
+    /// @notice The token1 min amount to get
+    uint256 amount1Min;
     /// @notice Deadline for the transaction
     uint256 deadline;
 }

@@ -59,5 +59,7 @@ interface ILendingPoolManager is IERC6909Accrues {
         payable
         returns (uint256 originalAmount);
 
-    function withdraw(address recipient, PoolId poolId, Currency currency, uint256 amount) external;
+    function withdraw(address recipient, PoolId poolId, Currency currency, uint256 amount)
+        external
+        returns (uint256 originalAmount);
 }
