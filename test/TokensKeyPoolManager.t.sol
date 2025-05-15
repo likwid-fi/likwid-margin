@@ -160,6 +160,8 @@ contract TokensKeyPoolManagerTest is DeployHelper {
             level: 1,
             amount0: 1 ether,
             amount1: 100 ether,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             deadline: type(uint256).max
         });
@@ -169,6 +171,8 @@ contract TokensKeyPoolManagerTest is DeployHelper {
             level: 2,
             amount0: 1 ether,
             amount1: 100 ether,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             deadline: type(uint256).max
         });
@@ -178,6 +182,8 @@ contract TokensKeyPoolManagerTest is DeployHelper {
             level: 3,
             amount0: 1 ether,
             amount1: 100 ether,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             deadline: type(uint256).max
         });

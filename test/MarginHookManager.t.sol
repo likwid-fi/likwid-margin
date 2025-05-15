@@ -48,6 +48,8 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: poolId,
             amount0: amount0,
             amount1: amount1,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             level: LiquidityLevel.BORROW_BOTH,
             deadline: type(uint256).max
@@ -101,6 +103,8 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: poolId,
             amount0: amount0,
             amount1: amount1,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             level: LiquidityLevel.RETAIN_BOTH,
             deadline: type(uint256).max
@@ -144,6 +148,8 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: poolId,
             amount0: amount0,
             amount1: amount1 * 2,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             level: LiquidityLevel.RETAIN_BOTH,
             deadline: type(uint256).max
@@ -159,6 +165,8 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: tokensKey.toId(),
             amount0: amount0,
             amount1: amount1,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             level: 4,
             deadline: type(uint256).max
@@ -193,6 +201,8 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: poolId,
             amount0: amount0,
             amount1: amount1,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             level: 4,
             deadline: type(uint256).max
@@ -229,6 +239,8 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: poolId,
             amount0: amount0,
             amount1: amount1,
+            amount0Min: 0,
+            amount1Min: 0,
             to: user,
             level: level,
             deadline: type(uint256).max
@@ -293,11 +305,28 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: poolId,
             amount0: amount0,
             amount1: amount1,
+            amount0Min: amount0,
+            amount1Min: amount1,
             to: user,
             level: 1,
             deadline: type(uint256).max
         });
-        vm.expectRevert(bytes("OUT_OF_RANGE"));
+        vm.expectRevert(bytes("INSUFFICIENT_AMOUNT0"));
+        pairPoolManager.addLiquidity{value: amount0}(params);
+        amount0 = 0.09 ether;
+        amount1 = 0.1 ether;
+        tokenUSDT.approve(address(pairPoolManager), amount1);
+        params = AddLiquidityParams({
+            poolId: poolId,
+            amount0: amount0,
+            amount1: amount1,
+            amount0Min: amount0,
+            amount1Min: amount1,
+            to: user,
+            level: 1,
+            deadline: type(uint256).max
+        });
+        vm.expectRevert(bytes("INSUFFICIENT_AMOUNT1"));
         pairPoolManager.addLiquidity{value: amount0}(params);
         vm.stopPrank();
     }
@@ -311,6 +340,8 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: poolId,
             amount0: amount0,
             amount1: amount1,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             level: LiquidityLevel.BORROW_BOTH,
             deadline: type(uint256).max
@@ -340,6 +371,8 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: poolId,
             amount0: amount0,
             amount1: amount1,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(pairPoolManager),
             level: LiquidityLevel.BORROW_BOTH,
             deadline: type(uint256).max

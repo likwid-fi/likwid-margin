@@ -1274,6 +1274,8 @@ contract MarginPositionManagerTest is DeployHelper {
                 poolId: poolId,
                 amount0: amount0,
                 amount1: amount1,
+                amount0Min: 0,
+                amount1Min: 0,
                 to: address(this),
                 level: LiquidityLevel.RETAIN_BOTH,
                 deadline: type(uint256).max
@@ -1283,6 +1285,8 @@ contract MarginPositionManagerTest is DeployHelper {
                 poolId: poolId,
                 amount0: amount0,
                 amount1: amount1,
+                amount0Min: 0,
+                amount1Min: 0,
                 to: address(this),
                 level: LiquidityLevel.BORROW_BOTH,
                 deadline: type(uint256).max
@@ -1558,6 +1562,8 @@ contract MarginPositionManagerTest is DeployHelper {
                 poolId: poolId,
                 amount0: amount0,
                 amount1: amount1,
+                amount0Min: 0,
+                amount1Min: 0,
                 to: user,
                 level: LiquidityLevel.RETAIN_BOTH,
                 deadline: type(uint256).max
@@ -1596,6 +1602,8 @@ contract MarginPositionManagerTest is DeployHelper {
                 poolId: poolId,
                 amount0: amount0,
                 amount1: amount1,
+                amount0Min: 0,
+                amount1Min: 0,
                 to: user,
                 level: LiquidityLevel.RETAIN_BOTH,
                 deadline: type(uint256).max

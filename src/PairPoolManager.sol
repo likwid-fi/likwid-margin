@@ -224,9 +224,8 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         uint256 _totalSupply = marginLiquidity.balanceOf(address(this), uPoolId);
         uint256 amount0In;
         uint256 amount1In;
-        uint24 maxSliding = marginLiquidity.getMaxSliding();
         (liquidity, amount0In, amount1In) =
-            status.computeLiquidity(_totalSupply, params.amount0, params.amount1, maxSliding);
+            status.computeLiquidity(_totalSupply, params.amount0, params.amount1, params.amount0Min, params.amount1Min);
         if (params.amount0 > amount0In && status.key.currency0.isAddressZero()) {
             status.key.currency0.transfer(msg.sender, params.amount0 - amount0In);
         }

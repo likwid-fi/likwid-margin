@@ -68,24 +68,23 @@ library PoolStatusLibrary {
         uint256 totalSupply,
         uint256 amount0,
         uint256 amount1,
-        uint24 maxSliding
+        uint256 amount0Min,
+        uint256 amount1Min
     ) internal pure returns (uint256 liquidity, uint256 amount0In, uint256 amount1In) {
-        require(maxSliding < PerLibrary.ONE_MILLION, "ERROR_SLIDING");
         (uint256 _reserve0, uint256 _reserve1) = getReserves(status);
         if (_reserve0 > 0 && _reserve1 > 0) {
             uint256 amount1Exactly = Math.mulDiv(amount0, _reserve1, _reserve0);
-            uint256 amount1Lower =
-                Math.mulDiv(amount1Exactly, PerLibrary.ONE_MILLION - maxSliding, PerLibrary.ONE_MILLION);
-            uint256 amount1Upper =
-                Math.mulDiv(amount1Exactly, PerLibrary.ONE_MILLION + maxSliding, PerLibrary.ONE_MILLION);
-            require(amount1 >= amount1Lower && amount1 <= amount1Upper, "OUT_OF_RANGE");
-            if (amount1Exactly > amount1) {
-                amount1In = amount1;
-                amount0In = Math.mulDiv(amount1In, _reserve0, _reserve1);
-            } else {
+            if (amount1Exactly <= amount1) {
+                require(amount1Exactly >= amount1Min, "INSUFFICIENT_AMOUNT1");
                 amount1In = amount1Exactly;
                 amount0In = amount0;
+            } else {
+                uint256 amount0Exactly = Math.mulDiv(amount1, _reserve0, _reserve1);
+                require(amount0Exactly >= amount0Min && amount0 >= amount0Exactly, "INSUFFICIENT_AMOUNT0");
+                amount0In = amount0Exactly;
+                amount1In = amount1;
             }
+
             liquidity =
                 Math.min(Math.mulDiv(amount0In, totalSupply, _reserve0), Math.mulDiv(amount1In, totalSupply, _reserve1));
         } else {

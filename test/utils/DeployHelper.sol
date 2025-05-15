@@ -165,6 +165,8 @@ contract DeployHelper is Test {
             level: 4,
             amount0: 1 ether,
             amount1: 10 ether,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             deadline: type(uint256).max
         });
@@ -177,6 +179,8 @@ contract DeployHelper is Test {
             level: 4,
             amount0: 10 ether,
             amount1: 10 ether,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             deadline: type(uint256).max
         });
@@ -189,6 +193,8 @@ contract DeployHelper is Test {
             level: 4,
             amount0: 1 ether,
             amount1: 100 ether,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             deadline: type(uint256).max
         });
@@ -201,6 +207,8 @@ contract DeployHelper is Test {
             level: 4,
             amount0: 1e18,
             amount1: 1e18,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             deadline: type(uint256).max
         });
@@ -210,6 +218,8 @@ contract DeployHelper is Test {
             level: 4,
             amount0: 1 ether,
             amount1: 100 ether,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             deadline: type(uint256).max
         });
@@ -219,6 +229,8 @@ contract DeployHelper is Test {
             level: 4,
             amount0: 1 ether,
             amount1: 100 ether,
+            amount0Min: 0,
+            amount1Min: 0,
             to: address(this),
             deadline: type(uint256).max
         });

@@ -12,6 +12,10 @@ struct AddLiquidityParams {
     uint256 amount0;
     /// @notice The token1 amount to add
     uint256 amount1;
+    /// @notice The token0 min amount to get
+    uint256 amount0Min;
+    /// @notice The token1 min amount to get
+    uint256 amount1Min;
     /// @notice LP level 1: x*y, 2: (x+x')*y, 3: x*(y+y'), 4: (x+x')*(y+y')
     uint8 level;
     /// @notice LP token recipient
