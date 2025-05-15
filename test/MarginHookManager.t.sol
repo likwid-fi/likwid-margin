@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 // Local
 import {PairPoolManager} from "../src/PairPoolManager.sol";
+import {MarginLiquidity} from "../src/MarginLiquidity.sol";
+import {ERC6909Liquidity} from "../src/base/ERC6909Liquidity.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
@@ -62,6 +64,8 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: poolId,
             level: LiquidityLevel.BORROW_BOTH,
             liquidity: liquidity / 2,
+            amount0Min: 0,
+            amount1Min: 0,
             deadline: type(uint256).max
         });
         vm.roll(100);
@@ -72,6 +76,8 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: poolId,
             level: LiquidityLevel.BORROW_BOTH,
             liquidity: liquidityHalf,
+            amount0Min: 0,
+            amount1Min: 0,
             deadline: type(uint256).max
         });
         vm.roll(100);
@@ -110,6 +116,8 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: poolId,
             level: LiquidityLevel.RETAIN_BOTH,
             liquidity: liquidity / 2,
+            amount0Min: 0,
+            amount1Min: 0,
             deadline: type(uint256).max
         });
         vm.roll(100);
@@ -121,6 +129,8 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: poolId,
             level: LiquidityLevel.RETAIN_BOTH,
             liquidity: liquidityHalf,
+            amount0Min: 0,
+            amount1Min: 0,
             deadline: type(uint256).max
         });
         vm.roll(100);
@@ -160,8 +170,14 @@ contract PairPoolManagerTest is DeployHelper {
         (uint256 _reserves0, uint256 _reserves1) = pairPoolManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
         assertEq(_reserves0, _reserves1);
-        RemoveLiquidityParams memory removeParams =
-            RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
+        RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
+            poolId: poolId,
+            level: 4,
+            liquidity: liquidity / 2,
+            amount0Min: 0,
+            amount1Min: 0,
+            deadline: type(uint256).max
+        });
         vm.roll(100);
         skip(100);
         pairPoolManager.removeLiquidity(removeParams);
@@ -188,8 +204,14 @@ contract PairPoolManagerTest is DeployHelper {
         (uint256 _reserves0, uint256 _reserves1) = pairPoolManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
         assertEq(_reserves0, _reserves1);
-        RemoveLiquidityParams memory removeParams =
-            RemoveLiquidityParams({poolId: poolId, level: 4, liquidity: liquidity / 2, deadline: type(uint256).max});
+        RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
+            poolId: poolId,
+            level: 4,
+            liquidity: liquidity / 2,
+            amount0Min: 0,
+            amount1Min: 0,
+            deadline: type(uint256).max
+        });
         vm.roll(100);
         skip(100);
         pairPoolManager.removeLiquidity(removeParams);
@@ -239,8 +261,14 @@ contract PairPoolManagerTest is DeployHelper {
         {
             vm.startPrank(user);
             uint256 liquidity = 0.2 ether;
-            RemoveLiquidityParams memory params =
-                RemoveLiquidityParams({poolId: poolId, liquidity: liquidity, level: 4, deadline: type(uint256).max});
+            RemoveLiquidityParams memory params = RemoveLiquidityParams({
+                poolId: poolId,
+                liquidity: liquidity,
+                level: 4,
+                amount0Min: 0,
+                amount1Min: 0,
+                deadline: type(uint256).max
+            });
             vm.roll(100);
             skip(100);
             pairPoolManager.removeLiquidity(params);
@@ -295,10 +323,28 @@ contract PairPoolManagerTest is DeployHelper {
             poolId: poolId,
             level: LiquidityLevel.BORROW_BOTH,
             liquidity: liquidity * 2,
+            amount0Min: 0,
+            amount1Min: 0,
             deadline: type(uint256).max
         });
         pairPoolManager.removeLiquidity(removeParams);
         balance = marginLiquidity.balanceOf(address(this), LiquidityLevel.BORROW_BOTH.getLevelId(uPoolId));
         assertEq(0, balance, "balance==0");
+    }
+
+    function testAddLiquidityErrorReceiver() public {
+        uint256 amount0 = 1 ether;
+        uint256 amount1 = 1 ether;
+        PoolId poolId = nativeKey.toId();
+        AddLiquidityParams memory params = AddLiquidityParams({
+            poolId: poolId,
+            amount0: amount0,
+            amount1: amount1,
+            to: address(pairPoolManager),
+            level: LiquidityLevel.BORROW_BOTH,
+            deadline: type(uint256).max
+        });
+        vm.expectRevert(ERC6909Liquidity.ErrorReceiver.selector);
+        pairPoolManager.addLiquidity{value: amount0}(params);
     }
 }

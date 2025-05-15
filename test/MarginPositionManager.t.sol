@@ -63,6 +63,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
 
@@ -90,6 +91,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
 
@@ -148,6 +150,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
 
@@ -211,6 +214,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -249,6 +253,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
 
@@ -292,6 +297,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1001
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -333,6 +339,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -361,6 +368,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -391,6 +399,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
         payValue = 0.001 ether;
@@ -415,6 +424,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: 0
         });
         vm.expectRevert(bytes("EXPIRED"));
@@ -488,6 +498,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
 
@@ -519,6 +530,7 @@ contract MarginPositionManagerTest is DeployHelper {
                 to: user,
                 amountIn: amountIn,
                 amountOut: 0,
+                amountInMax: 0,
                 amountOutMin: 0,
                 deadline: type(uint256).max
             });
@@ -558,6 +570,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -583,6 +596,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         skip(1000);
@@ -616,6 +630,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
 
@@ -635,6 +650,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
 
@@ -668,6 +684,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
 
@@ -687,6 +704,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
 
@@ -789,6 +807,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
         vm.expectPartialRevert(MarginPositionManager.InsufficientAmount.selector);
@@ -801,6 +820,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -831,6 +851,7 @@ contract MarginPositionManagerTest is DeployHelper {
                 to: user,
                 amountIn: amountIn,
                 amountOut: 0,
+                amountInMax: 0,
                 amountOutMin: 0,
                 deadline: type(uint256).max
             });
@@ -879,6 +900,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
         vm.expectPartialRevert(MarginPositionManager.InsufficientAmount.selector);
@@ -891,6 +913,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -921,6 +944,7 @@ contract MarginPositionManagerTest is DeployHelper {
                 to: user,
                 amountIn: amountIn,
                 amountOut: 0,
+                amountInMax: 0,
                 amountOutMin: 0,
                 deadline: type(uint256).max
             });
@@ -967,6 +991,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -978,6 +1003,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -1003,6 +1029,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -1061,6 +1088,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
         uint256 beforeBalance = tokenB.balanceOf(user);
@@ -1160,6 +1188,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: borrowMax,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
         vm.startPrank(user);
@@ -1195,6 +1224,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin(params);
@@ -1232,6 +1262,8 @@ contract MarginPositionManagerTest is DeployHelper {
                 poolId: poolId,
                 level: LiquidityLevel.BORROW_BOTH,
                 liquidity: liquidity,
+                amount0Min: 0,
+                amount1Min: 0,
                 deadline: type(uint256).max
             });
             skip(3600 * 2);
@@ -1284,6 +1316,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
 
@@ -1300,6 +1333,7 @@ contract MarginPositionManagerTest is DeployHelper {
                 marginAmount: payValue,
                 borrowAmount: 0,
                 borrowMaxAmount: 0,
+                recipient: user,
                 deadline: block.timestamp + 1000
             });
             tokenB.approve(address(pairPoolManager), payValue);
@@ -1341,6 +1375,7 @@ contract MarginPositionManagerTest is DeployHelper {
                 to: address(this),
                 amountIn: amountIn,
                 amountOut: 0,
+                amountInMax: 0,
                 amountOutMin: 0,
                 deadline: type(uint256).max
             });
@@ -1416,6 +1451,7 @@ contract MarginPositionManagerTest is DeployHelper {
                 to: address(this),
                 amountIn: amountIn,
                 amountOut: 0,
+                amountInMax: 0,
                 amountOutMin: 0,
                 deadline: type(uint256).max
             });
@@ -1481,6 +1517,7 @@ contract MarginPositionManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
 
@@ -1508,6 +1545,7 @@ contract MarginPositionManagerTest is DeployHelper {
                 to: user,
                 amountIn: amountIn,
                 amountOut: 0,
+                amountInMax: 0,
                 amountOutMin: 0,
                 deadline: type(uint256).max
             });
@@ -1530,6 +1568,8 @@ contract MarginPositionManagerTest is DeployHelper {
                 poolId: poolId,
                 level: LiquidityLevel.RETAIN_BOTH,
                 liquidity: liquidity,
+                amount0Min: 0,
+                amount1Min: 0,
                 deadline: type(uint256).max
             });
             pairPoolManager.removeLiquidity(removeParams);
@@ -1543,6 +1583,7 @@ contract MarginPositionManagerTest is DeployHelper {
                 to: user,
                 amountIn: amountIn,
                 amountOut: 0,
+                amountInMax: 0,
                 amountOutMin: 0,
                 deadline: type(uint256).max
             });
@@ -1565,6 +1606,8 @@ contract MarginPositionManagerTest is DeployHelper {
                 poolId: poolId,
                 level: LiquidityLevel.RETAIN_BOTH,
                 liquidity: liquidity,
+                amount0Min: 0,
+                amount1Min: 0,
                 deadline: type(uint256).max
             });
             pairPoolManager.removeLiquidity(removeParams);

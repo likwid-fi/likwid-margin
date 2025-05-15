@@ -89,6 +89,7 @@ contract TokensKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin(params);
@@ -139,6 +140,7 @@ contract TokensKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1002
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -205,6 +207,8 @@ contract TokensKeyPoolManagerTest is DeployHelper {
                 poolId: usdtKey.toId(),
                 level: i + 1,
                 liquidity: liquidities[i],
+                amount0Min: 0,
+                amount1Min: 0,
                 deadline: type(uint256).max
             });
             vm.roll(100);

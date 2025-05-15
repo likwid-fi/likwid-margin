@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 // Local
 import {PairPoolManager} from "../src/PairPoolManager.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
+import {MarginChecker} from "../src/MarginChecker.sol";
 import {MarginPositionManager} from "../src/MarginPositionManager.sol";
 import {MarginLiquidity, ERC6909Liquidity} from "../src/MarginLiquidity.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
@@ -104,6 +105,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -128,6 +130,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         marginPositionManager.margin{value: payValue}(params);
@@ -170,6 +173,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -208,6 +212,8 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             poolId: poolId,
             level: LiquidityLevel.BORROW_BOTH,
             liquidity: liquidity,
+            amount0Min: 0,
+            amount1Min: 0,
             deadline: type(uint256).max
         });
         vm.roll(100);
@@ -240,6 +246,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
         uint256 beforeBalance = tokenB.balanceOf(user);
@@ -282,11 +289,15 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 poolId: poolId,
                 level: LiquidityLevel.BORROW_BOTH,
                 liquidity: liquidity,
+                amount0Min: 0,
+                amount1Min: 0,
                 deadline: type(uint256).max
             });
+            console.log("expectRevert 01");
             vm.expectRevert(ERC6909Liquidity.NotAllowed.selector);
             pairPoolManager.removeLiquidity(removeParams);
             skip(20);
+            console.log("expectRevert 02");
             vm.expectRevert(ERC6909Liquidity.NotAllowed.selector);
             pairPoolManager.removeLiquidity(removeParams);
             skip(60);
@@ -302,6 +313,38 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 deadline: type(uint256).max
             });
             pairPoolManager.addLiquidity{value: amount0}(params);
+            console.log("expectRevert 03");
+            vm.expectRevert(ERC6909Liquidity.NotAllowed.selector);
+            pairPoolManager.removeLiquidity(removeParams);
+            address user = vm.addr(1);
+            uint256 userAmount0 = amount0 / 1000;
+            uint256 userAmount1 = amount1 / 1000;
+            (bool success,) = user.call{value: userAmount0}("");
+            assertTrue(success);
+            nativeKey.currency1.transfer(user, userAmount1);
+            vm.startPrank(user);
+            tokenB.approve(address(pairPoolManager), userAmount1);
+            params = AddLiquidityParams({
+                poolId: poolId,
+                amount0: userAmount0,
+                amount1: userAmount1,
+                to: user,
+                level: LiquidityLevel.BORROW_BOTH,
+                deadline: type(uint256).max
+            });
+            pairPoolManager.addLiquidity{value: userAmount0}(params);
+            liquidity = marginLiquidity.getPoolLiquidity(poolId, user, LiquidityLevel.BORROW_BOTH);
+            assertGt(liquidity, 0);
+            removeParams = RemoveLiquidityParams({
+                poolId: poolId,
+                level: LiquidityLevel.BORROW_BOTH,
+                liquidity: liquidity,
+                amount0Min: 0,
+                amount1Min: 0,
+                deadline: type(uint256).max
+            });
+            pairPoolManager.removeLiquidity(removeParams);
+            vm.stopPrank();
         }
         nativeKeyBalance("after testNativeLiquidity");
     }
@@ -324,6 +367,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 to: address(this),
                 amountIn: amountIn,
                 amountOut: 0,
+                amountInMax: 0,
                 amountOutMin: 0,
                 deadline: type(uint256).max
             });
@@ -349,6 +393,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
         uint256 beforeBalance = tokenB.balanceOf(user);
@@ -368,6 +413,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
         beforeBalance = tokenB.balanceOf(user);
@@ -420,6 +466,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 to: address(this),
                 amountIn: amountIn,
                 amountOut: 0,
+                amountInMax: 0,
                 amountOutMin: 0,
                 deadline: type(uint256).max
             });
@@ -470,6 +517,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 to: address(this),
                 amountIn: amountIn,
                 amountOut: 0,
+                amountInMax: 0,
                 amountOutMin: 0,
                 deadline: type(uint256).max
             });
@@ -537,6 +585,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 to: address(this),
                 amountIn: amountIn,
                 amountOut: 0,
+                amountInMax: 0,
                 amountOutMin: 0,
                 deadline: type(uint256).max
             });
@@ -751,6 +800,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 to: address(this),
                 amountIn: amountIn,
                 amountOut: 0,
+                amountInMax: 0,
                 amountOutMin: 0,
                 deadline: type(uint256).max
             });
@@ -801,6 +851,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -822,6 +873,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 marginAmount: payValue,
                 borrowAmount: 0,
                 borrowMaxAmount: 0,
+                recipient: address(this),
                 deadline: block.timestamp + 1000
             });
             (uint256 positionId,) = marginPositionManager.margin{value: payValue}(params);
@@ -836,9 +888,10 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
-        vm.expectPartialRevert(MarginPositionManager.InsufficientAmount.selector);
+        vm.expectPartialRevert(MarginChecker.LeverageOverflow.selector);
         marginPositionManager.margin{value: payValue}(outParams);
     }
 }

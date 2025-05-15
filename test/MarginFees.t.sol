@@ -90,6 +90,7 @@ contract MarginFeesTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: user,
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
@@ -175,6 +176,7 @@ contract MarginFeesTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);

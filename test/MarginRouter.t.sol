@@ -48,6 +48,7 @@ contract MarginRouterTest is DeployHelper {
             poolId: nativeKey.toId(),
             zeroForOne: true,
             to: user,
+            amountInMax: 0,
             amountIn: amountIn,
             amountOut: 0,
             amountOutMin: 0,
@@ -87,6 +88,7 @@ contract MarginRouterTest is DeployHelper {
             to: user,
             amountIn: 0,
             amountOut: amountOut,
+            amountInMax: 0,
             amountOutMin: 0,
             deadline: type(uint256).max
         });
@@ -107,6 +109,7 @@ contract MarginRouterTest is DeployHelper {
             zeroForOne: zeroForOne,
             to: user,
             amountIn: 0,
+            amountInMax: 0,
             amountOut: amountOut,
             amountOutMin: 0,
             deadline: type(uint256).max
@@ -129,6 +132,7 @@ contract MarginRouterTest is DeployHelper {
             to: user,
             amountIn: amountIn,
             amountOut: 0,
+            amountInMax: 0,
             amountOutMin: 0,
             deadline: type(uint256).max
         });
@@ -171,6 +175,7 @@ contract MarginRouterTest is DeployHelper {
             to: user,
             amountIn: amountIn,
             amountOut: 0,
+            amountInMax: 0,
             amountOutMin: 0,
             deadline: type(uint256).max
         });
@@ -216,6 +221,7 @@ contract MarginRouterTest is DeployHelper {
             marginAmount: payValue,
             borrowAmount: 0,
             borrowMaxAmount: 0,
+            recipient: address(this),
             deadline: block.timestamp + 1000
         });
 
@@ -237,16 +243,7 @@ contract MarginRouterTest is DeployHelper {
         uint256 lb = lendingPoolManager.balanceOf(user, tokenBId);
         assertEq(lb, 0);
         uint256 amountIn = 0.001 ether;
-        MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
-            poolId: poolId,
-            zeroForOne: true,
-            to: user,
-            amountIn: amountIn,
-            amountOut: 0,
-            amountOutMin: 0,
-            deadline: type(uint256).max
-        });
-        uint256 amountOut = swapRouter.swapMirror{value: amountIn}(swapParams);
+        uint256 amountOut = pairPoolManager.swapMirror{value: amountIn}(user, poolId, true, amountIn, 0);
         lb = lendingPoolManager.balanceOf(user, tokenBId);
         console.log(amountOut, lb);
         assertEq(lb, amountOut);
