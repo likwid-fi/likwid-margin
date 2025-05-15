@@ -20,6 +20,7 @@ contract MarginRouter is SafeCallback, Owned {
 
     error LockFailure();
     error NotSelf();
+    error InsufficientInputReceived();
     error InsufficientOutputReceived();
 
     event Swap(PoolId indexed poolId, address indexed sender, uint256 amount0, uint256 amount1, uint24 fee);
@@ -60,6 +61,7 @@ contract MarginRouter is SafeCallback, Owned {
         uint256 amountIn;
         uint256 amountOutMin;
         uint256 amountOut;
+        uint256 amountInMax;
         uint256 deadline;
     }
 
@@ -114,6 +116,7 @@ contract MarginRouter is SafeCallback, Owned {
                 return amountOut;
             } else if (params.amountOut > 0) {
                 amountIn = params.zeroForOne ? uint256(-int256(delta.amount0())) : uint256(-int256(delta.amount1()));
+                if (params.amountInMax > 0 && amountIn > params.amountInMax) revert InsufficientInputReceived();
                 inputCurrency.settle(poolManager, sender, amountIn, false);
                 outputCurrency.take(poolManager, params.to, params.amountOut, false);
                 amountOut = params.amountOut;
