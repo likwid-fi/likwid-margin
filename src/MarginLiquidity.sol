@@ -29,6 +29,8 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
     mapping(PoolId => int256) public interestStore0;
     mapping(PoolId => int256) public interestStore1;
 
+    mapping(address => mapping(uint256 => uint256)) public increaseStore;
+
     constructor(address initialOwner) Owned(initialOwner) {}
 
     modifier onlyPoolManager() {
@@ -279,12 +281,15 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         onlyPoolManager
         returns (uint256 liquidity)
     {
+        address pairPoolManager = msg.sender;
         if (interest0 >= 0 && interest1 >= 0) {
-            liquidity = _addInterests(msg.sender, poolId, _reserve0, _reserve1, uint256(interest0), uint256(interest1));
+            liquidity =
+                _addInterests(pairPoolManager, poolId, _reserve0, _reserve1, uint256(interest0), uint256(interest1));
         }
         if (interest0 <= 0 && interest1 <= 0) {
-            liquidity =
-                _deductInterests(msg.sender, poolId, _reserve0, _reserve1, uint256(-interest0), uint256(-interest1));
+            liquidity = _deductInterests(
+                pairPoolManager, poolId, _reserve0, _reserve1, uint256(-interest0), uint256(-interest1)
+            );
         }
     }
 
@@ -292,15 +297,22 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         external
         onlyPoolManager
     {
+        address pairPoolManager = msg.sender;
+        if (pairPoolManager == receiver) revert ErrorReceiver();
         uint256 levelId = level.getLevelId(id);
-        datetimeStore[receiver][levelId] = uint32(block.timestamp % 2 ** 32);
-        address poolManager = msg.sender;
         uint256 uPoolId = id.getPoolId();
+        uint256 increaseResult = increaseStore[receiver][levelId].increaseTimeStampStore(amount);
+        (uint32 t, uint224 v) = increaseResult.decodeTimeStampStore();
+        uint256 total = balanceOf(pairPoolManager, uPoolId);
+        if (v > total / 100) {
+            datetimeStore[receiver][levelId] = t;
+        }
         unchecked {
-            _mint(caller, poolManager, uPoolId, amount);
-            _mint(caller, poolManager, levelId, amount);
+            _mint(caller, pairPoolManager, uPoolId, amount);
+            _mint(caller, pairPoolManager, levelId, amount);
             _mint(caller, receiver, levelId, amount);
         }
+        increaseStore[receiver][levelId] = increaseResult;
     }
 
     function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount)
@@ -310,12 +322,12 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
     {
         uint256 levelId = level.getLevelId(id);
         uint256 uPoolId = id.getPoolId();
-        address pool = msg.sender;
+        address pairPoolManager = msg.sender;
         uint256 balance = balanceOf(sender, levelId);
         amount = Math.min(balance, amount);
         unchecked {
-            _burn(sender, pool, uPoolId, amount);
-            _burn(sender, pool, levelId, amount);
+            _burn(sender, pairPoolManager, uPoolId, amount);
+            _burn(sender, pairPoolManager, levelId, amount);
             _burn(sender, sender, levelId, amount);
         }
         return amount;
@@ -418,27 +430,25 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         if (totalSupply > 0) {
             marginReserve0 = Math.mulDiv(totalSupply - retainSupply1, status.reserve0(), totalSupply);
             marginReserve1 = Math.mulDiv(totalSupply - retainSupply0, status.reserve1(), totalSupply);
-            uint256 canMirrorReserve0 = Math.mulDiv(totalSupply - retainSupply0, status.reserve0(), totalSupply);
-            uint256 canMirrorReserve1 = Math.mulDiv(totalSupply - retainSupply1, status.reserve1(), totalSupply);
-            if (canMirrorReserve0 > status.mirrorReserve0) {
-                if (retainSupply0 > 0) {
-                    incrementMaxMirror0 =
-                        Math.mulDiv(canMirrorReserve0 - status.mirrorReserve0, totalSupply, retainSupply0);
-                } else {
-                    incrementMaxMirror0 = type(uint112).max / 2;
-                }
-            }
-            if (canMirrorReserve1 > status.mirrorReserve1) {
-                if (retainSupply1 > 0) {
-                    incrementMaxMirror1 =
-                        Math.mulDiv(canMirrorReserve1 - status.mirrorReserve1, totalSupply, retainSupply1);
-                } else {
-                    incrementMaxMirror1 = type(uint112).max / 2;
-                }
-            }
-
             marginReserve0 = Math.min(marginReserve0, status.realReserve0);
             marginReserve1 = Math.min(marginReserve1, status.realReserve1);
+
+            if (retainSupply0 > 0) {
+                uint256 maxMirror0 = Math.mulDiv(totalSupply - retainSupply0, status.reserve0(), totalSupply);
+                if (maxMirror0 > status.mirrorReserve0) {
+                    incrementMaxMirror0 = Math.mulDiv(maxMirror0 - status.mirrorReserve0, totalSupply, retainSupply0);
+                }
+            } else {
+                incrementMaxMirror0 = type(uint112).max / 2;
+            }
+            if (retainSupply1 > 0) {
+                uint256 maxMirror1 = Math.mulDiv(totalSupply - retainSupply1, status.reserve1(), totalSupply);
+                if (maxMirror1 > status.mirrorReserve1) {
+                    incrementMaxMirror1 = Math.mulDiv(maxMirror1 - status.mirrorReserve1, totalSupply, retainSupply1);
+                }
+            } else {
+                incrementMaxMirror1 = type(uint112).max / 2;
+            }
         }
     }
 
