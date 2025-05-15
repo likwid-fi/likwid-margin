@@ -49,6 +49,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
 
     error InsufficientLiquidityMinted();
     error InsufficientLiquidityBurnt();
+    error InsufficientOutputReceived();
     error InsufficientValue();
     error NotPositionManager();
     error NotAllowed();
@@ -283,6 +284,12 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             }
             require(amount0 <= maxReserve0 && amount1 <= maxReserve1, "NOT_ENOUGH_RESERVE");
             if (amount0 == 0 || amount1 == 0) revert InsufficientLiquidityBurnt();
+            if (
+                params.amount0Min > 0 && amount0 < params.amount0Min
+                    || params.amount1Min > 0 && amount1 < params.amount1Min
+            ) {
+                revert InsufficientOutputReceived();
+            }
         }
 
         poolManager.unlock(abi.encodeCall(this.handleRemoveLiquidity, (msg.sender, status.key, amount0, amount1)));
@@ -536,16 +543,18 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         }
     }
 
-    function swapMirror(address sender, address recipient, PoolId poolId, bool zeroForOne, uint256 amountIn)
+    function swapMirror(address recipient, PoolId poolId, bool zeroForOne, uint256 amountIn, uint256 amountOutMin)
         external
         payable
         returns (uint256 amountOut)
     {
+        address sender = msg.sender;
         PoolStatus memory status = statusManager.setBalances(sender, poolId);
         uint256 feeAmount;
         (amountOut,, feeAmount) = statusManager.getAmountOut(status, zeroForOne, amountIn);
         uint256 mirrorOut = zeroForOne ? status.mirrorReserve1 : status.mirrorReserve0;
         require(amountOut <= mirrorOut, "NOT_ENOUGH_RESERVE");
+        if (amountOutMin > 0 && amountOut < amountOutMin) revert InsufficientOutputReceived();
         (Currency inputCurrency, Currency outputCurrency) =
             zeroForOne ? (status.key.currency0, status.key.currency1) : (status.key.currency1, status.key.currency0);
         uint256 sendValue = inputCurrency.checkAmount(amountIn);

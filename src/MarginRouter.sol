@@ -105,7 +105,7 @@ contract MarginRouter is SafeCallback, Owned {
             BalanceDelta delta = poolManager.swap(key, swapParams, "");
             if (params.amountIn > 0) {
                 amountOut = params.zeroForOne ? uint256(int256(delta.amount1())) : uint256(int256(delta.amount0()));
-                if (amountOut < params.amountOutMin) revert InsufficientOutputReceived();
+                if (params.amountOutMin > 0 && amountOut < params.amountOutMin) revert InsufficientOutputReceived();
                 inputCurrency.settle(poolManager, sender, params.amountIn, false);
                 outputCurrency.take(poolManager, params.to, amountOut, false);
                 amountIn = params.amountIn;
@@ -123,17 +123,5 @@ contract MarginRouter is SafeCallback, Owned {
             }
         }
         return 0;
-    }
-
-    function swapMirror(SwapParams calldata params)
-        external
-        payable
-        ensure(params.deadline)
-        returns (uint256 amountOut)
-    {
-        require(params.amountIn > 0, "AMOUNT_ERROR");
-        amountOut = pairPoolManager.swapMirror{value: msg.value}(
-            msg.sender, params.to, params.poolId, params.zeroForOne, params.amountIn
-        );
     }
 }
