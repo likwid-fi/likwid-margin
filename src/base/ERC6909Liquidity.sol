@@ -26,6 +26,7 @@ abstract contract ERC6909Liquidity is IERC6909 {
     //////////////////////////////////////////////////////////////*/
 
     error NotAllowed();
+    error ErrorReceiver();
 
     uint32 public minHoldingDuration = 30; // seconds
     mapping(address => bool) public poolManagers;
@@ -46,26 +47,32 @@ abstract contract ERC6909Liquidity is IERC6909 {
         return amount.mulRatioX112(accruesRatioX112Of[id]);
     }
 
-    function transfer(address receiver, uint256 id, uint256 amount) public virtual returns (bool) {
-        if (datetimeStore[msg.sender][id].getTimeElapsed() < minHoldingDuration || poolManagers[receiver]) {
+    function transfer(address receiver, uint256 id, uint256 _amount) public virtual returns (bool) {
+        if (datetimeStore[msg.sender][id].getTimeElapsed() < minHoldingDuration) {
             revert NotAllowed();
         }
-        amount = amount.divRatioX112(accruesRatioX112Of[id]);
+        if (poolManagers[receiver]) revert ErrorReceiver();
+        uint256 amount = _amount.divRatioX112(accruesRatioX112Of[id]);
 
         balanceOriginal[msg.sender][id] -= amount;
 
         balanceOriginal[receiver][id] += amount;
 
-        emit Transfer(msg.sender, msg.sender, receiver, id, amount);
+        emit Transfer(msg.sender, msg.sender, receiver, id, _amount);
 
         return true;
     }
 
-    function transferFrom(address sender, address receiver, uint256 id, uint256 amount) public virtual returns (bool) {
-        if (datetimeStore[sender][id].getTimeElapsed() < minHoldingDuration || poolManagers[receiver]) {
+    function transferFrom(address sender, address receiver, uint256 id, uint256 _amount)
+        public
+        virtual
+        returns (bool)
+    {
+        if (datetimeStore[sender][id].getTimeElapsed() < minHoldingDuration) {
             revert NotAllowed();
         }
-        amount = amount.divRatioX112(accruesRatioX112Of[id]);
+        if (poolManagers[receiver]) revert ErrorReceiver();
+        uint256 amount = _amount.divRatioX112(accruesRatioX112Of[id]);
 
         if (msg.sender != sender && !isOperator[sender][msg.sender]) {
             uint256 allowed = allowanceOriginal[sender][msg.sender][id];
@@ -76,17 +83,17 @@ abstract contract ERC6909Liquidity is IERC6909 {
 
         balanceOriginal[receiver][id] += amount;
 
-        emit Transfer(msg.sender, sender, receiver, id, amount);
+        emit Transfer(msg.sender, sender, receiver, id, _amount);
 
         return true;
     }
 
-    function approve(address spender, uint256 id, uint256 amount) public virtual returns (bool) {
-        amount = amount.divRatioX112(accruesRatioX112Of[id]);
+    function approve(address spender, uint256 id, uint256 _amount) public virtual returns (bool) {
+        uint256 amount = _amount.divRatioX112(accruesRatioX112Of[id]);
 
         allowanceOriginal[msg.sender][spender][id] = amount;
 
-        emit Approval(msg.sender, spender, id, amount);
+        emit Approval(msg.sender, spender, id, _amount);
 
         return true;
     }
@@ -127,7 +134,7 @@ abstract contract ERC6909Liquidity is IERC6909 {
 
         balanceOriginal[receiver][id] += originalAmount;
 
-        emit Transfer(caller, address(0), receiver, id, originalAmount);
+        emit Transfer(caller, address(0), receiver, id, amount);
     }
 
     function _burn(address caller, address sender, uint256 id, uint256 amount)
@@ -145,6 +152,6 @@ abstract contract ERC6909Liquidity is IERC6909 {
 
         balanceOriginal[sender][id] -= originalAmount;
 
-        emit Transfer(caller, sender, address(0), id, originalAmount);
+        emit Transfer(caller, sender, address(0), id, amount);
     }
 }

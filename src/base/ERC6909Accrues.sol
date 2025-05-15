@@ -40,22 +40,26 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
         return amount.mulRatioX112(accruesRatioX112Of[id]);
     }
 
-    function transfer(address receiver, uint256 id, uint256 amount) public virtual returns (bool) {
+    function transfer(address receiver, uint256 id, uint256 _amount) public virtual returns (bool) {
         if (receiver == address(this)) revert ErrorReceiver();
-        amount = amount.divRatioX112(accruesRatioX112Of[id]);
+        uint256 amount = _amount.divRatioX112(accruesRatioX112Of[id]);
 
         balanceOriginal[msg.sender][id] -= amount;
 
         balanceOriginal[receiver][id] += amount;
 
-        emit Transfer(msg.sender, msg.sender, receiver, id, amount);
+        emit Transfer(msg.sender, msg.sender, receiver, id, _amount);
 
         return true;
     }
 
-    function transferFrom(address sender, address receiver, uint256 id, uint256 amount) public virtual returns (bool) {
+    function transferFrom(address sender, address receiver, uint256 id, uint256 _amount)
+        public
+        virtual
+        returns (bool)
+    {
         if (receiver == address(this)) revert ErrorReceiver();
-        amount = amount.divRatioX112(accruesRatioX112Of[id]);
+        uint256 amount = _amount.divRatioX112(accruesRatioX112Of[id]);
 
         if (msg.sender != sender && !isOperator[sender][msg.sender]) {
             uint256 allowed = allowanceOriginal[sender][msg.sender][id];
@@ -66,17 +70,17 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
 
         balanceOriginal[receiver][id] += amount;
 
-        emit Transfer(msg.sender, sender, receiver, id, amount);
+        emit Transfer(msg.sender, sender, receiver, id, _amount);
 
         return true;
     }
 
-    function approve(address spender, uint256 id, uint256 amount) public virtual returns (bool) {
-        amount = amount.divRatioX112(accruesRatioX112Of[id]);
+    function approve(address spender, uint256 id, uint256 _amount) public virtual returns (bool) {
+        uint256 amount = _amount.divRatioX112(accruesRatioX112Of[id]);
 
         allowanceOriginal[msg.sender][spender][id] = amount;
 
-        emit Approval(msg.sender, spender, id, amount);
+        emit Approval(msg.sender, spender, id, _amount);
 
         return true;
     }
@@ -115,6 +119,7 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
         virtual
         returns (uint256 originalAmount)
     {
+        if (receiver == address(this)) revert ErrorReceiver();
         int256 deviation = deviationOf[id];
         if (deviation > 0) {
             amount += uint256(deviation);
@@ -138,7 +143,7 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
 
         balanceOriginal[receiver][id] += originalAmount;
         balanceOriginal[address(this)][id] += originalAmount;
-        emit Transfer(caller, address(0), receiver, id, originalAmount);
+        emit Transfer(caller, address(0), receiver, id, amount);
     }
 
     function _burn(address caller, address sender, uint256 id, uint256 amount)
@@ -160,6 +165,6 @@ abstract contract ERC6909Accrues is IERC6909Accrues {
         balanceOriginal[sender][id] -= originalAmount;
         balanceOriginal[address(this)][id] -= originalAmount;
 
-        emit Transfer(caller, sender, address(0), id, originalAmount);
+        emit Transfer(caller, sender, address(0), id, amount);
     }
 }
