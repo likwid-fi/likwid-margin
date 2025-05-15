@@ -27,6 +27,9 @@ contract MarginChecker is IMarginChecker, Owned {
     using FeeLibrary for uint24;
     using PoolStatusLibrary for PoolStatus;
 
+    error LeverageOverflow();
+
+    uint24 public maxLeverage = 5;
     uint24 public liquidationMarginLevel = 1100000; // 110%
     uint24 public minMarginLevel = 1170000; // 117%
     uint24 public minBorrowLevel = 1400000; // 140%
@@ -43,6 +46,10 @@ contract MarginChecker is IMarginChecker, Owned {
 
     function setProtocolProfit(uint24 _protocolProfit) external onlyOwner {
         protocolProfit = _protocolProfit;
+    }
+
+    function setMaxLeverage(uint24 _maxLeverage) external onlyOwner {
+        maxLeverage = _maxLeverage;
     }
 
     function setLiquidationMarginLevel(uint24 _liquidationMarginLevel) external onlyOwner {
@@ -132,6 +139,8 @@ contract MarginChecker is IMarginChecker, Owned {
         uint256 assetsAmount,
         uint256 debtAmount
     ) external view returns (bool valid) {
+        if (leverage > maxLeverage) revert LeverageOverflow();
+
         uint256 repayAmount;
         (uint256 reserveBorrow, uint256 reserveMargin) = _getReserves(_status, marginForOne);
 

@@ -329,13 +329,19 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         emit Deposit(poolId, currency, sender, id, recipient, amount, originalAmount, accruesRatioX112Of[id]);
     }
 
-    function withdraw(address recipient, PoolId poolId, Currency currency, uint256 amount) external {
-        poolManager.unlock(abi.encodeCall(this.handleWithdraw, (msg.sender, recipient, poolId, currency, amount)));
+    function withdraw(address recipient, PoolId poolId, Currency currency, uint256 amount)
+        external
+        returns (uint256 originalAmount)
+    {
+        bytes memory result =
+            poolManager.unlock(abi.encodeCall(this.handleWithdraw, (msg.sender, recipient, poolId, currency, amount)));
+        originalAmount = abi.decode(result, (uint256));
     }
 
     function handleWithdraw(address sender, address recipient, PoolId poolId, Currency currency, uint256 amount)
         external
         selfOnly
+        returns (uint256 originalAmount)
     {
         IPoolStatusManager statusManager = pairPoolManager.statusManager();
         PoolStatus memory status = statusManager.setBalances(sender, poolId);
@@ -354,7 +360,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         }
         currency.settle(poolManager, address(this), realAmount, true);
         currency.take(poolManager, recipient, realAmount, false);
-        uint256 originalAmount = _burn(sender, sender, id, realAmount);
+        originalAmount = _burn(sender, sender, id, realAmount);
         emit Withdraw(poolId, currency, sender, id, recipient, realAmount, originalAmount, accruesRatioX112Of[id]);
         statusManager.update(poolId);
     }
