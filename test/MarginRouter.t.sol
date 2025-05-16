@@ -92,7 +92,8 @@ contract MarginRouterTest is DeployHelper {
             amountOutMin: 0,
             deadline: type(uint256).max
         });
-        swapRouter.exactOutput{value: amountIn}(swapParams);
+        swapRouter.exactOutput{value: amountIn + amountOut}(swapParams);
+        assertEq(address(swapRouter).balance, 0);
         balance0 = manager.balanceOf(address(pairPoolManager), 0);
         balance1 = manager.balanceOf(address(pairPoolManager), uint160(address(tokenB)));
         console.log("after swap hook.balance0:%s,hook.balance1:%s", balance0, balance1);
