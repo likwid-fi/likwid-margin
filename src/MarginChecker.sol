@@ -112,14 +112,16 @@ contract MarginChecker is IMarginChecker, Owned {
             _positionVo.pnl = 0;
         } else {
             uint256 repayAmount = uint256(_position.borrowAmount).mulDivMillion(closeMillionth);
-            uint256 releaseAmount;
             if (_position.marginTotal == 0) {
-                releaseAmount = pairPoolManager.getAmountOut(_position.poolId, _position.marginForOne, repayAmount);
+                uint256 repayValue = pairPoolManager.getAmountOut(_position.poolId, _position.marginForOne, repayAmount);
+                uint256 releaseAmount = uint256(_position.marginAmount).mulDivMillion(closeMillionth);
+                _positionVo.pnl = int256(releaseAmount) - int256(repayValue);
             } else {
-                releaseAmount = pairPoolManager.getAmountIn(_position.poolId, !_position.marginForOne, repayAmount);
+                uint256 releaseAmount =
+                    pairPoolManager.getAmountIn(_position.poolId, !_position.marginForOne, repayAmount);
+                uint256 releaseTotal = uint256(_position.marginTotal).mulDivMillion(closeMillionth);
+                _positionVo.pnl = int256(releaseTotal) - int256(releaseAmount);
             }
-            uint256 releaseTotal = uint256(_position.marginTotal).mulDivMillion(closeMillionth);
-            _positionVo.pnl = int256(releaseTotal) - int256(releaseAmount);
         }
         _positionVo.position = _position;
     }
