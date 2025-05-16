@@ -29,6 +29,9 @@ contract MarginFees is IMarginFees, Owned {
     using PerLibrary for uint256;
     using PoolStatusLibrary for PoolStatus;
 
+    event StateChanged(string name, uint24 oldValue, uint24 newValue);
+    event RateStatusChanged(RateStatus oldStatus, RateStatus newStatus);
+
     uint24 public marginFee = 3000; // 0.3%
     uint24 public protocolSwapFee = 100000; // LP receive 90% of the SwapFee, while 10% goes to the treasury.
     uint24 public protocolMarginFee = 200000; // LP receive 80% of the MarginFee, while 20% goes to the treasury.
@@ -266,22 +269,27 @@ contract MarginFees is IMarginFees, Owned {
     }
 
     function setMarginFee(uint24 _marginFee) external onlyOwner {
+        emit StateChanged("marginFee", marginFee, _marginFee);
         marginFee = _marginFee;
     }
 
     function setProtocolSwapFee(uint24 _protocolSwapFee) external onlyOwner {
+        emit StateChanged("protocolSwapFee", protocolSwapFee, _protocolSwapFee);
         protocolSwapFee = _protocolSwapFee;
     }
 
     function setProtocolMarginFee(uint24 _protocolMarginFee) external onlyOwner {
+        emit StateChanged("protocolMarginFee", protocolMarginFee, _protocolMarginFee);
         protocolMarginFee = _protocolMarginFee;
     }
 
     function setProtocolInterestFee(uint24 _protocolInterestFee) external onlyOwner {
+        emit StateChanged("protocolInterestFee", protocolInterestFee, _protocolInterestFee);
         protocolInterestFee = _protocolInterestFee;
     }
 
     function setRateStatus(RateStatus calldata _status) external onlyOwner {
+        emit RateStatusChanged(rateStatus, _status);
         rateStatus = _status;
     }
 

@@ -29,6 +29,8 @@ contract MarginChecker is IMarginChecker, Owned {
 
     error LeverageOverflow();
 
+    event StateChanged(string name, uint24 oldValue, uint24 newValue);
+
     uint24 public maxLeverage = 5;
     uint24 public liquidationMarginLevel = 1100000; // 110%
     uint24 public minMarginLevel = 1170000; // 117%
@@ -41,30 +43,37 @@ contract MarginChecker is IMarginChecker, Owned {
 
     // ******************** OWNER CALL ********************
     function setCallerProfit(uint24 _callerProfit) external onlyOwner {
+        emit StateChanged("callerProfit", callerProfit, _callerProfit);
         callerProfit = _callerProfit;
     }
 
     function setProtocolProfit(uint24 _protocolProfit) external onlyOwner {
+        emit StateChanged("protocolProfit", protocolProfit, _protocolProfit);
         protocolProfit = _protocolProfit;
     }
 
     function setMaxLeverage(uint24 _maxLeverage) external onlyOwner {
+        emit StateChanged("maxLeverage", maxLeverage, _maxLeverage);
         maxLeverage = _maxLeverage;
     }
 
     function setLiquidationMarginLevel(uint24 _liquidationMarginLevel) external onlyOwner {
+        emit StateChanged("liquidationMarginLevel", liquidationMarginLevel, _liquidationMarginLevel);
         liquidationMarginLevel = _liquidationMarginLevel;
     }
 
     function setMinMarginLevel(uint24 _minMarginLevel) external onlyOwner {
+        emit StateChanged("minMarginLevel", minMarginLevel, _minMarginLevel);
         minMarginLevel = _minMarginLevel;
     }
 
     function setLiquidationRatio(uint24 _liquidationRatio) external onlyOwner {
+        emit StateChanged("liquidationRatio", liquidationRatio, _liquidationRatio);
         liquidationRatio = _liquidationRatio;
     }
 
     function setMinBorrowLevel(uint24 _minBorrowLevel) external onlyOwner {
+        emit StateChanged("minBorrowLevel", minBorrowLevel, _minBorrowLevel);
         minBorrowLevel = _minBorrowLevel;
     }
 
