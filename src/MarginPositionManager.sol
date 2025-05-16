@@ -16,6 +16,7 @@ import {IPairMarginManager} from "./interfaces/IPairMarginManager.sol";
 import {IMarginChecker} from "./interfaces/IMarginChecker.sol";
 import {MarginPosition, MarginPositionVo} from "./types/MarginPosition.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
+import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {LiquidateStatus} from "./types/LiquidateStatus.sol";
 import {ReleaseParams} from "./types/ReleaseParams.sol";
 import {MarginParams, MarginParamsVo} from "./types/MarginParams.sol";
@@ -30,6 +31,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
     using UQ112x112 for *;
     using PerLibrary for uint256;
     using FeeLibrary for uint24;
+    using PoolStatusLibrary for PoolStatus;
 
     error PairNotExists();
     error PositionLiquidated();
@@ -462,7 +464,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             }
         }
         uint256 releaseAmount = assetsAmount - profit - protocolProfit;
-        // repayAmount = _status.getAmountOut(!params.marginForOne, releaseAmount);
+        repayAmount = _status.getAmountOut(!params.marginForOne, releaseAmount);
+        // When insolvent, protocol profit equals zero.
+        if (repayAmount < borrowAmount) protocolProfit = 0;
         if (profit > 0 || protocolProfit > 0) {
             uint256 marginTokenId = marginCurrency.toTokenId(_position.poolId);
             if (profit > 0) {
