@@ -469,6 +469,12 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     }
 
     function setInterestClosed(PoolId poolId, bool _closed) external onlyOwner {
+        PoolStatus storage status = statusStore[poolId];
+        uint32 blockTS = uint32(block.timestamp % 2 ** 32);
+        if (status.blockTimestampLast != blockTS) {
+            (status.truncatedReserve0, status.truncatedReserve1) = _transform(status);
+            status.blockTimestampLast = blockTS;
+        }
         interestClosed[poolId] = _closed;
     }
 
