@@ -331,6 +331,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             assertTrue(success);
             nativeKey.currency1.transfer(user, userAmount1);
             vm.startPrank(user);
+            vm.roll(100);
             tokenB.approve(address(pairPoolManager), userAmount1);
             params = AddLiquidityParams({
                 poolId: poolId,
