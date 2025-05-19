@@ -29,8 +29,6 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
     mapping(PoolId => int256) public interestStore0;
     mapping(PoolId => int256) public interestStore1;
 
-    mapping(uint256 => mapping(uint256 => uint256)) public increaseStore;
-
     constructor(address initialOwner) Owned(initialOwner) {}
 
     modifier onlyPoolManager() {
@@ -298,21 +296,15 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         onlyPoolManager
     {
         address pairPoolManager = msg.sender;
-        if (pairPoolManager == receiver) revert ErrorReceiver();
+        if (caller != receiver) revert ErrorReceiver(); // caller must equal receiver
         uint256 levelId = level.getLevelId(id);
         uint256 uPoolId = id.getPoolId();
-        uint256 increaseResult = increaseStore[block.number][levelId].increaseTimeStampStore(amount);
-        (uint32 t, uint224 v) = increaseResult.decodeTimeStampStore();
-        uint256 total = balanceOf(pairPoolManager, uPoolId);
-        if (v > total / 100) {
-            datetimeStore[receiver][levelId] = t;
-        }
+        datetimeStore[receiver][levelId] = uint32(block.timestamp % 2 ** 32);
         unchecked {
             _mint(caller, pairPoolManager, uPoolId, amount);
             _mint(caller, pairPoolManager, levelId, amount);
             _mint(caller, receiver, levelId, amount);
         }
-        increaseStore[block.number][levelId] = increaseResult;
     }
 
     function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount)

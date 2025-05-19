@@ -104,20 +104,4 @@ library UQ112x112 {
     {
         result = toUint112(Math.mulDiv(current, rateCumulativeLast, rateCumulativeOld, Math.Rounding.Ceil));
     }
-
-    function decodeTimeStampStore(uint256 x) internal pure returns (uint32 t, uint224 v) {
-        t = uint32(x >> 224);
-        v = uint224(x);
-    }
-
-    function increaseTimeStampStore(uint256 current, uint256 increase) internal view returns (uint256 result) {
-        uint32 blockTS = uint32(block.timestamp % 2 ** 32);
-        (uint32 preTS, uint224 value) = decodeTimeStampStore(current);
-        if (preTS == blockTS) {
-            value += toUint224(increase);
-        } else {
-            value = toUint224(increase);
-        }
-        result = (uint256(blockTS) << 224) + uint256(value);
-    }
 }
