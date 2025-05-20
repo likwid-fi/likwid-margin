@@ -228,7 +228,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             debtAmount = _position.borrowAmount;
             assetsAmount = _position.marginAmount + _position.marginTotal;
         } else {
-            require(ownerOf(positionId) == params.recipient, "AUTH_ERROR");
+            require(ownerOf(positionId) == msg.sender, "AUTH_ERROR");
             MarginPosition storage _position = _positions[positionId];
             _updateBorrow(_position, _status);
             _position.marginAmount += params.marginAmount.toUint112();
