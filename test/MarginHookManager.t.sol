@@ -50,7 +50,7 @@ contract PairPoolManagerTest is DeployHelper {
             amount1: amount1,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             level: LiquidityLevel.BORROW_BOTH,
             deadline: type(uint256).max
         });
@@ -105,7 +105,7 @@ contract PairPoolManagerTest is DeployHelper {
             amount1: amount1,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             level: LiquidityLevel.RETAIN_BOTH,
             deadline: type(uint256).max
         });
@@ -150,7 +150,7 @@ contract PairPoolManagerTest is DeployHelper {
             amount1: amount1 * 2,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             level: LiquidityLevel.RETAIN_BOTH,
             deadline: type(uint256).max
         });
@@ -167,7 +167,7 @@ contract PairPoolManagerTest is DeployHelper {
             amount1: amount1,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             level: 4,
             deadline: type(uint256).max
         });
@@ -203,7 +203,7 @@ contract PairPoolManagerTest is DeployHelper {
             amount1: amount1,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             level: 4,
             deadline: type(uint256).max
         });
@@ -241,7 +241,7 @@ contract PairPoolManagerTest is DeployHelper {
             amount1: amount1,
             amount0Min: 0,
             amount1Min: 0,
-            to: user,
+            source: user,
             level: level,
             deadline: type(uint256).max
         });
@@ -307,7 +307,7 @@ contract PairPoolManagerTest is DeployHelper {
             amount1: amount1,
             amount0Min: amount0,
             amount1Min: amount1,
-            to: user,
+            source: user,
             level: 1,
             deadline: type(uint256).max
         });
@@ -322,7 +322,7 @@ contract PairPoolManagerTest is DeployHelper {
             amount1: amount1,
             amount0Min: amount0,
             amount1Min: amount1,
-            to: user,
+            source: user,
             level: 1,
             deadline: type(uint256).max
         });
@@ -342,7 +342,7 @@ contract PairPoolManagerTest is DeployHelper {
             amount1: amount1,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             level: LiquidityLevel.BORROW_BOTH,
             deadline: type(uint256).max
         });
@@ -373,11 +373,16 @@ contract PairPoolManagerTest is DeployHelper {
             amount1: amount1,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(pairPoolManager),
+            source: address(pairPoolManager),
             level: LiquidityLevel.BORROW_BOTH,
             deadline: type(uint256).max
         });
+        uint256 lp = pairPoolManager.addLiquidity{value: amount0}(params);
+        uint256 lpId = LiquidityLevel.BORROW_BOTH.getLevelId(marginLiquidity.getPoolId(poolId));
+        vm.expectRevert(ERC6909Liquidity.NotAllowed.selector);
+        marginLiquidity.transfer(address(pairPoolManager), lpId, lp);
+        skip(100);
         vm.expectRevert(ERC6909Liquidity.ErrorReceiver.selector);
-        pairPoolManager.addLiquidity{value: amount0}(params);
+        marginLiquidity.transfer(address(pairPoolManager), lpId, lp);
     }
 }

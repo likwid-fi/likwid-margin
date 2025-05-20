@@ -167,7 +167,7 @@ contract DeployHelper is Test {
             amount1: 10 ether,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: 1 ether}(params);
@@ -181,7 +181,7 @@ contract DeployHelper is Test {
             amount1: 10 ether,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: 1 ether}(params);
@@ -195,7 +195,7 @@ contract DeployHelper is Test {
             amount1: 100 ether,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: 1 ether}(params);
@@ -209,7 +209,7 @@ contract DeployHelper is Test {
             amount1: 1e18,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity(params);
@@ -220,7 +220,7 @@ contract DeployHelper is Test {
             amount1: 100 ether,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: 1 ether}(params);
@@ -231,7 +231,7 @@ contract DeployHelper is Test {
             amount1: 100 ether,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: 1 ether}(params);

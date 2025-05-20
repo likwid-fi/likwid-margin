@@ -18,8 +18,8 @@ struct AddLiquidityParams {
     uint256 amount1Min;
     /// @notice LP level 1: x*y, 2: (x+x')*y, 3: x*(y+y'), 4: (x+x')*(y+y')
     uint8 level;
-    /// @notice LP token recipient
-    address to;
+    /// @notice The address of source
+    address source;
     /// @notice Deadline for the transaction
     uint256 deadline;
 }

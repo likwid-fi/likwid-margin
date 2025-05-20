@@ -229,7 +229,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
             amount1: amount1,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             level: LiquidityLevel.RETAIN_BOTH,
             deadline: type(uint256).max
         });
@@ -271,7 +271,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 amount1: amount1,
                 amount0Min: 0,
                 amount1Min: 1,
-                to: address(this),
+                source: address(this),
                 level: LiquidityLevel.RETAIN_BOTH,
                 deadline: type(uint256).max
             });
@@ -282,7 +282,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 amount1: amount1,
                 amount0Min: 0,
                 amount1Min: 1,
-                to: address(this),
+                source: address(this),
                 level: LiquidityLevel.BORROW_BOTH,
                 deadline: type(uint256).max
             });
@@ -316,7 +316,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 amount1: amount1,
                 amount0Min: 0,
                 amount1Min: 1,
-                to: address(this),
+                source: address(this),
                 level: LiquidityLevel.BORROW_BOTH,
                 deadline: type(uint256).max
             });
@@ -338,7 +338,7 @@ contract NativeKeyPoolManagerTest is DeployHelper {
                 amount1: userAmount1,
                 amount0Min: 0,
                 amount1Min: 1,
-                to: user,
+                source: user,
                 level: LiquidityLevel.BORROW_BOTH,
                 deadline: type(uint256).max
             });

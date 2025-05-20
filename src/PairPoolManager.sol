@@ -68,16 +68,18 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
 
     event Mint(
         PoolId indexed poolId,
+        address indexed source,
         address indexed sender,
-        address indexed to,
         uint256 liquidity,
         uint256 amount0,
         uint256 amount1,
         uint8 level
     );
+
     event Burn(
         PoolId indexed poolId, address indexed sender, uint256 liquidity, uint256 amount0, uint256 amount1, uint8 level
     );
+
     event Release(
         PoolId indexed poolId,
         Currency indexed borrowCurrency,
@@ -230,10 +232,10 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             status.key.currency0.transfer(msg.sender, params.amount0 - amount0In);
         }
         if (liquidity == 0) revert InsufficientLiquidityMinted();
-        marginLiquidity.addLiquidity(msg.sender, params.to, uPoolId, params.level, liquidity);
+        marginLiquidity.addLiquidity(msg.sender, uPoolId, params.level, liquidity);
         poolManager.unlock(abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, amount0In, amount1In)));
         statusManager.update(params.poolId);
-        emit Mint(params.poolId, msg.sender, params.to, liquidity, amount0In, amount1In, params.level);
+        emit Mint(params.poolId, params.source, msg.sender, liquidity, amount0In, amount1In, params.level);
     }
 
     /// @dev Handle liquidity addition by taking tokens from the sender and claiming ERC6909 to the hook address

@@ -162,7 +162,7 @@ contract TokensKeyPoolManagerTest is DeployHelper {
             amount1: 100 ether,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: 1 ether}(params);
@@ -173,7 +173,7 @@ contract TokensKeyPoolManagerTest is DeployHelper {
             amount1: 100 ether,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: 1 ether}(params);
@@ -184,7 +184,7 @@ contract TokensKeyPoolManagerTest is DeployHelper {
             amount1: 100 ether,
             amount0Min: 0,
             amount1Min: 0,
-            to: address(this),
+            source: address(this),
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: 1 ether}(params);
