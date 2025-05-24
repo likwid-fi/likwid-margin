@@ -35,6 +35,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
 
     error PairNotExists();
     error PositionLiquidated();
+    error PositionNotLiquidated();
     error MarginTransferFailed(uint256 amount);
     error InsufficientAmount(uint256 amount);
     error InsufficientBorrowReceived();
@@ -432,7 +433,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         PoolStatus memory _status = pairPoolManager.setBalances(msg.sender, _position.poolId);
         (bool liquidated, uint256 borrowAmount) = checker.checkLiquidate(pairPoolManager, _status, _position);
         if (!liquidated) {
-            return (profit, repayAmount);
+            revert PositionNotLiquidated();
         }
         _position = _updateMargin(_position, _status);
         Currency marginCurrency = _position.marginForOne ? _status.key.currency1 : _status.key.currency0;
@@ -499,7 +500,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         PoolStatus memory _status = pairPoolManager.setBalances(msg.sender, _position.poolId);
         (bool liquidated, uint256 borrowAmount) = checker.checkLiquidate(pairPoolManager, _status, _position);
         if (!liquidated) {
-            return (profit, repayAmount);
+            revert PositionNotLiquidated();
         }
         _position = _updateMargin(_position, _status);
         profit = _position.marginAmount + _position.marginTotal;
