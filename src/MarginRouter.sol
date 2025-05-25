@@ -56,6 +56,11 @@ contract MarginRouter is SafeCallback, Owned {
         }
     }
 
+    function transferNative(address to, uint256 amount) internal {
+        (bool success,) = to.call{value: amount}("");
+        require(success, "TRANSFER_FAILED");
+    }
+
     struct SwapParams {
         PoolId poolId;
         bool zeroForOne;
@@ -104,6 +109,8 @@ contract MarginRouter is SafeCallback, Owned {
         }
         (Currency inputCurrency, Currency outputCurrency) =
             params.zeroForOne ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
+        bool inputNative = inputCurrency.isAddressZero();
+        if (!inputNative && msgValue > 0) transferNative(sender, msgValue);
         if (amountSpecified != 0) {
             IPoolManager.SwapParams memory swapParams = IPoolManager.SwapParams({
                 zeroForOne: params.zeroForOne,
@@ -114,7 +121,7 @@ contract MarginRouter is SafeCallback, Owned {
             uint256 amountOut;
             BalanceDelta delta = poolManager.swap(key, swapParams, "");
             if (params.amountIn > 0) {
-                if (inputCurrency.isAddressZero() && params.amountIn != msgValue) revert InsufficientInput();
+                if (inputNative && params.amountIn != msgValue) revert InsufficientInput();
                 amountOut = params.zeroForOne ? uint256(int256(delta.amount1())) : uint256(int256(delta.amount0()));
                 if (params.amountOutMin > 0 && amountOut < params.amountOutMin) revert InsufficientOutputReceived();
                 inputCurrency.settle(poolManager, sender, params.amountIn, false);
@@ -125,7 +132,7 @@ contract MarginRouter is SafeCallback, Owned {
                 return amountOut;
             } else if (params.amountOut > 0) {
                 amountIn = params.zeroForOne ? uint256(-int256(delta.amount0())) : uint256(-int256(delta.amount1()));
-                if (inputCurrency.isAddressZero() && msgValue > amountIn) {
+                if (inputNative && msgValue > amountIn) {
                     inputCurrency.transfer(sender, msgValue - amountIn);
                 }
                 if (params.amountInMax > 0 && amountIn > params.amountInMax) revert InsufficientInputReceived();
