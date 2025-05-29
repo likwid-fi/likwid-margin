@@ -905,4 +905,117 @@ contract NativeKeyPoolManagerTest is DeployHelper {
         vm.expectPartialRevert(MarginChecker.LeverageOverflow.selector);
         marginPositionManager.margin{value: payValue}(outParams);
     }
+
+    function testInsolvency01() public {
+        uint256 payValue = 0.001 ether;
+        MarginParams memory params = MarginParams({
+            poolId: nativeKey.toId(),
+            marginForOne: true,
+            leverage: 3,
+            marginAmount: payValue,
+            borrowAmount: 0,
+            borrowMaxAmount: 0,
+            recipient: address(this),
+            deadline: block.timestamp + 1000
+        });
+        (uint256 positionId,) = marginPositionManager.margin(params);
+        PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
+        printPoolStatus(status);
+        skip(1000);
+        params = MarginParams({
+            poolId: nativeKey.toId(),
+            marginForOne: true,
+            leverage: 3,
+            marginAmount: payValue,
+            borrowAmount: 0,
+            borrowMaxAmount: 0,
+            recipient: vm.addr(2),
+            deadline: block.timestamp + 1000
+        });
+        (positionId,) = marginPositionManager.margin(params);
+        status = pairPoolManager.getStatus(nativeKey.toId());
+        printPoolStatus(status);
+        assertEq(status.lendingRealReserve0, 0, "status.lendingRealReserve0==0");
+        assertGt(status.lendingMirrorReserve0, 0, "status.lendingMirrorReserve0>0");
+        MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+            poolId: nativeKey.toId(),
+            zeroForOne: false,
+            amountIn: 2 ether,
+            amountOutMin: 0,
+            amountOut: 0,
+            amountInMax: 0,
+            to: address(this),
+            deadline: block.timestamp + 1000
+        });
+        swapRouter.exactInput(swapParams);
+        skip(1000);
+        status = pairPoolManager.getStatus(nativeKey.toId());
+        uint256 beforeLendingMirrorReserve0 = status.lendingMirrorReserve0;
+        marginPositionManager.liquidateBurn(positionId);
+        status = pairPoolManager.getStatus(nativeKey.toId());
+        uint256 afterLendingMirrorReserve0 = status.lendingMirrorReserve0;
+        assertGt(
+            beforeLendingMirrorReserve0,
+            afterLendingMirrorReserve0,
+            "beforeLendingMirrorReserve0>afterLendingMirrorReserve0"
+        );
+        assertEq(status.lendingRealReserve0, 0, "status.lendingRealReserve0==0");
+    }
+
+    function testInsolvency02() public {
+        uint256 payValue = 0.001 ether;
+        MarginParams memory params = MarginParams({
+            poolId: nativeKey.toId(),
+            marginForOne: true,
+            leverage: 3,
+            marginAmount: payValue,
+            borrowAmount: 0,
+            borrowMaxAmount: 0,
+            recipient: address(this),
+            deadline: block.timestamp + 1000
+        });
+        (uint256 positionId,) = marginPositionManager.margin(params);
+        PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
+        printPoolStatus(status);
+        skip(1000);
+        params = MarginParams({
+            poolId: nativeKey.toId(),
+            marginForOne: true,
+            leverage: 3,
+            marginAmount: payValue,
+            borrowAmount: 0,
+            borrowMaxAmount: 0,
+            recipient: vm.addr(2),
+            deadline: block.timestamp + 1000
+        });
+        (positionId,) = marginPositionManager.margin(params);
+        status = pairPoolManager.getStatus(nativeKey.toId());
+        printPoolStatus(status);
+        assertEq(status.lendingRealReserve0, 0, "status.lendingRealReserve0==0");
+        assertGt(status.lendingMirrorReserve0, 0, "status.lendingMirrorReserve0>0");
+        MarginRouter.SwapParams memory swapParams = MarginRouter.SwapParams({
+            poolId: nativeKey.toId(),
+            zeroForOne: false,
+            amountIn: 2 ether,
+            amountOutMin: 0,
+            amountOut: 0,
+            amountInMax: 0,
+            to: address(this),
+            deadline: block.timestamp + 1000
+        });
+        swapRouter.exactInput(swapParams);
+        skip(1000);
+        status = pairPoolManager.getStatus(nativeKey.toId());
+        uint256 beforeLendingMirrorReserve0 = status.lendingMirrorReserve0;
+        lendingPoolManager.deposit{value: 0.1 ether}(address(this), nativeKey.toId(), nativeKey.currency0, 0.1 ether);
+        marginPositionManager.liquidateBurn(positionId);
+        status = pairPoolManager.getStatus(nativeKey.toId());
+        uint256 afterLendingMirrorReserve0 = status.lendingMirrorReserve0;
+        assertLe(
+            beforeLendingMirrorReserve0,
+            afterLendingMirrorReserve0,
+            "beforeLendingMirrorReserve0<=afterLendingMirrorReserve0"
+        );
+        assertLt(status.lendingRealReserve0, 0.1 ether, "status.lendingRealReserve0<0.1 ether");
+    }
 }

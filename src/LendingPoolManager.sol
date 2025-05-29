@@ -204,13 +204,6 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         emit Sync(poolId, id0, reserve0, total0, deviationOf[id0], id1, reserve1, total1, deviationOf[id1]);
     }
 
-    function balanceAccounts(Currency currency, uint256 amount) external onlyPairManager {
-        if (amount == 0) {
-            return;
-        }
-        poolManager.transfer(msg.sender, currency.toId(), amount);
-    }
-
     function mirrorIn(address caller, address receiver, PoolId poolId, Currency currency, uint256 amount)
         external
         onlyPairManager
@@ -383,6 +376,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
 
     function setPairPoolManger(IPairPoolManager _manager) external onlyOwner {
         pairPoolManager = _manager;
+        poolManager.setOperator(address(_manager), true);
         mirrorTokenManager.setOperator(address(_manager), true);
     }
 }

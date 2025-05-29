@@ -473,7 +473,31 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
                 if (lendingInterest > 0) {
                     poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), uint256(lendingInterest));
                 } else {
-                    lendingPoolManager.balanceAccounts(borrowCurrency, uint256(-lendingInterest));
+                    uint256 moveAmount = uint256(-lendingInterest);
+                    if (moveAmount > 0) {
+                        moveAmount = Math.min(moveAmount, lendingReserve);
+                        uint256 lendingRealReserve =
+                            params.marginForOne ? status.lendingRealReserve0 : status.lendingRealReserve1;
+                        if (lendingRealReserve >= moveAmount) {
+                            poolManager.transferFrom(
+                                address(lendingPoolManager), address(this), borrowCurrency.toId(), moveAmount
+                            );
+                            moveAmount = 0;
+                        } else {
+                            poolManager.transferFrom(
+                                address(lendingPoolManager), address(this), borrowCurrency.toId(), lendingRealReserve
+                            );
+                            moveAmount -= lendingRealReserve;
+                        }
+                        if (moveAmount > 0) {
+                            mirrorTokenManager.transferFrom(
+                                address(lendingPoolManager),
+                                address(this),
+                                borrowCurrency.toTokenId(status.key),
+                                moveAmount
+                            );
+                        }
+                    }
                 }
             }
         } else {
