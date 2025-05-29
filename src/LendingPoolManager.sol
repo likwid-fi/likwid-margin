@@ -32,6 +32,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     using PoolStatusLibrary for PoolStatus;
 
     error InsufficientFunds();
+    error PairPoolAlreadySet();
 
     event UpdateInterestRatio(
         uint256 indexed id,
@@ -375,6 +376,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     // ******************** OWNER CALL ********************
 
     function setPairPoolManger(IPairPoolManager _manager) external onlyOwner {
+        if (address(pairPoolManager) != address(0)) revert PairPoolAlreadySet();
         pairPoolManager = _manager;
         poolManager.setOperator(address(_manager), true);
         mirrorTokenManager.setOperator(address(_manager), true);
