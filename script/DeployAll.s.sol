@@ -37,6 +37,10 @@ contract DeployAllScript is Script {
             manager = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
         } else if (chainId == 97) {
             manager = 0x7cAf3F63D481555361Ad3b17703Ac95f7a320D0c;
+        } else if (chainId == 10143) {
+            manager = 0x029C5eC244a73cC54c0731c2F3184bCA6C60eF2D;
+        } else if (chainId == 130) {
+            manager = 0x1F98400000000000000000000000000000000004;
         }
     }
 
