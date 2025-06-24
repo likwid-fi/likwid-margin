@@ -137,9 +137,8 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         bool borrowForOne = currency == status.key.currency1;
         uint256 mirrorReserve = borrowForOne ? status.totalMirrorReserve1() : status.totalMirrorReserve0();
-        uint256 borrowRate = pairPoolManager.marginFees().getBorrowRate(address(pairPoolManager), status, !borrowForOne);
-        (uint256 reserve0, uint256 reserve1) =
-            pairPoolManager.marginLiquidity().getInterestReserves(address(pairPoolManager), poolId, status);
+        uint256 borrowRate = pairPoolManager.marginFees().getBorrowRate(status, !borrowForOne);
+        (uint256 reserve0, uint256 reserve1) = (status.reserve0(), status.reserve1());
         uint256 flowReserve = borrowForOne ? reserve1 : reserve0;
         uint256 totalSupply = balanceOf(address(this), id);
         uint256 allInterestReserve = flowReserve + inputAmount + totalSupply;
@@ -216,7 +215,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         emit Deposit(poolId, currency, caller, id, receiver, amount, originalAmount, accruesRatioX112Of[id]);
     }
 
-    function mirrorInRealOut(PoolId poolId, PoolStatus memory status, Currency currency, uint256 amount)
+    function mirrorInRealOut(PoolId poolId, PoolStatus calldata status, Currency currency, uint256 amount)
         external
         onlyPairManager
         returns (uint256 exchangeAmount)
@@ -348,7 +347,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
             uint256 mirrorReserve =
                 currency == status.key.currency0 ? status.lendingMirrorReserve0 : status.lendingMirrorReserve1;
             uint256 exchangeAmount = Math.min(amount - realReserve, mirrorReserve);
-            bool success = pairPoolManager.mirrorInRealOut(poolId, status, currency, exchangeAmount);
+            bool success = pairPoolManager.mirrorInRealOut(poolId, currency, exchangeAmount);
             require(success, "NOT_ENOUGH_RESERVE");
             realAmount = realReserve + exchangeAmount;
         }

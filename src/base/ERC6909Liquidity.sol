@@ -28,7 +28,6 @@ abstract contract ERC6909Liquidity is IERC6909 {
     error NotAllowed();
     error ErrorReceiver();
 
-    uint32 public minHoldingDuration = 30; // seconds
     mapping(address => bool) public poolManagers;
     mapping(uint256 => uint256) public accruesRatioX112Of;
     mapping(address => mapping(uint256 => uint32)) public datetimeStore;
@@ -48,9 +47,6 @@ abstract contract ERC6909Liquidity is IERC6909 {
     }
 
     function transfer(address receiver, uint256 id, uint256 _amount) public virtual returns (bool) {
-        if (datetimeStore[msg.sender][id].getTimeElapsed() < minHoldingDuration) {
-            revert NotAllowed();
-        }
         if (poolManagers[receiver]) revert ErrorReceiver();
         uint256 amount = _amount.divRatioX112(accruesRatioX112Of[id]);
 
@@ -68,9 +64,6 @@ abstract contract ERC6909Liquidity is IERC6909 {
         virtual
         returns (bool)
     {
-        if (datetimeStore[sender][id].getTimeElapsed() < minHoldingDuration) {
-            revert NotAllowed();
-        }
         if (poolManagers[receiver]) revert ErrorReceiver();
         uint256 amount = _amount.divRatioX112(accruesRatioX112Of[id]);
 
@@ -142,9 +135,6 @@ abstract contract ERC6909Liquidity is IERC6909 {
         virtual
         returns (uint256 originalAmount)
     {
-        if (datetimeStore[sender][id].getTimeElapsed() < minHoldingDuration) {
-            revert NotAllowed();
-        }
         originalAmount = amount.divRatioX112(accruesRatioX112Of[id]);
         if (amount > 0 && originalAmount == 0) {
             originalAmount = 1;

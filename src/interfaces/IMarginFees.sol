@@ -47,12 +47,10 @@ interface IMarginFees {
     function getBorrowRateByReserves(uint256 realReserve, uint256 mirrorReserve) external view returns (uint256);
 
     /// @notice Get the last cumulative multiplication of rate
-    /// @param interestReserve0 The interest reserve of the first currency
-    /// @param interestReserve1 The interest reserve of the second currency
     /// @param status The status of the pairPool
     /// @return rate0CumulativeLast The currency0 last cumulative multiplication of rate
     /// @return rate1CumulativeLast The currency1 last cumulative multiplication of rate
-    function getBorrowRateCumulativeLast(uint256 interestReserve0, uint256 interestReserve1, PoolStatus memory status)
+    function getBorrowRateCumulativeLast(PoolStatus memory status)
         external
         view
         returns (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast);
@@ -68,14 +66,10 @@ interface IMarginFees {
         returns (uint256);
 
     /// @notice Get the current borrow rate
-    /// @param pairPoolManager The address of pairPoolManager
     /// @param status The status of the pool
     /// @param marginForOne true: currency1 is marginToken, false: currency0 is marginToken
     /// @return The current borrow rate
-    function getBorrowRate(address pairPoolManager, PoolStatus memory status, bool marginForOne)
-        external
-        view
-        returns (uint256);
+    function getBorrowRate(PoolStatus memory status, bool marginForOne) external view returns (uint256);
 
     /// @notice Get the current borrow rate
     /// @param pairPoolManager The address of pairPoolManager

@@ -7,9 +7,9 @@ import {IERC6909} from "../interfaces/external/IERC6909.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";
 
 interface IMarginLiquidity is IERC6909 {
-    function addLiquidity(address sender, uint256 id, uint8 level, uint256 amount) external;
+    function addLiquidity(address sender, uint256 id, uint256 amount) external;
 
-    function removeLiquidity(address sender, uint256 id, uint8 level, uint256 amount) external returns (uint256);
+    function removeLiquidity(address sender, uint256 id, uint256 amount) external returns (uint256);
 
     function changeLiquidity(PoolId poolId, uint256 _reserve0, uint256 _reserve1, int256 interest0, int256 interest1)
         external
@@ -19,49 +19,13 @@ interface IMarginLiquidity is IERC6909 {
         external
         returns (uint256 liquidity);
 
-    function getMaxSliding() external view returns (uint24);
-
     function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId);
 
-    function getSupplies(uint256 uPoolId)
-        external
-        view
-        returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1);
+    function getTotalSupply(uint256 uPoolId) external view returns (uint256 totalSupply);
 
-    /// Get the supplies of pool status
+    /// Get the totalSupply of pool status
     /// @param poolManager The address of pool manager
     /// @param poolId The pool id
     /// @return totalSupply The total supply
-    /// @return retainSupply0 The level1+level3 supply(can't mirror x)
-    /// @return retainSupply1 The level1+level2 supply(can't mirror y)
-    function getPoolSupplies(address poolManager, PoolId poolId)
-        external
-        view
-        returns (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1);
-
-    /// Get the reserves can claim interests
-    /// @param pairPoolManager The address of pool manager
-    /// @param poolId The pool Id
-    /// @param status The status of pool
-    /// @return reserve0 The reserve can claim interest0
-    /// @return reserve1 The reserve can claim interest1
-    function getInterestReserves(address pairPoolManager, PoolId poolId, PoolStatus memory status)
-        external
-        view
-        returns (uint256 reserve0, uint256 reserve1);
-
-    function getFlowReserves(address pairPoolManager, PoolId poolId, PoolStatus memory status)
-        external
-        view
-        returns (uint256 reserve0, uint256 reserve1);
-
-    function getMarginReserves(address pairPoolManager, PoolId poolId, PoolStatus memory status)
-        external
-        view
-        returns (
-            uint256 marginReserve0,
-            uint256 marginReserve1,
-            uint256 incrementMaxMirror0,
-            uint256 incrementMaxMirror1
-        );
+    function getPoolTotalSupply(address poolManager, PoolId poolId) external view returns (uint256 totalSupply);
 }

@@ -16,8 +16,6 @@ struct AddLiquidityParams {
     uint256 amount0Min;
     /// @notice The token1 min amount to get
     uint256 amount1Min;
-    /// @notice LP level 1: x*y, 2: (x+x')*y, 3: x*(y+y'), 4: (x+x')*(y+y')
-    uint8 level;
     /// @notice The address of source
     address source;
     /// @notice Deadline for the transaction
@@ -28,8 +26,6 @@ struct AddLiquidityParams {
 struct RemoveLiquidityParams {
     /// @notice The id of the pool
     PoolId poolId;
-    /// @notice LP level
-    uint8 level;
     /// @notice LP amount to remove
     uint256 liquidity;
     /// @notice The token0 min amount to get

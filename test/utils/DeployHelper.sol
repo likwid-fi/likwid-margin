@@ -17,7 +17,6 @@ import {MarginParams} from "../../src/types/MarginParams.sol";
 import {MarginPosition} from "../../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../../src/types/LiquidityParams.sol";
 import {MarginPosition} from "../../src/types/MarginPosition.sol";
-import {LiquidityLevel} from "../../src/libraries/LiquidityLevel.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
@@ -162,7 +161,6 @@ contract DeployHelper is Test {
     function initNativeKey() internal {
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: nativeKey.toId(),
-            level: 4,
             amount0: 1 ether,
             amount1: 10 ether,
             amount0Min: 0,
@@ -176,7 +174,6 @@ contract DeployHelper is Test {
     function initTokensKey() internal {
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: tokensKey.toId(),
-            level: 4,
             amount0: 10 ether,
             amount1: 10 ether,
             amount0Min: 0,
@@ -190,7 +187,6 @@ contract DeployHelper is Test {
     function initUSDTKey() internal {
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: usdtKey.toId(),
-            level: 4,
             amount0: 1 ether,
             amount1: 100 ether,
             amount0Min: 0,
@@ -204,7 +200,6 @@ contract DeployHelper is Test {
     function initPoolLiquidity() internal {
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: tokensKey.toId(),
-            level: 4,
             amount0: 1e18,
             amount1: 1e18,
             amount0Min: 0,
@@ -215,7 +210,6 @@ contract DeployHelper is Test {
         pairPoolManager.addLiquidity(params);
         params = AddLiquidityParams({
             poolId: nativeKey.toId(),
-            level: 4,
             amount0: 1 ether,
             amount1: 100 ether,
             amount0Min: 0,
@@ -226,7 +220,6 @@ contract DeployHelper is Test {
         pairPoolManager.addLiquidity{value: 1 ether}(params);
         params = AddLiquidityParams({
             poolId: usdtKey.toId(),
-            level: 4,
             amount0: 1 ether,
             amount1: 100 ether,
             amount0Min: 0,

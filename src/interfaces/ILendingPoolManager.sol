@@ -29,7 +29,7 @@ interface ILendingPoolManager is IERC6909Accrues {
         external
         returns (uint256 originalAmount);
 
-    function mirrorInRealOut(PoolId poolId, PoolStatus memory status, Currency currency, uint256 amount)
+    function mirrorInRealOut(PoolId poolId, PoolStatus calldata status, Currency currency, uint256 amount)
         external
         returns (uint256 exchangeAmount);
 

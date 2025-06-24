@@ -13,7 +13,6 @@ import {PoolStatusLibrary} from "../src/types/PoolStatusLibrary.sol";
 import {MarginParams} from "../src/types/MarginParams.sol";
 import {MarginPosition} from "../src/types/MarginPosition.sol";
 import {AddLiquidityParams, RemoveLiquidityParams} from "../src/types/LiquidityParams.sol";
-import {LiquidityLevel} from "../src/libraries/LiquidityLevel.sol";
 // Solmate
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
@@ -33,7 +32,6 @@ import {HookMiner} from "./utils/HookMiner.sol";
 import {DeployHelper} from "./utils/DeployHelper.sol";
 
 contract PairPoolManagerTest is DeployHelper {
-    using LiquidityLevel for uint8;
     using PoolStatusLibrary for PoolStatus;
 
     function setUp() public {
@@ -51,12 +49,11 @@ contract PairPoolManagerTest is DeployHelper {
             amount0Min: 0,
             amount1Min: 0,
             source: address(this),
-            level: LiquidityLevel.BORROW_BOTH,
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: amount0}(params);
         uint256 uPoolId = marginLiquidity.getPoolId(poolId);
-        uint256 liquidity = marginLiquidity.balanceOf(address(this), LiquidityLevel.BORROW_BOTH.getLevelId(uPoolId));
+        uint256 liquidity = marginLiquidity.balanceOf(address(this), uPoolId);
         assertGt(liquidity, 0);
         (uint256 _reserves0, uint256 _reserves1) = pairPoolManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
@@ -64,7 +61,6 @@ contract PairPoolManagerTest is DeployHelper {
         vm.warp(3600);
         RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
             poolId: poolId,
-            level: LiquidityLevel.BORROW_BOTH,
             liquidity: liquidity / 2,
             amount0Min: 0,
             amount1Min: 0,
@@ -72,11 +68,10 @@ contract PairPoolManagerTest is DeployHelper {
         });
         vm.roll(100);
         pairPoolManager.removeLiquidity(removeParams);
-        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BORROW_BOTH.getLevelId(uPoolId));
+        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), uPoolId);
         assertEq(liquidityHalf, liquidity - liquidity / 2);
         removeParams = RemoveLiquidityParams({
             poolId: poolId,
-            level: LiquidityLevel.BORROW_BOTH,
             liquidity: liquidityHalf,
             amount0Min: 0,
             amount1Min: 0,
@@ -85,7 +80,7 @@ contract PairPoolManagerTest is DeployHelper {
         vm.roll(100);
         vm.warp(3600 * 2);
         pairPoolManager.removeLiquidity(removeParams);
-        liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BORROW_BOTH.getLevelId(uPoolId));
+        liquidityHalf = marginLiquidity.balanceOf(address(this), uPoolId);
         console.log("remove all liquidity:%s", liquidityHalf);
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         console.log("status.reserve0:%s,status.reserve1:%s", status.reserve0(), status.reserve1());
@@ -106,19 +101,17 @@ contract PairPoolManagerTest is DeployHelper {
             amount0Min: 0,
             amount1Min: 0,
             source: address(this),
-            level: LiquidityLevel.RETAIN_BOTH,
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: amount0}(params);
         uint256 uPoolId = marginLiquidity.getPoolId(poolId);
-        uint256 liquidity = marginLiquidity.balanceOf(address(this), LiquidityLevel.RETAIN_BOTH.getLevelId(uPoolId));
+        uint256 liquidity = marginLiquidity.balanceOf(address(this), uPoolId);
         assertGt(liquidity, 0);
         (uint256 _reserves0, uint256 _reserves1) = pairPoolManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
         assertEq(_reserves0, _reserves1);
         RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
             poolId: poolId,
-            level: LiquidityLevel.RETAIN_BOTH,
             liquidity: liquidity / 2,
             amount0Min: 0,
             amount1Min: 0,
@@ -127,11 +120,10 @@ contract PairPoolManagerTest is DeployHelper {
         vm.roll(100);
         vm.warp(3600);
         pairPoolManager.removeLiquidity(removeParams);
-        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.RETAIN_BOTH.getLevelId(uPoolId));
+        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), uPoolId);
         assertEq(liquidityHalf, liquidity - liquidity / 2);
         removeParams = RemoveLiquidityParams({
             poolId: poolId,
-            level: LiquidityLevel.RETAIN_BOTH,
             liquidity: liquidityHalf,
             amount0Min: 0,
             amount1Min: 0,
@@ -140,7 +132,7 @@ contract PairPoolManagerTest is DeployHelper {
         vm.roll(100);
         vm.warp(3600 * 2);
         pairPoolManager.removeLiquidity(removeParams);
-        liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.RETAIN_BOTH.getLevelId(uPoolId));
+        liquidityHalf = marginLiquidity.balanceOf(address(this), uPoolId);
         console.log("remove all liquidity:%s", liquidityHalf);
         PoolStatus memory status = pairPoolManager.getStatus(poolId);
         console.log("status.reserve0:%s,status.reserve1:%s", status.reserve0(), status.reserve1());
@@ -151,7 +143,6 @@ contract PairPoolManagerTest is DeployHelper {
             amount0Min: 0,
             amount1Min: 0,
             source: address(this),
-            level: LiquidityLevel.RETAIN_BOTH,
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: amount0}(params);
@@ -168,19 +159,17 @@ contract PairPoolManagerTest is DeployHelper {
             amount0Min: 0,
             amount1Min: 0,
             source: address(this),
-            level: 4,
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity(params);
         uint256 uPoolId = marginLiquidity.getPoolId(poolId);
-        uint256 liquidity = marginLiquidity.balanceOf(address(this), LiquidityLevel.BORROW_BOTH.getLevelId(uPoolId));
+        uint256 liquidity = marginLiquidity.balanceOf(address(this), uPoolId);
         assertGt(liquidity, 0);
         (uint256 _reserves0, uint256 _reserves1) = pairPoolManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
         assertEq(_reserves0, _reserves1);
         RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
             poolId: poolId,
-            level: 4,
             liquidity: liquidity / 2,
             amount0Min: 0,
             amount1Min: 0,
@@ -189,7 +178,7 @@ contract PairPoolManagerTest is DeployHelper {
         vm.roll(100);
         skip(100);
         pairPoolManager.removeLiquidity(removeParams);
-        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BORROW_BOTH.getLevelId(uPoolId));
+        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), uPoolId);
         assertEq(liquidityHalf, liquidity - liquidity / 2);
     }
 
@@ -204,19 +193,17 @@ contract PairPoolManagerTest is DeployHelper {
             amount0Min: 0,
             amount1Min: 0,
             source: address(this),
-            level: 4,
             deadline: type(uint256).max
         });
         pairPoolManager.addLiquidity{value: amount0}(params);
         uint256 uPoolId = marginLiquidity.getPoolId(poolId);
-        uint256 liquidity = marginLiquidity.balanceOf(address(this), LiquidityLevel.BORROW_BOTH.getLevelId(uPoolId));
+        uint256 liquidity = marginLiquidity.balanceOf(address(this), uPoolId);
         assertGt(liquidity, 0);
         (uint256 _reserves0, uint256 _reserves1) = pairPoolManager.getReserves(poolId);
         assertEq(_reserves0, amount0);
         assertEq(_reserves0, _reserves1);
         RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
             poolId: poolId,
-            level: 4,
             liquidity: liquidity / 2,
             amount0Min: 0,
             amount1Min: 0,
@@ -225,14 +212,11 @@ contract PairPoolManagerTest is DeployHelper {
         vm.roll(100);
         skip(100);
         pairPoolManager.removeLiquidity(removeParams);
-        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), LiquidityLevel.BORROW_BOTH.getLevelId(uPoolId));
+        uint256 liquidityHalf = marginLiquidity.balanceOf(address(this), uPoolId);
         assertEq(liquidityHalf, liquidity - liquidity / 2);
     }
 
-    function addLiquidity(address user, PoolId poolId, uint256 amount0, uint256 amount1, uint8 level)
-        internal
-        returns (uint256)
-    {
+    function addLiquidity(address user, PoolId poolId, uint256 amount0, uint256 amount1) internal returns (uint256) {
         vm.startPrank(user);
         tokenUSDT.approve(address(pairPoolManager), amount1);
         AddLiquidityParams memory params = AddLiquidityParams({
@@ -242,52 +226,11 @@ contract PairPoolManagerTest is DeployHelper {
             amount0Min: 0,
             amount1Min: 0,
             source: user,
-            level: level,
             deadline: type(uint256).max
         });
         uint256 liquidity = pairPoolManager.addLiquidity{value: amount0}(params);
         vm.stopPrank();
         return liquidity;
-    }
-
-    function test_hook_liquidity_level() public {
-        address user = vm.addr(1);
-        tokenUSDT.transfer(user, 10 ether);
-        (bool success,) = user.call{value: 10 ether}("");
-        assertTrue(success);
-        PoolId poolId = usdtKey.toId();
-        uint256 level1 = addLiquidity(user, poolId, 0.1 ether, 0.1 ether, LiquidityLevel.RETAIN_BOTH);
-        uint256 level2 = addLiquidity(user, poolId, 0.2 ether, 0.2 ether, LiquidityLevel.BORROW_TOKEN0);
-        uint256 level3 = addLiquidity(user, poolId, 0.3 ether, 0.3 ether, LiquidityLevel.BORROW_TOKEN1);
-        uint256 level4 = addLiquidity(user, poolId, 0.4 ether, 0.4 ether, LiquidityLevel.BORROW_BOTH);
-        uint256[4] memory liquidities = marginLiquidity.getPoolLiquidities(poolId, user);
-        (uint256 totalSupply, uint256 retainSupply0, uint256 retainSupply1) =
-            marginLiquidity.getPoolSupplies(address(pairPoolManager), poolId);
-        assertEq(level1, liquidities[0]);
-        assertEq(level2, liquidities[1]);
-        assertEq(level3, liquidities[2]);
-        assertEq(level4, liquidities[3]);
-        assertEq(level1 + level2 + level3 + level4, totalSupply);
-        assertEq(level1 + level3, retainSupply0);
-        assertEq(level1 + level2, retainSupply1);
-        {
-            vm.startPrank(user);
-            uint256 liquidity = 0.2 ether;
-            RemoveLiquidityParams memory params = RemoveLiquidityParams({
-                poolId: poolId,
-                liquidity: liquidity,
-                level: 4,
-                amount0Min: 0,
-                amount1Min: 0,
-                deadline: type(uint256).max
-            });
-            vm.roll(100);
-            skip(100);
-            pairPoolManager.removeLiquidity(params);
-            vm.stopPrank();
-        }
-        liquidities = marginLiquidity.getPoolLiquidities(poolId, user);
-        assertEq(level4 - 0.2 ether, liquidities[3]);
     }
 
     function test_OutOfRange() public {
@@ -296,7 +239,7 @@ contract PairPoolManagerTest is DeployHelper {
         (bool success,) = user.call{value: 10 ether}("");
         assertTrue(success);
         PoolId poolId = usdtKey.toId();
-        addLiquidity(user, poolId, 0.1 ether, 0.1 ether, LiquidityLevel.BORROW_TOKEN0);
+        addLiquidity(user, poolId, 0.1 ether, 0.1 ether);
         vm.startPrank(user);
         uint256 amount0 = 0.1 ether;
         uint256 amount1 = 0.09 ether;
@@ -308,7 +251,6 @@ contract PairPoolManagerTest is DeployHelper {
             amount0Min: amount0,
             amount1Min: amount1,
             source: user,
-            level: 1,
             deadline: type(uint256).max
         });
         vm.expectRevert(bytes("INSUFFICIENT_AMOUNT0"));
@@ -323,7 +265,6 @@ contract PairPoolManagerTest is DeployHelper {
             amount0Min: amount0,
             amount1Min: amount1,
             source: user,
-            level: 1,
             deadline: type(uint256).max
         });
         vm.expectRevert(bytes("INSUFFICIENT_AMOUNT1"));
@@ -343,46 +284,21 @@ contract PairPoolManagerTest is DeployHelper {
             amount0Min: 0,
             amount1Min: 0,
             source: address(this),
-            level: LiquidityLevel.BORROW_BOTH,
             deadline: type(uint256).max
         });
         uint256 liquidity = pairPoolManager.addLiquidity{value: amount0}(params);
-        uint256 balance = marginLiquidity.balanceOf(address(this), LiquidityLevel.BORROW_BOTH.getLevelId(uPoolId));
+        uint256 balance = marginLiquidity.balanceOf(address(this), uPoolId);
         assertEq(liquidity, balance, "liquidity==balance");
         skip(1000);
         RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
             poolId: poolId,
-            level: LiquidityLevel.BORROW_BOTH,
             liquidity: liquidity * 2,
             amount0Min: 0,
             amount1Min: 0,
             deadline: type(uint256).max
         });
         pairPoolManager.removeLiquidity(removeParams);
-        balance = marginLiquidity.balanceOf(address(this), LiquidityLevel.BORROW_BOTH.getLevelId(uPoolId));
+        balance = marginLiquidity.balanceOf(address(this), uPoolId);
         assertEq(0, balance, "balance==0");
-    }
-
-    function testAddLiquidityErrorReceiver() public {
-        uint256 amount0 = 1 ether;
-        uint256 amount1 = 1 ether;
-        PoolId poolId = nativeKey.toId();
-        AddLiquidityParams memory params = AddLiquidityParams({
-            poolId: poolId,
-            amount0: amount0,
-            amount1: amount1,
-            amount0Min: 0,
-            amount1Min: 0,
-            source: address(pairPoolManager),
-            level: LiquidityLevel.BORROW_BOTH,
-            deadline: type(uint256).max
-        });
-        uint256 lp = pairPoolManager.addLiquidity{value: amount0}(params);
-        uint256 lpId = LiquidityLevel.BORROW_BOTH.getLevelId(marginLiquidity.getPoolId(poolId));
-        vm.expectRevert(ERC6909Liquidity.NotAllowed.selector);
-        marginLiquidity.transfer(address(pairPoolManager), lpId, lp);
-        skip(100);
-        vm.expectRevert(ERC6909Liquidity.ErrorReceiver.selector);
-        marginLiquidity.transfer(address(pairPoolManager), lpId, lp);
     }
 }

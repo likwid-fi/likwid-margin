@@ -87,9 +87,7 @@ interface IPairPoolManager is IPairMarginManager {
 
     // ******************** EXTERNAL FUNCTIONS ********************
 
-    function mirrorInRealOut(PoolId poolId, PoolStatus memory status, Currency currency, uint256 amount)
-        external
-        returns (bool success);
+    function mirrorInRealOut(PoolId poolId, Currency currency, uint256 amount) external returns (bool success);
 
     function swapMirror(address recipient, PoolId poolId, bool zeroForOne, uint256 amountIn, uint256 amountOutMin)
         external
