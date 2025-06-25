@@ -146,6 +146,10 @@ contract DeployHelper is Test {
 
         marginLiquidity.addPoolManager(address(pairPoolManager));
         mirrorTokenManager.addPoolManager(address(pairPoolManager));
+
+        // Initialize the margin liquidity
+        marginLiquidity.setStageSize(0);
+        marginLiquidity.setStageDuration(0);
     }
 
     function deployHookAndRouter() internal {

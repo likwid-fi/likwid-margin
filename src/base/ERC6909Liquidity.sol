@@ -25,7 +25,6 @@ abstract contract ERC6909Liquidity is IERC6909 {
                              EXTEND STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    error NotAllowed();
     error ErrorReceiver();
 
     mapping(address => bool) public poolManagers;

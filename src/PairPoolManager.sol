@@ -45,6 +45,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     using CurrencyPoolLibrary for Currency;
     using PoolStatusLibrary for PoolStatus;
 
+    error EmptyPool();
     error InsufficientLiquidityMinted();
     error InsufficientLiquidityBurnt();
     error InsufficientOutputReceived();
@@ -254,6 +255,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         {
             (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
             (uint256 _totalSupply) = marginLiquidity.getTotalSupply(uPoolId);
+            if (_totalSupply == 0) revert EmptyPool();
             params.liquidity = marginLiquidity.removeLiquidity(msg.sender, uPoolId, params.liquidity);
             uint256 maxReserve0 = status.realReserve0;
             uint256 maxReserve1 = status.realReserve1;
