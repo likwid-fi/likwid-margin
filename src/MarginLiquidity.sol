@@ -4,26 +4,18 @@ pragma solidity ^0.8.26;
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
-import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 import {DoubleEndedQueue} from "./external/openzeppelin-contracts/DoubleEndedQueue.sol";
 // Local
 import {ERC6909Liquidity} from "./base/ERC6909Liquidity.sol";
-import {TimeLibrary} from "./libraries/TimeLibrary.sol";
 import {StageMath} from "./libraries/StageMath.sol";
-import {UQ112x112} from "./libraries/UQ112x112.sol";
-import {PerLibrary} from "./libraries/PerLibrary.sol";
+
 import {PoolStatus, PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IStatusBase} from "./interfaces/IStatusBase.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 
 contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
-    using SafeCast for uint256;
-    using UQ112x112 for *;
-    using PerLibrary for *;
-    using TimeLibrary for uint32;
     using StageMath for uint256;
-    using StageMath for uint256[];
     using PoolStatusLibrary for PoolStatus;
     using DoubleEndedQueue for DoubleEndedQueue.Uint256Deque;
 
@@ -62,7 +54,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         stageSize = _stageSize;
     }
 
-    // ********************  POOL CALL ********************
+    // ********************  INTERNAL CALL ********************
 
     function _lockLiquidity(uint256 id, uint256 amount) internal {
         if (stageDuration * stageSize == 0) {
@@ -86,19 +78,6 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
                 queue.pushBack(lastStage);
             }
         }
-    }
-
-    function addLiquidity(address sender, PoolId poolId, uint256 amount) external onlyPoolManager {
-        uint256 id = _getPoolId(poolId);
-        unchecked {
-            _mint(sender, sender, id, amount);
-        }
-        _lockLiquidity(id, amount);
-    }
-
-    function getLockedLiquidity(PoolId poolId) external view returns (uint256 lockedLiquidity) {
-        uint256 uPoolId = _getPoolId(poolId);
-        lockedLiquidity = _getLockedLiquidity(uPoolId);
     }
 
     function _getLockedLiquidity(uint256 id) internal view returns (uint256 lockedLiquidity) {
@@ -128,6 +107,16 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         }
     }
 
+    // ********************  POOL CALL ********************
+
+    function addLiquidity(address sender, PoolId poolId, uint256 amount) external onlyPoolManager {
+        uint256 id = _getPoolId(poolId);
+        unchecked {
+            _mint(sender, sender, id, amount);
+        }
+        _lockLiquidity(id, amount);
+    }
+
     function removeLiquidity(address sender, PoolId poolId, uint256 amount)
         external
         onlyPoolManager
@@ -155,6 +144,11 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
     }
 
     // ********************  EXTERNAL CALL ********************
+    function getLockedLiquidity(PoolId poolId) external view returns (uint256 lockedLiquidity) {
+        uint256 uPoolId = _getPoolId(poolId);
+        lockedLiquidity = _getLockedLiquidity(uPoolId);
+    }
+
     function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId) {
         uPoolId = _getPoolId(poolId);
     }

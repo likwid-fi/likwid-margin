@@ -355,7 +355,8 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
                 borrowMaxAmount = Math.min(borrowMaxAmount, flowMaxAmount);
 
                 if (params.borrowAmount > 0) {
-                    borrowAmount = Math.min(borrowMaxAmount, params.borrowAmount);
+                    require(borrowMaxAmount >= params.borrowAmount, "BORROW_TOO_MUCH");
+                    borrowAmount = params.borrowAmount;
                 } else {
                     borrowAmount = borrowMaxAmount;
                 }

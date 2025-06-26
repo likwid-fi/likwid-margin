@@ -1021,19 +1021,38 @@ contract MarginPositionManagerTest is DeployHelper {
         (bool success,) = user.call{value: 1 ether}("");
         assertTrue(success);
         (, uint256 borrowMax) = getBorrowMax(nativeKey.toId(), false, payValue);
+        bool marginForOne = false;
+        PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
+        borrowAmount = status.getAmountOut(!marginForOne, payValue);
+        uint256 flowMaxAmount = (marginForOne ? status.realReserve0 : status.realReserve1) * 20 / 100;
+        console.log("borrowAmount:%s,flowMaxAmount:%s", borrowAmount, flowMaxAmount);
         MarginParams memory params = MarginParams({
             poolId: nativeKey.toId(),
             marginForOne: false,
             leverage: 0,
             marginAmount: payValue,
-            borrowAmount: borrowMax,
-            borrowMaxAmount: 0,
+            borrowAmount: borrowAmount,
+            borrowMaxAmount: borrowMax,
             recipient: user,
             deadline: block.timestamp + 1000
         });
         vm.startPrank(user);
         uint256 beforeBalance = tokenB.balanceOf(user);
         assertEq(beforeBalance, 0);
+        vm.expectRevert(bytes("BORROW_TOO_MUCH"));
+        (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
+        // MinBorrowLevel is 1400000, so borrowAmount should be less than 1400000
+        borrowAmount = borrowAmount * 100 / 140;
+        params = MarginParams({
+            poolId: nativeKey.toId(),
+            marginForOne: false,
+            leverage: 0,
+            marginAmount: payValue,
+            borrowAmount: borrowAmount,
+            borrowMaxAmount: borrowMax,
+            recipient: user,
+            deadline: block.timestamp + 1000
+        });
         (positionId, borrowAmount) = marginPositionManager.margin{value: payValue}(params);
         uint256 afterBalance = tokenB.balanceOf(user);
         assertEq(positionId, 1);
