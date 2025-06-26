@@ -1170,11 +1170,7 @@ contract MarginPositionManagerTest is DeployHelper {
             (positionId, borrowAmount) = marginPositionManager.margin(borrowParams);
             console.log("borrowAmount:%s", borrowAmount);
         }
-        {
-            uint256 nowLiquidity = marginLiquidity.getPoolLiquidity(poolId, address(this));
-            assertGt(nowLiquidity, liquidity);
-            console.log("after margin:nowLiquidity%s, liquidity%s", nowLiquidity, liquidity);
-        }
+
         vm.stopPrank();
         {
             PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());
@@ -1292,10 +1288,10 @@ contract MarginPositionManagerTest is DeployHelper {
         marginPositionManager.liquidateBurn(positionId);
         uint256 afterLendingAmount0 = lendingPoolManager.balanceOf(address(this), nativeKey.currency0.toTokenId(poolId));
         uint256 afterLendingAmount1 = lendingPoolManager.balanceOf(address(this), nativeKey.currency1.toTokenId(poolId));
-        assertGt(afterLendingAmount0, beforeLendingAmount0);
-        assertLe(beforeLendingAmount1, afterLendingAmount1);
+        assertGt(afterLendingAmount0, beforeLendingAmount0, "afterLendingAmount0 > beforeLendingAmount0");
+        assertLe(beforeLendingAmount1, afterLendingAmount1, "beforeLendingAmount1 <= afterLendingAmount1");
         position = marginPositionManager.getPosition(positionId);
-        assertEq(position.borrowAmount, 0);
+        assertEq(position.borrowAmount, 0, "position.borrowAmount == 0");
 
         console.log("after liquidateBurn,before withdraw");
         PoolStatus memory status = pairPoolManager.getStatus(nativeKey.toId());

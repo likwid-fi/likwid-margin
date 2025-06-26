@@ -424,15 +424,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                     }
                 }
             }
-            if (interestStatus0.pairInterest + interestStatus1.pairInterest > 0) {
-                marginLiquidity.addInterests(
-                    poolId,
-                    status.reserve0() - interestStatus0.pairInterest,
-                    status.reserve1() - interestStatus1.pairInterest,
-                    interestStatus0.pairInterest,
-                    interestStatus1.pairInterest
-                );
-            }
+
             status.rate0CumulativeLast = rate0CumulativeLast;
             status.rate1CumulativeLast = rate1CumulativeLast;
         }

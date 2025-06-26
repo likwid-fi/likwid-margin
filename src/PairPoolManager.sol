@@ -217,8 +217,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     {
         PoolStatus memory status = statusManager.setBalances(msg.sender, params.poolId);
         if (status.key.currency0.isAddressZero() && params.amount0 != msg.value) revert InsufficientValue();
-        uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
-        uint256 _totalSupply = marginLiquidity.balanceOf(address(this), uPoolId);
+        uint256 _totalSupply = marginLiquidity.getTotalSupply(params.poolId);
         uint256 amount0In;
         uint256 amount1In;
         (liquidity, amount0In, amount1In) =
@@ -227,7 +226,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             status.key.currency0.transfer(msg.sender, params.amount0 - amount0In);
         }
         if (liquidity == 0) revert InsufficientLiquidityMinted();
-        marginLiquidity.addLiquidity(msg.sender, uPoolId, liquidity);
+        marginLiquidity.addLiquidity(msg.sender, params.poolId, liquidity);
         poolManager.unlock(abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, amount0In, amount1In)));
         statusManager.update(params.poolId);
         emit Mint(params.poolId, params.source, msg.sender, liquidity, amount0In, amount1In);
@@ -251,17 +250,14 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         returns (uint256 amount0, uint256 amount1)
     {
         PoolStatus memory status = statusManager.setBalances(msg.sender, params.poolId);
-        uint256 uPoolId = marginLiquidity.getPoolId(params.poolId);
         {
             (uint256 _reserve0, uint256 _reserve1) = status.getReserves();
-            (uint256 _totalSupply) = marginLiquidity.getTotalSupply(uPoolId);
-            if (_totalSupply == 0) revert EmptyPool();
-            params.liquidity = marginLiquidity.removeLiquidity(msg.sender, uPoolId, params.liquidity);
-            uint256 maxReserve0 = status.realReserve0;
-            uint256 maxReserve1 = status.realReserve1;
+            uint256 _totalSupply;
+            (_totalSupply, params.liquidity) =
+                marginLiquidity.removeLiquidity(msg.sender, params.poolId, params.liquidity);
             amount0 = Math.mulDiv(params.liquidity, _reserve0, _totalSupply);
             amount1 = Math.mulDiv(params.liquidity, _reserve1, _totalSupply);
-            require(amount0 <= maxReserve0 && amount1 <= maxReserve1, "NOT_ENOUGH_RESERVE");
+            require(amount0 <= status.realReserve0 && amount1 <= status.realReserve1, "NOT_ENOUGH_RESERVE");
             if (amount0 == 0 || amount1 == 0) revert InsufficientLiquidityBurnt();
             if (
                 params.amount0Min > 0 && amount0 < params.amount0Min
@@ -408,34 +404,16 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         uint256 burnAmount = pairAmount + lendingAmount;
         int256 diff = repayAmount.toInt256() - params.debtAmount.toInt256();
         if (diff != 0) {
-            int256 interest0;
-            int256 interest1;
             int256 lendingInterest;
             uint256 diffUint = diff > 0 ? uint256(diff) : uint256(-diff);
             (uint256 interestReserve0, uint256 interestReserve1) = (status.reserve0(), status.reserve1());
             uint256 pairReserve = params.marginForOne ? interestReserve0 : interestReserve1;
             uint256 lendingReserve = params.marginForOne ? status.lendingReserve0() : status.lendingReserve1();
             uint256 lendingDiff = Math.mulDiv(diffUint, lendingReserve, pairReserve + lendingReserve);
-            uint256 pairDiff = diffUint - lendingDiff;
             if (diff > 0) {
-                if (params.marginForOne) {
-                    interest0 = pairDiff.toInt256();
-                } else {
-                    interest1 = pairDiff.toInt256();
-                }
                 lendingInterest = lendingDiff.toInt256();
             } else {
-                if (params.marginForOne) {
-                    interest0 = -(pairDiff.toInt256());
-                } else {
-                    interest1 = -(pairDiff.toInt256());
-                }
                 lendingInterest = -(lendingDiff.toInt256());
-            }
-            if (interest0 != 0 || interest1 != 0) {
-                marginLiquidity.changeLiquidity(
-                    params.poolId, status.reserve0(), status.reserve1(), interest0, interest1
-                );
             }
             if (lendingInterest != 0) {
                 lendingPoolManager.updateInterests(borrowTokenId, lendingInterest);
