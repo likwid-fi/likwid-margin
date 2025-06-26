@@ -80,9 +80,9 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         }
     }
 
-    function _getLockedLiquidity(uint256 id) internal view returns (uint256 lockedLiquidity) {
+    function _getLockedLiquidity(uint256 id) internal view returns (uint256 lockedLiquidity, uint256 expiredSize) {
         if (stageDuration * stageSize == 0) {
-            return lockedLiquidity; // No locking if stageDuration or stageSize is zero
+            return (lockedLiquidity, expiredSize); // No locking if stageDuration or stageSize is zero
         }
         DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
         if (!queue.empty()) {
@@ -90,8 +90,8 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
             uint256 oldestTimestamp = currentTimestamp - uint256(stageDuration) * stageSize;
             uint256 lowLimit = currentTimestamp - MAX_LOCK_SECONDS; // Maximum lock time limit
             uint256 stageStep = 0;
-            for (uint256 i = queue.length(); i > 0; i--) {
-                uint256 stage = queue.at(i - 1);
+            for (expiredSize = queue.length(); expiredSize > 0; expiredSize--) {
+                uint256 stage = queue.at(expiredSize - 1);
                 (uint40 timestamp, uint256 liquidity) = stage.decode();
                 if (timestamp < oldestTimestamp || timestamp < lowLimit) {
                     break; // Skip stages that are too old
@@ -103,6 +103,15 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
                         break;
                     }
                 }
+            }
+        }
+    }
+
+    function _clearExpiredQueue(uint256 id, uint256 expiredSize) internal {
+        DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
+        if (queue.length() > expiredSize) {
+            for (; expiredSize > 0; expiredSize--) {
+                queue.popFront();
             }
         }
     }
@@ -129,7 +138,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         }
         uint256 balance = balanceOf[sender][id];
         liquidityRemoved = Math.min(balance, amount);
-        uint256 lockedLiquidity = _getLockedLiquidity(id);
+        (uint256 lockedLiquidity, uint256 expiredSize) = _getLockedLiquidity(id);
         if (lockedLiquidity > _totalSupply) {
             revert LiquidityLocked();
         } else {
@@ -141,12 +150,13 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         unchecked {
             _burn(sender, sender, id, liquidityRemoved);
         }
+        _clearExpiredQueue(id, expiredSize);
     }
 
     // ********************  EXTERNAL CALL ********************
     function getLockedLiquidity(PoolId poolId) external view returns (uint256 lockedLiquidity) {
         uint256 uPoolId = _getPoolId(poolId);
-        lockedLiquidity = _getLockedLiquidity(uPoolId);
+        (lockedLiquidity,) = _getLockedLiquidity(uPoolId);
     }
 
     function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId) {
