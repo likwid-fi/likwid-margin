@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
+import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 import {DoubleEndedQueue} from "./external/openzeppelin-contracts/DoubleEndedQueue.sol";
 // Local
 import {ERC6909Liquidity} from "./base/ERC6909Liquidity.sol";
@@ -15,6 +16,7 @@ import {IStatusBase} from "./interfaces/IStatusBase.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 
 contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
+    using SafeCast for uint256;
     using StageMath for uint256;
     using PoolStatusLibrary for PoolStatus;
     using DoubleEndedQueue for DoubleEndedQueue.Uint256Deque;
@@ -23,7 +25,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
     error PoolIsEmpty();
 
     mapping(address => bool) public poolManagers;
-    uint256 constant MAX_LOCK_SECONDS = 10 days;
+    uint40 public lastStageTimestamp; // Timestamp of the last stage
     uint32 public stageDuration = 1 hours; // default: 1 hour seconds
     uint32 public stageSize = 10; // default: 10 stages
     mapping(uint256 => DoubleEndedQueue.Uint256Deque) liquidityLockedQueue;
@@ -60,58 +62,46 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         if (stageDuration * stageSize == 0) {
             return; // No locking if stageDuration or stageSize is zero
         }
+        if (lastStageTimestamp == 0) {
+            // Initialize lastStageTimestamp if it's not set
+            lastStageTimestamp = uint40(block.timestamp / stageDuration * stageDuration);
+        }
         DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
+        uint128 lockAmount = (amount / stageSize).toUint128() + 1; // Ensure at least 1 unit is locked per stage
+        uint256 zeroStage = 0;
         if (queue.empty()) {
-            uint40 lastTimestamp = uint40((block.timestamp / stageDuration + 1) * stageDuration);
-            uint256 lastStage = StageMath.encode(lastTimestamp, amount);
-            queue.pushBack(lastStage);
+            for (uint32 i = 0; i < stageSize; i++) {
+                queue.pushBack(zeroStage.add(lockAmount));
+            }
         } else {
-            uint256 lastStage = queue.back();
-            (uint40 lastTimestamp, uint256 lastLiquidity) = lastStage.decode();
-            uint40 currentTimestamp = uint40(block.timestamp);
-            if (lastTimestamp > currentTimestamp) {
-                lastStage = StageMath.encode(lastTimestamp, lastLiquidity + amount);
-                queue.set(queue.length() - 1, lastStage);
-            } else {
-                lastTimestamp = uint40((block.timestamp / stageDuration + 1) * stageDuration);
-                lastStage = StageMath.encode(lastTimestamp, amount);
-                queue.pushBack(lastStage);
+            uint256 queueSize = queue.length();
+            for (uint256 i = 0; i < queueSize; i++) {
+                uint256 stage = queue.at(i);
+                queue.set(i, stage.add(lockAmount));
+            }
+            for (uint256 i = queueSize; i < stageSize; i++) {
+                queue.pushBack(zeroStage.add(lockAmount));
             }
         }
     }
 
-    function _getLockedLiquidity(uint256 id) internal view returns (uint256 lockedLiquidity, uint256 expiredSize) {
-        if (stageDuration * stageSize == 0) {
-            return (lockedLiquidity, expiredSize); // No locking if stageDuration or stageSize is zero
-        }
-        DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
-        if (!queue.empty()) {
-            uint256 currentTimestamp = block.timestamp;
-            uint256 oldestTimestamp = currentTimestamp - uint256(stageDuration) * stageSize;
-            uint256 lowLimit = currentTimestamp - MAX_LOCK_SECONDS; // Maximum lock time limit
-            uint256 stageStep = 0;
-            for (expiredSize = queue.length(); expiredSize > 0; expiredSize--) {
-                uint256 stage = queue.at(expiredSize - 1);
-                (uint40 timestamp, uint256 liquidity) = stage.decode();
-                if (timestamp < oldestTimestamp || timestamp < lowLimit) {
-                    break; // Skip stages that are too old
+    function _getReleasedLiquidity(uint256 id)
+        internal
+        view
+        returns (uint128 releasedLiquidity, uint128 nextReleasedLiquidity)
+    {
+        releasedLiquidity = type(uint128).max;
+        if (stageDuration * stageSize > 0) {
+            DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
+            if (!queue.empty()) {
+                uint256 currentStage = queue.front();
+                (, releasedLiquidity) = currentStage.decode();
+                if (
+                    queue.length() > 1 && currentStage.isFree() && block.timestamp >= lastStageTimestamp + stageDuration
+                ) {
+                    uint256 nextStage = queue.at(1);
+                    (, nextReleasedLiquidity) = nextStage.decode();
                 }
-                for (; stageStep < stageSize; stageStep++) {
-                    uint256 lowTime = (currentTimestamp / stageDuration - stageStep) * stageDuration;
-                    if (timestamp > lowTime) {
-                        lockedLiquidity += Math.mulDiv(liquidity, stageSize - stageStep, stageSize);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    function _clearExpiredQueue(uint256 id, uint256 expiredSize) internal {
-        DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
-        if (queue.length() > expiredSize) {
-            for (; expiredSize > 0; expiredSize--) {
-                queue.popFront();
             }
         }
     }
@@ -138,25 +128,47 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         }
         uint256 balance = balanceOf[sender][id];
         liquidityRemoved = Math.min(balance, amount);
-        (uint256 lockedLiquidity, uint256 expiredSize) = _getLockedLiquidity(id);
-        if (lockedLiquidity > _totalSupply) {
-            revert LiquidityLocked();
-        } else {
-            uint256 availableLiquidity = _totalSupply - lockedLiquidity;
+        if (stageDuration * stageSize > 0) {
+            (uint128 releasedLiquidity, uint128 nextReleasedLiquidity) = _getReleasedLiquidity(id);
+            uint256 availableLiquidity = releasedLiquidity + nextReleasedLiquidity;
             if (availableLiquidity < liquidityRemoved) {
                 revert LiquidityLocked();
+            }
+            DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
+            if (!queue.empty()) {
+                if (nextReleasedLiquidity > 0) {
+                    // If next stage is free, we can release the next stage liquidity
+                    uint256 currentStage = queue.popFront(); // Remove the current stage
+                    uint256 nextStage = queue.front();
+                    (, uint128 currentLiquidity) = currentStage.decode();
+                    if (currentLiquidity > liquidityRemoved) {
+                        nextStage = nextStage.add((currentLiquidity - liquidityRemoved).toUint128());
+                    } else {
+                        nextStage = nextStage.sub((liquidityRemoved - currentLiquidity).toUint128());
+                    }
+                    queue.set(0, nextStage);
+                    // Update lastStageTimestamp to the next stage time
+                    lastStageTimestamp = uint40(block.timestamp / stageDuration * stageDuration);
+                } else {
+                    // If next stage is not free, we just reduce the current stage liquidity
+                    uint256 currentStage = queue.front();
+                    queue.set(0, currentStage.sub(liquidityRemoved.toUint128()));
+                }
             }
         }
         unchecked {
             _burn(sender, sender, id, liquidityRemoved);
         }
-        _clearExpiredQueue(id, expiredSize);
     }
 
     // ********************  EXTERNAL CALL ********************
-    function getLockedLiquidity(PoolId poolId) external view returns (uint256 lockedLiquidity) {
+    function getReleasedLiquidity(PoolId poolId) external view returns (uint128 releasedLiquidity) {
         uint256 uPoolId = _getPoolId(poolId);
-        (lockedLiquidity,) = _getLockedLiquidity(uPoolId);
+        uint128 nextReleasedLiquidity;
+        (releasedLiquidity, nextReleasedLiquidity) = _getReleasedLiquidity(uPoolId);
+        if (nextReleasedLiquidity > 0) {
+            releasedLiquidity += nextReleasedLiquidity;
+        }
     }
 
     function getPoolId(PoolId poolId) external pure returns (uint256 uPoolId) {

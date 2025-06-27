@@ -55,18 +55,18 @@ contract MarginLiquidityTest is DeployHelper {
             deadline: type(uint256).max
         });
         uint256 liquidity = pairPoolManager.addLiquidity(params);
-        uint256 lockedLiquidity = marginLiquidity.getLockedLiquidity(poolId);
+        uint256 releaseLiquidity = marginLiquidity.getReleasedLiquidity(poolId);
         assertEq(liquidity, 1e18, "Liquidity should be 1e18");
-        assertEq(lockedLiquidity, 1e18, "Locked liquidity should be 1e18");
+        assertEq(releaseLiquidity, 1e18 / 10, "Release 1 liquidity should be 1e17");
         skip(1 hours + 1);
-        lockedLiquidity = marginLiquidity.getLockedLiquidity(poolId);
-        assertEq(lockedLiquidity, liquidity * 9 / 10, "Locked liquidity should be 9 / 10 after first stage ends");
+        releaseLiquidity = marginLiquidity.getReleasedLiquidity(poolId);
+        assertEq(releaseLiquidity, 1e18 / 10, "Release 2 liquidity should be 1e17");
         skip(1 hours + 1);
-        lockedLiquidity = marginLiquidity.getLockedLiquidity(poolId);
-        assertEq(lockedLiquidity, liquidity * 8 / 10, "Locked liquidity should be 8 / 10 after second stage ends");
+        releaseLiquidity = marginLiquidity.getReleasedLiquidity(poolId);
+        assertEq(releaseLiquidity, 1e18 / 10, "Release 3 liquidity should be 1e17");
         skip(10 days);
-        lockedLiquidity = marginLiquidity.getLockedLiquidity(poolId);
-        assertEq(lockedLiquidity, 0, "Locked liquidity should be 0");
+        releaseLiquidity = marginLiquidity.getReleasedLiquidity(poolId);
+        assertEq(releaseLiquidity, 1e18 / 10, "Release 4 liquidity should be 1e17");
     }
 
     function test_double_AddLiquidity() public {
@@ -81,15 +81,9 @@ contract MarginLiquidityTest is DeployHelper {
             deadline: type(uint256).max
         });
         uint256 liquidity = pairPoolManager.addLiquidity(params);
-        uint256 lockedLiquidity = marginLiquidity.getLockedLiquidity(poolId);
+        uint256 releaseLiquidity = marginLiquidity.getReleasedLiquidity(poolId);
         assertEq(liquidity, 1e18, "Liquidity should be 1e18");
-        assertEq(lockedLiquidity, 1e18, "Locked liquidity should be 1e18");
-        skip(1 hours + 1);
-        lockedLiquidity = marginLiquidity.getLockedLiquidity(poolId);
-        assertEq(lockedLiquidity, liquidity * 9 / 10, "Locked liquidity should be 9 / 10 after first stage ends");
-        skip(1 hours + 1);
-        lockedLiquidity = marginLiquidity.getLockedLiquidity(poolId);
-        assertEq(lockedLiquidity, liquidity * 8 / 10, "Locked liquidity should be 8 / 10 after second stage ends");
+        assertEq(releaseLiquidity, 1e18 / 10, "Release 1 liquidity should be 1e17");
         params = AddLiquidityParams({
             poolId: poolId,
             amount0: 1e18,
@@ -101,22 +95,8 @@ contract MarginLiquidityTest is DeployHelper {
         });
         uint256 liquidity2 = pairPoolManager.addLiquidity(params);
         assertEq(liquidity2, 1e18, "Liquidity2 should be 1e18");
-        lockedLiquidity = marginLiquidity.getLockedLiquidity(poolId);
-        assertEq(
-            lockedLiquidity,
-            liquidity * 8 / 10 + liquidity2,
-            "Locked liquidity should add liquidity2 after second stage ends"
-        );
-        skip(1 hours + 1);
-        lockedLiquidity = marginLiquidity.getLockedLiquidity(poolId);
-        assertEq(
-            lockedLiquidity,
-            liquidity * 7 / 10 + liquidity2 * 9 / 10,
-            "Locked liquidity2 should be (liquidity * 7 / 10 + liquidity2 * 9 / 10) after first stage ends"
-        );
-        skip(10 days);
-        lockedLiquidity = marginLiquidity.getLockedLiquidity(poolId);
-        assertEq(lockedLiquidity, 0, "Locked liquidity should be 0");
+        releaseLiquidity = marginLiquidity.getReleasedLiquidity(poolId);
+        assertEq(releaseLiquidity, liquidity / 10 + liquidity2 / 10, "Release 2 liquidity should be 1e17 + 1e17");
     }
 
     function test_single_removeLiquidity() public {
@@ -131,35 +111,61 @@ contract MarginLiquidityTest is DeployHelper {
             deadline: type(uint256).max
         });
         uint256 liquidity = pairPoolManager.addLiquidity(params);
-        uint256 lockedLiquidity = marginLiquidity.getLockedLiquidity(poolId);
+        uint256 releaseLiquidity = marginLiquidity.getReleasedLiquidity(poolId);
         assertEq(liquidity, 1e18, "Liquidity should be 1e18");
-        assertEq(lockedLiquidity, 1e18, "Locked liquidity should be 1e18");
+        assertEq(releaseLiquidity, 1e18 / 10, "Release 1 liquidity should be 1e17");
         skip(1 hours + 1);
-        lockedLiquidity = marginLiquidity.getLockedLiquidity(poolId);
-        assertEq(lockedLiquidity, liquidity * 9 / 10, "Locked liquidity should be 9 / 10 after first stage ends");
-        uint256 removeLiquidity = liquidity - lockedLiquidity;
         RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
             poolId: poolId,
-            liquidity: removeLiquidity,
+            liquidity: releaseLiquidity,
             amount0Min: 0,
             amount1Min: 0,
             deadline: type(uint256).max
         });
         pairPoolManager.removeLiquidity(removeParams);
+        uint256 releaseLiquidity01 = marginLiquidity.getReleasedLiquidity(poolId);
+        releaseLiquidity += 100;
+        assertLt(releaseLiquidity01, releaseLiquidity, "Release liquidity should be less than 1e17 + 100");
+        removeParams = RemoveLiquidityParams({
+            poolId: poolId,
+            liquidity: releaseLiquidity,
+            amount0Min: 0,
+            amount1Min: 0,
+            deadline: type(uint256).max
+        });
         vm.expectRevert(MarginLiquidity.LiquidityLocked.selector);
         pairPoolManager.removeLiquidity(removeParams);
         skip(1 hours + 1);
-        pairPoolManager.removeLiquidity(removeParams);
-        skip(10 days);
         removeParams = RemoveLiquidityParams({
             poolId: poolId,
-            liquidity: liquidity,
+            liquidity: releaseLiquidity / 2,
+            amount0Min: 0,
+            amount1Min: 0,
+            deadline: type(uint256).max
+        });
+        pairPoolManager.removeLiquidity(removeParams);
+        skip(1 hours + 1);
+        removeParams = RemoveLiquidityParams({
+            poolId: poolId,
+            liquidity: releaseLiquidity / 2,
             amount0Min: 0,
             amount1Min: 0,
             deadline: type(uint256).max
         });
         pairPoolManager.removeLiquidity(removeParams);
         uint256 lp = marginLiquidity.getPoolLiquidity(poolId, address(this));
-        assertEq(lp, 0, "LP should be 0 after removing all liquidity");
+        assertGt(lp, 0, "Liquidity should be greater than 0");
+        while (lp > 0) {
+            skip(1 hours + 1);
+            removeParams = RemoveLiquidityParams({
+                poolId: poolId,
+                liquidity: releaseLiquidity / 2,
+                amount0Min: 0,
+                amount1Min: 0,
+                deadline: type(uint256).max
+            });
+            pairPoolManager.removeLiquidity(removeParams);
+            lp = marginLiquidity.getPoolLiquidity(poolId, address(this));
+        }
     }
 }
