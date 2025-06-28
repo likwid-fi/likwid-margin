@@ -99,7 +99,7 @@ contract MarginLiquidityTest is DeployHelper {
         assertEq(releaseLiquidity, liquidity / 10 + liquidity2 / 10, "Release 2 liquidity should be 1e17 + 1e17");
     }
 
-    function test_single_removeLiquidity() public {
+    function test_removeLiquidity() public {
         PoolId poolId = tokensKey.toId();
         AddLiquidityParams memory params = AddLiquidityParams({
             poolId: poolId,
@@ -167,5 +167,23 @@ contract MarginLiquidityTest is DeployHelper {
             pairPoolManager.removeLiquidity(removeParams);
             lp = marginLiquidity.getPoolLiquidity(poolId, address(this));
         }
+        liquidity = pairPoolManager.addLiquidity(params);
+        uint256 newReleaseLiquidity = marginLiquidity.getReleasedLiquidity(poolId);
+        console.log("New release liquidity: %s,liquidity:%s", newReleaseLiquidity, liquidity);
+        removeParams = RemoveLiquidityParams({
+            poolId: poolId,
+            liquidity: liquidity / 10,
+            amount0Min: 0,
+            amount1Min: 0,
+            deadline: type(uint256).max
+        });
+        pairPoolManager.removeLiquidity(removeParams);
+        newReleaseLiquidity = marginLiquidity.getReleasedLiquidity(poolId);
+        console.log("New release liquidity: %s,liquidity:%s", newReleaseLiquidity, liquidity);
+        vm.expectRevert(MarginLiquidity.LiquidityLocked.selector);
+        pairPoolManager.removeLiquidity(removeParams);
+        skip(1 hours + 1);
+        newReleaseLiquidity = marginLiquidity.getReleasedLiquidity(poolId);
+        console.log("New release liquidity: %s,liquidity:%s", newReleaseLiquidity, liquidity);
     }
 }

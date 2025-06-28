@@ -67,7 +67,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
             lastStageTimestamp = uint40(block.timestamp / stageDuration * stageDuration);
         }
         DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
-        uint128 lockAmount = (amount / stageSize).toUint128() + 1; // Ensure at least 1 unit is locked per stage
+        uint128 lockAmount = Math.ceilDiv(amount, stageSize).toUint128(); // Ensure at least 1 unit is locked per stage
         uint256 zeroStage = 0;
         if (queue.empty()) {
             for (uint32 i = 0; i < stageSize; i++) {
@@ -95,7 +95,8 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
             DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
             if (!queue.empty()) {
                 uint256 currentStage = queue.front();
-                (, releasedLiquidity) = currentStage.decode();
+                uint256 total;
+                (total, releasedLiquidity) = currentStage.decode();
                 if (
                     queue.length() > 1 && currentStage.isFree() && block.timestamp >= lastStageTimestamp + stageDuration
                 ) {
@@ -152,7 +153,15 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
                 } else {
                     // If next stage is not free, we just reduce the current stage liquidity
                     uint256 currentStage = queue.front();
-                    queue.set(0, currentStage.sub(liquidityRemoved.toUint128()));
+                    uint256 afterStage;
+                    if (queue.length() == 1) {
+                        afterStage = currentStage.subTotal(liquidityRemoved.toUint128());
+                        // Update lastStageTimestamp
+                        lastStageTimestamp = uint40(block.timestamp / stageDuration * stageDuration);
+                    } else {
+                        afterStage = currentStage.sub(liquidityRemoved.toUint128());
+                    }
+                    queue.set(0, afterStage);
                 }
             }
         }
