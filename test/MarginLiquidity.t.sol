@@ -186,4 +186,66 @@ contract MarginLiquidityTest is DeployHelper {
         newReleaseLiquidity = marginLiquidity.getReleasedLiquidity(poolId);
         console.log("New release liquidity: %s,liquidity:%s", newReleaseLiquidity, liquidity);
     }
+
+    function test_getStageLiquidities() public {
+        PoolId poolId = tokensKey.toId();
+        AddLiquidityParams memory params = AddLiquidityParams({
+            poolId: poolId,
+            amount0: 1e18,
+            amount1: 1e18,
+            amount0Min: 0,
+            amount1Min: 0,
+            source: address(this),
+            deadline: type(uint256).max
+        });
+        uint256 liquidity = pairPoolManager.addLiquidity(params);
+        uint256 stageLiquidity = liquidity / 10;
+        uint128[][] memory liquidities = marginLiquidity.getStageLiquidities(poolId);
+        assertEq(liquidities.length, 10, "Stage size should be 10");
+        assertEq(liquidities[0][0], stageLiquidity, "First stage total liquidity should be 1e17");
+        assertEq(liquidities[0][1], stageLiquidity, "First stage liquidity should be 1e17");
+        assertEq(liquidities[9][1], stageLiquidity, "Last stage liquidity should be 1e17");
+        RemoveLiquidityParams memory removeParams = RemoveLiquidityParams({
+            poolId: poolId,
+            liquidity: stageLiquidity,
+            amount0Min: 0,
+            amount1Min: 0,
+            deadline: type(uint256).max
+        });
+        pairPoolManager.removeLiquidity(removeParams);
+        vm.expectRevert(MarginLiquidity.LiquidityLocked.selector);
+        pairPoolManager.removeLiquidity(removeParams);
+        liquidities = marginLiquidity.getStageLiquidities(poolId);
+        assertEq(liquidities.length, 10, "Stage size should be 10");
+        assertEq(liquidities[0][0], stageLiquidity, "First stage total liquidity should be 1e17");
+        assertEq(liquidities[0][1], 0, "First stage liquidity should be zero after removal");
+        skip(1 hours + 1);
+        pairPoolManager.removeLiquidity(removeParams);
+        liquidities = marginLiquidity.getStageLiquidities(poolId);
+        assertEq(liquidities.length, 10, "Stage size should be 10");
+        assertEq(liquidities[0][0], stageLiquidity, "First stage total liquidity should be 1e17");
+        assertEq(liquidities[0][1], 0, "First stage liquidity should be zero after removal");
+        assertEq(liquidities[9][0], 0, "Last stage total liquidity should be 0");
+        assertEq(liquidities[9][1], 0, "Last stage liquidity should be 0");
+        params = AddLiquidityParams({
+            poolId: poolId,
+            amount0: 0.5e18,
+            amount1: 0.5e18,
+            amount0Min: 0,
+            amount1Min: 0,
+            source: address(this),
+            deadline: type(uint256).max
+        });
+        liquidity = pairPoolManager.addLiquidity(params);
+        assertEq(liquidity, 0.5e18, "Liquidity should be 0.5e18");
+        uint256 stageAddedLiquidity = liquidity / 10;
+        liquidities = marginLiquidity.getStageLiquidities(poolId);
+        assertEq(liquidities.length, 10, "Stage size should be 10");
+        assertEq(
+            liquidities[0][0], stageLiquidity + stageAddedLiquidity, "First stage total liquidity should be 1.5e17"
+        );
+        assertEq(liquidities[0][1], stageAddedLiquidity, "First stage liquidity should be 0.5e17 after addition");
+        assertEq(liquidities[9][0], stageAddedLiquidity, "Last stage total liquidity should be 0.5e17");
+        assertEq(liquidities[9][1], stageAddedLiquidity, "Last stage liquidity should be 0.5e17");
+    }
 }

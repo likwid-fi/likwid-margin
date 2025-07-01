@@ -27,7 +27,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
     mapping(address => bool) public poolManagers;
     uint40 public lastStageTimestamp; // Timestamp of the last stage
     uint32 public stageDuration = 1 hours; // default: 1 hour seconds
-    uint32 public stageSize = 10; // default: 10 stages
+    uint32 public stageSize = 5; // default: 5 stages
     mapping(uint256 => DoubleEndedQueue.Uint256Deque) liquidityLockedQueue;
 
     constructor(address initialOwner) Owned(initialOwner) {
@@ -156,10 +156,12 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
                     uint256 afterStage;
                     if (queue.length() == 1) {
                         afterStage = currentStage.subTotal(liquidityRemoved.toUint128());
-                        // Update lastStageTimestamp
-                        lastStageTimestamp = uint40(block.timestamp / stageDuration * stageDuration);
                     } else {
                         afterStage = currentStage.sub(liquidityRemoved.toUint128());
+                    }
+                    if (!currentStage.isFree() || queue.length() == 1) {
+                        // Update lastStageTimestamp
+                        lastStageTimestamp = uint40(block.timestamp / stageDuration * stageDuration);
                     }
                     queue.set(0, afterStage);
                 }
@@ -177,6 +179,21 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         (releasedLiquidity, nextReleasedLiquidity) = _getReleasedLiquidity(uPoolId);
         if (nextReleasedLiquidity > 0) {
             releasedLiquidity += nextReleasedLiquidity;
+        }
+    }
+
+    function getStageLiquidities(PoolId poolId) external view returns (uint128[][] memory liquidities) {
+        uint256 uPoolId = _getPoolId(poolId);
+        liquidities = new uint128[][](stageSize);
+        DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[uPoolId];
+        for (uint32 i = 0; i < stageSize; i++) {
+            liquidities[i] = new uint128[](2);
+        }
+        for (uint32 i = 0; i < queue.length(); i++) {
+            uint256 stage = queue.at(i);
+            (uint128 total, uint128 liquidity) = stage.decode();
+            liquidities[i][0] = total;
+            liquidities[i][1] = liquidity;
         }
     }
 
