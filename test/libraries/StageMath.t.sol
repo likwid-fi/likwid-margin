@@ -27,10 +27,13 @@ contract StageMathTest is Test {
 
     function test_isFree() public pure {
         uint256 stage = 0;
-        assertTrue(StageMath.isFree(stage));
+        uint32 leavePart = 5; // Default level part
+        assertTrue(StageMath.isFree(stage, leavePart));
         stage = stage.add(100);
-        assertFalse(StageMath.isFree(stage));
+        assertFalse(StageMath.isFree(stage, leavePart));
         stage = stage.sub(50);
-        assertTrue(StageMath.isFree(stage), "Stage should be free after reducing liquidity");
+        assertFalse(StageMath.isFree(stage, leavePart), "Stage should not be free after reducing liquidity");
+        stage = stage.sub(30);
+        assertTrue(StageMath.isFree(stage, leavePart), "Stage should be free after reducing liquidity");
     }
 }

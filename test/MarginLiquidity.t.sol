@@ -147,7 +147,7 @@ contract MarginLiquidityTest is DeployHelper {
         skip(1 hours + 1);
         removeParams = RemoveLiquidityParams({
             poolId: poolId,
-            liquidity: releaseLiquidity / 2,
+            liquidity: releaseLiquidity * 4 / 10,
             amount0Min: 0,
             amount1Min: 0,
             deadline: type(uint256).max
@@ -157,9 +157,10 @@ contract MarginLiquidityTest is DeployHelper {
         assertGt(lp, 0, "Liquidity should be greater than 0");
         while (lp > 0) {
             skip(1 hours + 1);
+            releaseLiquidity = marginLiquidity.getReleasedLiquidity(poolId);
             removeParams = RemoveLiquidityParams({
                 poolId: poolId,
-                liquidity: releaseLiquidity / 2,
+                liquidity: releaseLiquidity,
                 amount0Min: 0,
                 amount1Min: 0,
                 deadline: type(uint256).max

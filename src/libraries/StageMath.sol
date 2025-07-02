@@ -27,9 +27,12 @@ library StageMath {
         return (uint256(_total) << 128) | uint256(_liquidity & ((1 << 128) - 1));
     }
 
-    function isFree(uint256 stage) internal pure returns (bool) {
+    function isFree(uint256 stage, uint32 leavePart) internal pure returns (bool) {
         (uint128 total, uint128 liquidity) = decode(stage);
-        return total / 2 >= liquidity;
+        if (leavePart == 0) {
+            leavePart = 2;
+        }
+        return total / leavePart >= liquidity;
     }
 
     function decode(uint256 stage) internal pure returns (uint128 total, uint128 liquidity) {
