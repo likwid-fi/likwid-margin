@@ -81,7 +81,9 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
                 queue.pushBack(zeroStage.add(lockAmount));
             }
         } else {
-            uint256 queueSize = queue.length();
+            uint256 queueSize = Math.min(queue.length(), stageSize);
+            // If the queue is not empty, we need to update the existing stages
+            // and add new stages if necessary
             for (uint256 i = 0; i < queueSize; i++) {
                 uint256 stage = queue.at(i);
                 queue.set(i, stage.add(lockAmount));
