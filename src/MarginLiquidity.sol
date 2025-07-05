@@ -70,8 +70,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
         uint256 lastStageTimestamp = lastStageTimestampStore[id];
         if (lastStageTimestamp == 0) {
             // Initialize lastStageTimestamp if it's not set
-            lastStageTimestamp = block.timestamp / stageDuration * stageDuration;
-            lastStageTimestampStore[id] = lastStageTimestamp;
+            lastStageTimestampStore[id] = block.timestamp;
         }
         DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
         uint128 lockAmount = Math.ceilDiv(amount, stageSize).toUint128(); // Ensure at least 1 unit is locked per stage
@@ -160,7 +159,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
                     }
                     queue.set(0, nextStage);
                     // Update lastStageTimestamp to the next stage time
-                    lastStageTimestampStore[id] = block.timestamp / stageDuration * stageDuration;
+                    lastStageTimestampStore[id] = block.timestamp;
                 } else {
                     // If next stage is not free, we just reduce the current stage liquidity
                     uint256 currentStage = queue.front();
@@ -172,7 +171,7 @@ contract MarginLiquidity is IMarginLiquidity, ERC6909Liquidity, Owned {
                     }
                     if (!currentStage.isFree(stageLeavePart) || queue.length() == 1) {
                         // Update lastStageTimestamp
-                        lastStageTimestampStore[id] = block.timestamp / stageDuration * stageDuration;
+                        lastStageTimestampStore[id] = block.timestamp;
                     }
                     queue.set(0, afterStage);
                 }
