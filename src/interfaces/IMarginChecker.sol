@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {PoolId} from "v4-core/types/PoolId.sol";
+import {PoolId} from "likwid-v2-core/types/PoolId.sol";
 
 import {IPairMarginManager} from "./IPairMarginManager.sol";
 import {IMarginPositionManager} from "./IMarginPositionManager.sol";

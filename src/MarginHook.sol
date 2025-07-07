@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-// V4 core
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {BaseHook} from "v4-periphery/src/base/hooks/BaseHook.sol";
-import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
-import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
-import {Hooks} from "v4-core/libraries/Hooks.sol";
-import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
-import {SafeCast} from "v4-core/libraries/SafeCast.sol";
+// Likwid V2 core
+import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
+import {BaseHook} from "likwid-v2-core/base/hooks/BaseHook.sol";
+import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "likwid-v2-core/types/PoolId.sol";
+import {BeforeSwapDelta, toBeforeSwapDelta} from "likwid-v2-core/types/BeforeSwapDelta.sol";
+import {Hooks} from "likwid-v2-core/libraries/Hooks.sol";
+import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
+// Openzeppelin
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
@@ -17,7 +18,7 @@ import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 
 contract MarginHook is BaseHook, Owned {
-    using SafeCast for uint256;
+    using SafeCast for *;
     using CurrencyPoolLibrary for Currency;
 
     error InvalidInitialization();
@@ -71,7 +72,8 @@ contract MarginHook is BaseHook, Owned {
             specified.take(poolManager, address(pairPoolManager), specifiedAmount, true);
             unspecified.settle(poolManager, address(pairPoolManager), unspecifiedAmount, true);
             //unspecified.settle(poolManager, address(this), unspecifiedAmount, true);
-            returnDelta = toBeforeSwapDelta(specifiedAmount.toInt128(), -unspecifiedAmount.toInt128());
+            returnDelta =
+                toBeforeSwapDelta(specifiedAmount.toInt256().toInt128(), -unspecifiedAmount.toInt256().toInt128());
         } else {
             // exactOutput
             // in exact-output swaps, the unspecified token is a debt that gets paid down by the swapper
@@ -79,7 +81,8 @@ contract MarginHook is BaseHook, Owned {
             unspecified.take(poolManager, address(pairPoolManager), unspecifiedAmount, true);
             specified.settle(poolManager, address(pairPoolManager), specifiedAmount, true);
             //specified.settle(poolManager, address(this), specifiedAmount, true);
-            returnDelta = toBeforeSwapDelta(-specifiedAmount.toInt128(), unspecifiedAmount.toInt128());
+            returnDelta =
+                toBeforeSwapDelta(-specifiedAmount.toInt256().toInt128(), unspecifiedAmount.toInt256().toInt128());
         }
         return (BaseHook.beforeSwap.selector, returnDelta, swapFee);
     }

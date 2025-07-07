@@ -2,10 +2,10 @@
 pragma solidity ^0.8.13;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
-import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
+import {IHooks} from "likwid-v2-core/interfaces/IHooks.sol";
+import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "likwid-v2-core/types/PoolId.sol";
+import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
 import {Test, console} from "forge-std/Test.sol";
 
 import {PoolStatus} from "../src/types/PoolStatus.sol";

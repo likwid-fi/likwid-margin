@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
+// Openzeppelin
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
-import {Currency} from "v4-core/types/Currency.sol";
-import {SafeCast} from "v4-core/libraries/SafeCast.sol";
+// Likwid V2 core
+import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
+import {PoolId, PoolIdLibrary} from "likwid-v2-core/types/PoolId.sol";
+import {Currency} from "likwid-v2-core/types/Currency.sol";
 // Local
 import {BasePoolManager} from "./base/BasePoolManager.sol";
 import {ERC6909Accrues} from "./base/ERC6909Accrues.sol";

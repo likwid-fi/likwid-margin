@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Currency} from "v4-core/types/Currency.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import {Currency} from "likwid-v2-core/types/Currency.sol";
+import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
+import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "likwid-v2-core/types/PoolId.sol";
 
 import {CurrencyExtLibrary} from "./CurrencyExtLibrary.sol";
 import {IERC20} from "../external/openzeppelin-contracts/IERC20.sol";

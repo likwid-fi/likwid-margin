@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {PoolId} from "v4-core/types/PoolId.sol";
+import {PoolId} from "likwid-v2-core/types/PoolId.sol";
 
 /// @notice ReleaseParams is a struct that contains all the parameters needed to release margin position.
 struct ReleaseParams {

@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-// V4 core
+// Openzeppelin
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
-import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {IHooks} from "v4-core/interfaces/IPoolManager.sol";
-import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
+// Likwid V2 core
+import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "likwid-v2-core/types/PoolId.sol";
+import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
+import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
+import {IHooks} from "likwid-v2-core/interfaces/IPoolManager.sol";
 // Local
 import {BaseFees} from "./base/BaseFees.sol";
 import {BasePoolManager} from "./base/BasePoolManager.sol";

@@ -2,8 +2,8 @@
 pragma solidity ^0.8.26;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {Currency} from "v4-core/types/Currency.sol";
-import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {Currency} from "likwid-v2-core/types/Currency.sol";
+import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
 
 import {UQ112x112} from "../libraries/UQ112x112.sol";
 import {PerLibrary} from "../libraries/PerLibrary.sol";

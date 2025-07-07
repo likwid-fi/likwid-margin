@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.24;
 
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {IHooks} from "v4-core/interfaces/IHooks.sol";
-import {Currency} from "v4-core/types/Currency.sol";
-import {PoolId} from "v4-core/types/PoolId.sol";
-import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
+import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
+import {IHooks} from "likwid-v2-core/interfaces/IHooks.sol";
+import {Currency} from "likwid-v2-core/types/Currency.sol";
+import {PoolId} from "likwid-v2-core/types/PoolId.sol";
+import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
+import {BeforeSwapDelta, toBeforeSwapDelta} from "likwid-v2-core/types/BeforeSwapDelta.sol";
 
 import {AddLiquidityParams, RemoveLiquidityParams} from "../types/LiquidityParams.sol";
 import {ReleaseParams} from "../types/ReleaseParams.sol";

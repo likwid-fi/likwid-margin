@@ -19,14 +19,14 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 // V4
-import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
-import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
-import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
-import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol";
+import {LikwidVault} from "likwid-v2-core/LikwidVault.sol";
+import {Hooks} from "likwid-v2-core/libraries/Hooks.sol";
+import {IHooks} from "likwid-v2-core/interfaces/IHooks.sol";
+import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
+import {PoolId, PoolIdLibrary} from "likwid-v2-core/types/PoolId.sol";
+import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
+import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
+import {BalanceDelta, BalanceDeltaLibrary} from "likwid-v2-core/types/BalanceDelta.sol";
 
 import {HookMiner} from "./utils/HookMiner.sol";
 import {DeployHelper} from "./utils/DeployHelper.sol";

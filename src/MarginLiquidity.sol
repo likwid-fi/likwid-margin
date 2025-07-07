@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
+// Openzeppelin
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+// Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
-import {PoolId} from "v4-core/types/PoolId.sol";
-import {SafeCast} from "v4-core/libraries/SafeCast.sol";
+// Likwid V2 core
+import {PoolId} from "likwid-v2-core/types/PoolId.sol";
 import {DoubleEndedQueue} from "./external/openzeppelin-contracts/DoubleEndedQueue.sol";
 // Local
 import {ERC6909Liquidity} from "./base/ERC6909Liquidity.sol";

@@ -2,27 +2,14 @@
 pragma solidity ^0.8.26;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 library UQ112x112 {
+    using SafeCast for uint256;
+
     error Overflow();
 
     uint224 constant Q112 = 2 ** 112;
-
-    /// @notice Cast a uint256 to a uint112, revert on overflow or underflow
-    /// @param x The uint256 to be casted
-    /// @return y The casted integer, now type uint112
-    function toUint112(uint256 x) internal pure returns (uint112 y) {
-        y = uint112(x);
-        if (x != y) revert Overflow();
-    }
-
-    /// @notice Cast a uint256 to a uint224, revert on overflow or underflow
-    /// @param x The uint256 to be casted
-    /// @return y The casted integer, now type uint224
-    function toUint224(uint256 x) internal pure returns (uint224 y) {
-        y = uint224(x);
-        if (x != y) revert Overflow();
-    }
 
     // encode a uint112 as a UQ112x112
     function encode(uint112 y) internal pure returns (uint224 z) {
@@ -43,25 +30,25 @@ library UQ112x112 {
     }
 
     function add(uint112 x, uint256 y) internal pure returns (uint112 z) {
-        z = x + toUint112(y);
+        z = x + y.toUint112();
     }
 
     // subtract
     function sub(uint112 x, uint256 y) internal pure returns (uint112 z) {
-        z = x - toUint112(y);
+        z = x - y.toUint112();
     }
 
     function mul(uint112 x, uint256 y) internal pure returns (uint224 z) {
-        z = toUint224(x) * toUint224(y);
+        z = uint224(x) * y.toUint224();
     }
 
     // divide a UQ112x112 by a uint112, returning a UQ112x112
     function div(uint224 x, uint112 y) internal pure returns (uint224 z) {
-        z = x / toUint224(y);
+        z = x / y;
     }
 
     function scaleDown(uint112 x, uint256 scaler, uint256 denominator) internal pure returns (uint112 z) {
-        z = toUint112(Math.mulDiv(x, denominator - scaler, denominator));
+        z = (Math.mulDiv(x, denominator - scaler, denominator)).toUint112();
     }
 
     function growRatioX112(uint256 ratio, uint256 numerator, uint256 denominator)
@@ -102,6 +89,6 @@ library UQ112x112 {
         pure
         returns (uint128 result)
     {
-        result = toUint112(Math.mulDiv(current, rateCumulativeLast, rateCumulativeOld, Math.Rounding.Ceil));
+        result = (Math.mulDiv(current, rateCumulativeLast, rateCumulativeOld, Math.Rounding.Ceil)).toUint128();
     }
 }

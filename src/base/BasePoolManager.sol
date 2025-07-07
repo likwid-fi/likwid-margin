@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-// V4 core
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {SafeCallback} from "v4-periphery/src/base/SafeCallback.sol";
+// Likwid V2 Core
+import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
+import {SafeCallback} from "likwid-v2-core/base/SafeCallback.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 

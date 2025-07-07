@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
+// Openzeppelin
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+// Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
-import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
-import {PoolId} from "v4-core/types/PoolId.sol";
+import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
+import {PoolId} from "likwid-v2-core/types/PoolId.sol";
 // Local
 import {ReentrancyGuardTransient} from "./external/openzeppelin-contracts/ReentrancyGuardTransient.sol";
 import {CurrencyExtLibrary} from "./libraries/CurrencyExtLibrary.sol";
@@ -25,10 +28,11 @@ import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 
 contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, ReentrancyGuardTransient {
+    using SafeCast for *;
+    using UQ112x112 for *;
     using CurrencyLibrary for Currency;
     using CurrencyPoolLibrary for Currency;
     using CurrencyExtLibrary for Currency;
-    using UQ112x112 for *;
     using PerLibrary for uint256;
     using FeeLibrary for uint24;
     using PoolStatusLibrary for PoolStatus;

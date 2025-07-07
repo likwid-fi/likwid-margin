@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol";
-import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {PoolId} from "v4-core/types/PoolId.sol";
-import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
-import {SafeCallback} from "v4-periphery/src/base/SafeCallback.sol";
+// Likwid V2 core
+import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
+import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
+import {BalanceDelta, BalanceDeltaLibrary} from "likwid-v2-core/types/BalanceDelta.sol";
+import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
+import {PoolId} from "likwid-v2-core/types/PoolId.sol";
+import {SafeCallback} from "likwid-v2-core/base/SafeCallback.sol";
+// Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
-
+// Local
+import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 

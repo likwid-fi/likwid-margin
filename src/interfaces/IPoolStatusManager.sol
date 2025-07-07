@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.24;
 
-import {PoolId} from "v4-core/types/PoolId.sol";
-import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
-import {IHooks} from "v4-core/interfaces/IHooks.sol";
+import {PoolId} from "likwid-v2-core/types/PoolId.sol";
+import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
+import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
+import {IHooks} from "likwid-v2-core/interfaces/IHooks.sol";
 
 import {IStatusBase} from "./IStatusBase.sol";
 import {IMarginFees} from "./IMarginFees.sol";
