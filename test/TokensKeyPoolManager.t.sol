@@ -21,7 +21,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
-// V4
+// Likwid V2
 import {LikwidVault} from "likwid-v2-core/LikwidVault.sol";
 import {Hooks} from "likwid-v2-core/libraries/Hooks.sol";
 import {IHooks} from "likwid-v2-core/interfaces/IHooks.sol";

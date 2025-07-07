@@ -20,8 +20,9 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
-// V4
+// Likwid V2
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {LikwidVault} from "likwid-v2-core/LikwidVault.sol";
 import {Hooks} from "likwid-v2-core/libraries/Hooks.sol";
 import {IHooks} from "likwid-v2-core/interfaces/IHooks.sol";
@@ -36,6 +37,7 @@ import {HookMiner} from "./utils/HookMiner.sol";
 import {DeployHelper} from "./utils/DeployHelper.sol";
 
 contract MarginFeesTest is DeployHelper {
+    using SafeCast for *;
     using UQ112x112 for *;
     using CurrencyPoolLibrary for *;
     using PoolStatusLibrary for PoolStatus;

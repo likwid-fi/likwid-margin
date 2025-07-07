@@ -2,8 +2,8 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Script.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
+import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
+import {Hooks} from "likwid-v2-core/libraries/Hooks.sol";
 import {HookMiner} from "../test/utils/HookMiner.sol";
 import {MarginHook} from "../src/MarginHook.sol";
 import {PairPoolManager} from "../src/PairPoolManager.sol";

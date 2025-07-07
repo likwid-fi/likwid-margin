@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Script.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
 import {MarginRouter} from "../src/MarginRouter.sol";
 import {IPairPoolManager} from "../src/interfaces/IPairPoolManager.sol";
 

@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 // Openzeppelin
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Likwid V2 core
@@ -25,6 +26,7 @@ import {IMarginChecker} from "./interfaces/IMarginChecker.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 
 contract MarginChecker is IMarginChecker, Owned {
+    using SafeCast for *;
     using UQ112x112 for *;
     using PerLibrary for uint256;
     using FeeLibrary for uint24;

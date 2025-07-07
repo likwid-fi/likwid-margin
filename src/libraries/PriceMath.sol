@@ -2,10 +2,12 @@
 pragma solidity ^0.8.26;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {UQ112x112} from "./UQ112x112.sol";
 import {PerLibrary} from "./PerLibrary.sol";
 
 library PriceMath {
+    using SafeCast for *;
     using UQ112x112 for *;
     using PerLibrary for *;
 

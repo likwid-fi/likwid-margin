@@ -22,7 +22,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 // Forge
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
-// V4
+// Likwid V2
 import {LikwidVault} from "likwid-v2-core/LikwidVault.sol";
 import {Hooks} from "likwid-v2-core/libraries/Hooks.sol";
 import {IHooks} from "likwid-v2-core/interfaces/IHooks.sol";
@@ -58,7 +58,7 @@ contract DeployHelper is Test {
     MockERC20 tokenB;
     EIP20NonStandardThrowHarness tokenUSDT;
 
-    PoolManager manager;
+    LikwidVault manager;
     MirrorTokenManager mirrorTokenManager;
     LendingPoolManager lendingPoolManager;
     MarginLiquidity marginLiquidity;
@@ -153,7 +153,7 @@ contract DeployHelper is Test {
     }
 
     function deployHookAndRouter() internal {
-        manager = new PoolManager(address(this));
+        manager = new LikwidVault(address(this));
         mirrorTokenManager = new MirrorTokenManager(address(this));
         lendingPoolManager = new LendingPoolManager(address(this), manager, mirrorTokenManager);
         marginFees = new MarginFees(address(this));
