@@ -68,7 +68,6 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     IMarginLiquidity public immutable marginLiquidity;
     address public immutable pairPoolManager;
     IMarginFees public marginFees;
-    mapping(PoolId => bool) public interestClosed;
 
     mapping(PoolId => PoolStatus) private statusStore;
     mapping(Currency currency => uint256 amount) public protocolFeesAccrued;
@@ -158,22 +157,20 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
                 (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) =
                     marginFees.getBorrowRateCumulativeLast(_status);
 
-                if (!interestClosed[poolId]) {
-                    (InterestBalance memory interestStatus0,) = _updateInterest0(poolId, _status, rate0CumulativeLast);
-                    if (interestStatus0.allInterest > 0) {
-                        _status.mirrorReserve0 += interestStatus0.pairInterest.toUint112();
-                        uint256 lendingAmount0 = interestStatus0.lendingInterest + interestStatus0.protocolInterest;
-                        _status.lendingMirrorReserve0 += lendingAmount0.toUint112();
-                        lendingGrownAmount0 = interestStatus0.lendingInterest;
-                    }
+                (InterestBalance memory interestStatus0,) = _updateInterest0(poolId, _status, rate0CumulativeLast);
+                if (interestStatus0.allInterest > 0) {
+                    _status.mirrorReserve0 += interestStatus0.pairInterest.toUint112();
+                    uint256 lendingAmount0 = interestStatus0.lendingInterest + interestStatus0.protocolInterest;
+                    _status.lendingMirrorReserve0 += lendingAmount0.toUint112();
+                    lendingGrownAmount0 = interestStatus0.lendingInterest;
+                }
 
-                    (InterestBalance memory interestStatus1,) = _updateInterest1(poolId, _status, rate1CumulativeLast);
-                    if (interestStatus1.allInterest > 0) {
-                        _status.mirrorReserve1 += interestStatus1.pairInterest.toUint112();
-                        uint256 lendingAmount1 = interestStatus1.lendingInterest + interestStatus1.protocolInterest;
-                        _status.lendingMirrorReserve1 += lendingAmount1.toUint112();
-                        lendingGrownAmount1 = interestStatus1.lendingInterest;
-                    }
+                (InterestBalance memory interestStatus1,) = _updateInterest1(poolId, _status, rate1CumulativeLast);
+                if (interestStatus1.allInterest > 0) {
+                    _status.mirrorReserve1 += interestStatus1.pairInterest.toUint112();
+                    uint256 lendingAmount1 = interestStatus1.lendingInterest + interestStatus1.protocolInterest;
+                    _status.lendingMirrorReserve1 += lendingAmount1.toUint112();
+                    lendingGrownAmount1 = interestStatus1.lendingInterest;
                 }
 
                 _status.rate0CumulativeLast = rate0CumulativeLast;
@@ -453,16 +450,6 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         }
     }
 
-    function setInterestClosed(PoolId poolId, bool _closed) external onlyOwner {
-        PoolStatus storage status = statusStore[poolId];
-        uint32 blockTS = uint32(block.timestamp % 2 ** 32);
-        if (status.blockTimestampLast != blockTS) {
-            (status.truncatedReserve0, status.truncatedReserve1) = _transform(status);
-            status.blockTimestampLast = blockTS;
-        }
-        interestClosed[poolId] = _closed;
-    }
-
     // ******************** POOL_MANAGER CALL ********************
 
     function initialize(PoolKey calldata key) external onlyPoolManager {
@@ -481,9 +468,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
         PoolStatus storage status = statusStore[poolId];
         uint32 blockTS = uint32(block.timestamp % 2 ** 32);
         if (status.blockTimestampLast != blockTS) {
-            if (!interestClosed[poolId]) {
-                _updateInterests(sender, status);
-            }
+            _updateInterests(sender, status);
 
             (status.truncatedReserve0, status.truncatedReserve1) = _transform(status);
             status.blockTimestampLast = blockTS;
