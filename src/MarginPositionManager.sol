@@ -5,12 +5,12 @@ pragma solidity ^0.8.26;
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
 import {PoolId} from "likwid-v2-core/types/PoolId.sol";
 // Local
-import {ReentrancyGuardTransient} from "./external/openzeppelin-contracts/ReentrancyGuardTransient.sol";
 import {CurrencyExtLibrary} from "./libraries/CurrencyExtLibrary.sol";
 import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";

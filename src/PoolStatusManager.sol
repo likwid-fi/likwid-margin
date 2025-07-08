@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 // Openzeppelin
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {TransientSlot} from "@openzeppelin/contracts/utils/TransientSlot.sol";
 // Likwid V2 core
 import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
 import {IHooks} from "likwid-v2-core/interfaces/IHooks.sol";
@@ -25,7 +26,6 @@ import {LendingStatus} from "./types/LendingStatus.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";
 import {PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
-import {TransientSlot} from "./external/openzeppelin-contracts/TransientSlot.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 import {ILendingPoolManager} from "./interfaces/ILendingPoolManager.sol";

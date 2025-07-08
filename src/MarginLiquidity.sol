@@ -8,10 +8,10 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Likwid V2 core
 import {PoolId} from "likwid-v2-core/types/PoolId.sol";
-import {DoubleEndedQueue} from "./external/openzeppelin-contracts/DoubleEndedQueue.sol";
 // Local
 import {ERC6909Liquidity} from "./base/ERC6909Liquidity.sol";
 import {StageMath} from "./libraries/StageMath.sol";
+import {DoubleEndedQueue} from "./libraries/external/DoubleEndedQueue.sol";
 
 import {PoolStatus, PoolStatusLibrary} from "./types/PoolStatusLibrary.sol";
 import {IMarginLiquidity} from "./interfaces/IMarginLiquidity.sol";
