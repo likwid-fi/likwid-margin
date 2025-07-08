@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Likwid Contracts
 pragma solidity >=0.8.0;
 
 import {IERC6909Accrues} from "../interfaces/external/IERC6909Accrues.sol";

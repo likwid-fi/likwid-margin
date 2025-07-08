@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
+// Likwid Contracts
 pragma solidity ^0.8.19;
 
 import {UQ112x112} from "./UQ112x112.sol";

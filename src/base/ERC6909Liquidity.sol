@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Likwid Contracts
 pragma solidity >=0.8.0;
 
 import {IERC6909} from "../interfaces/external/IERC6909.sol";
