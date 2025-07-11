@@ -21,3 +21,5 @@ docs/
 emv*
 script/LocalTests.s.sol
 broadcast/DeployAll.s.sol/1439
+broadcast/DeployLocal.s.sol/56
+script/DeployLocal.s.sol
