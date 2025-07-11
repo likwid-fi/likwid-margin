@@ -18,7 +18,7 @@ import {PoolStatusManager} from "../src/PoolStatusManager.sol";
 
 contract DeployAllScript is Script {
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
-    address owner = 0x35D3F3497eC612b3Dd982819F95cA98e6a404Ce1;
+
     MirrorTokenManager mirrorTokenManager;
     LendingPoolManager lendingPoolManager;
     MarginLiquidity marginLiquidity;
@@ -41,6 +41,8 @@ contract DeployAllScript is Script {
             manager = 0x029C5eC244a73cC54c0731c2F3184bCA6C60eF2D;
         } else if (chainId == 130) {
             manager = 0x1F98400000000000000000000000000000000004;
+        } else if (chainId == 1439) {
+            manager = 0x029C5eC244a73cC54c0731c2F3184bCA6C60eF2D;
         }
     }
 
@@ -52,6 +54,8 @@ contract DeployAllScript is Script {
             revert ManagerNotExist();
         }
         console2.log("poolManager:", manager);
+        address owner = msg.sender;
+        console2.log("owner:", owner);
 
         mirrorTokenManager = new MirrorTokenManager(owner);
         console2.log("mirrorTokenManager:", address(mirrorTokenManager));
