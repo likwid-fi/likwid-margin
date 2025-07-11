@@ -20,3 +20,4 @@ docs/
 .certora_internal/
 emv*
 script/LocalTests.s.sol
+broadcast/DeployAll.s.sol/1439
