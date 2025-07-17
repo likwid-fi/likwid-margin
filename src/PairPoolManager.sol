@@ -56,7 +56,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     error NotAllowed();
     error StatusManagerAlreadySet();
     error HookAlreadySet();
-    error LowFeePoolOnlyOneLevel();
+    error LowFeePoolMarginBanned();
 
     event Initialize(
         PoolId indexed id,
@@ -317,6 +317,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         onlyPosition
         returns (MarginParamsVo memory)
     {
+        if (status.key.fee < 3000) revert LowFeePoolMarginBanned();
         bytes memory result =
             poolManager.unlock(abi.encodeCall(this.handleMargin, (msg.sender, sender, status, paramsVo)));
         (paramsVo.params.marginAmount, paramsVo.marginTotal, paramsVo.params.borrowAmount) =
