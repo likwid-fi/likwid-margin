@@ -318,9 +318,12 @@ contract MarginChecker is IMarginChecker, Owned {
     {
         IMarginPositionManager positionManager = IMarginPositionManager(manager);
         MarginPosition memory _position = positionManager.getPosition(positionId);
-        IPairPoolManager pairPoolManager = IPairPoolManager(IStatusBase(manager).pairPoolManager());
-        PoolStatus memory _status = pairPoolManager.statusManager().getStatus(_position.poolId);
-        return _checkLiquidate(pairPoolManager, _status, _position, false);
+        if (_position.borrowAmount > 0) {
+            IPairPoolManager pairPoolManager = IPairPoolManager(IStatusBase(manager).pairPoolManager());
+            PoolStatus memory _status = pairPoolManager.statusManager().getStatus(_position.poolId);
+            return _checkLiquidate(pairPoolManager, _status, _position, false);
+        }
+        return (true, 0);
     }
 
     /// @inheritdoc IMarginChecker
