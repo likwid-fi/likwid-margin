@@ -432,7 +432,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         }
     }
 
-    function liquidateBurn(uint256 positionId) external returns (uint256 profit, uint256 repayAmount) {
+    function liquidateBurn(uint256 positionId) external nonReentrant returns (uint256 profit, uint256 repayAmount) {
         require(checker.checkValidity(msg.sender, positionId), "AUTH_ERROR");
         MarginPosition memory _position = _positions[positionId];
         PoolStatus memory _status = pairPoolManager.setBalances(msg.sender, _position.poolId);
@@ -483,6 +483,7 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             }
         }
         params.releaseAmount = assetsAmount - profit - protocolProfit;
+
         repayAmount = pairPoolManager.release(msg.sender, _status, params);
 
         emit Liquidate(
@@ -498,7 +499,12 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         _burnPosition(positionId, BurnType.LIQUIDATE_BURN);
     }
 
-    function liquidateCall(uint256 positionId) external payable returns (uint256 profit, uint256 repayAmount) {
+    function liquidateCall(uint256 positionId)
+        external
+        payable
+        nonReentrant
+        returns (uint256 profit, uint256 repayAmount)
+    {
         require(checker.checkValidity(msg.sender, positionId), "AUTH_ERROR");
         MarginPosition memory _position = _positions[positionId];
         // nonReentrant with pairPoolManager.release
@@ -527,10 +533,13 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
             deadline: block.timestamp + 1000
         });
 
-        pairPoolManager.release{value: sendValue}(msg.sender, _status, params);
         if (msg.value > sendValue) {
             transferNative(msg.sender, msg.value - sendValue);
         }
+
+        // nonReentrant after transferNative
+        pairPoolManager.release{value: sendValue}(msg.sender, _status, params);
+
         _burnPosition(positionId, BurnType.LIQUIDATE_CALL);
 
         if (_checkAmount(_status, marginCurrency, profit)) {
