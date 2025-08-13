@@ -43,6 +43,8 @@ contract DeployAllScript is Script {
             manager = 0x1F98400000000000000000000000000000000004;
         } else if (chainId == 1439) {
             manager = 0x029C5eC244a73cC54c0731c2F3184bCA6C60eF2D;
+        } else if (chainId == 998) {
+            manager = 0x6a68019FE642B599af0cab3F35A3AE696b661be4;
         }
     }
 
