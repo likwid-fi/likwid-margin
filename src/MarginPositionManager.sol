@@ -186,7 +186,13 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
     }
 
     /// @inheritdoc IMarginPositionManager
-    function margin(MarginParams memory params) external payable ensure(params.deadline) returns (uint256, uint256) {
+    function margin(MarginParams memory params)
+        external
+        payable
+        nonReentrant
+        ensure(params.deadline)
+        returns (uint256, uint256)
+    {
         PoolStatus memory _status = pairPoolManager.setBalances(msg.sender, params.poolId);
         uint256 positionId;
         if (params.leverage > 0) {
@@ -203,9 +209,9 @@ contract MarginPositionManager is IMarginPositionManager, ERC721, Owned, Reentra
         });
         {
             uint256 sendValue = paramsVo.marginCurrency.checkAmount(params.marginAmount);
+            if (msg.value > sendValue) transferNative(msg.sender, msg.value - sendValue);
             paramsVo = pairPoolManager.margin{value: sendValue}(msg.sender, _status, paramsVo);
             params = paramsVo.params;
-            if (msg.value > sendValue) transferNative(msg.sender, msg.value - sendValue);
         }
         if (params.borrowMaxAmount > 0 && params.borrowAmount > params.borrowMaxAmount) {
             revert InsufficientBorrowReceived();
