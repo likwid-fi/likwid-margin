@@ -1,6 +1,3 @@
-@openzeppelin/=lib/likwid-v2-core/lib/openzeppelin-contracts/
-@openzeppelin/contracts/=lib/likwid-v2-core/lib/openzeppelin-contracts/contracts/
-likwid-v2-core/=lib/likwid-v2-core/src/
 forge-std/=lib/forge-std/src/
-openzeppelin-contracts/=lib/likwid-v2-core/lib/openzeppelin-contracts/
-solmate/=lib/likwid-v2-core/lib/solmate/
+@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+solmate/=lib/solmate/
