@@ -2,7 +2,7 @@
 // Likwid Contracts
 pragma solidity ^0.8.0;
 
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {Math} from "./Math.sol";
 
 import {PerLibrary} from "./PerLibrary.sol";
 

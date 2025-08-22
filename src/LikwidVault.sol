@@ -93,29 +93,31 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims {
         _appendPoolBalanceDelta(key, msg.sender, callerDelta);
     }
 
-    function swap(PoolKey memory, IVault.SwapParams memory params, bytes calldata)
+    function swap(PoolKey memory key, IVault.SwapParams memory params, bytes calldata)
         external
-        view
         onlyWhenUnlocked
         noDelegateCall
         returns (BalanceDelta)
     {
         if (params.amountSpecified == 0) revert SwapAmountCannotBeZero();
-        revert NotImplemented();
-    }
 
-    function donate(PoolKey memory, uint256, uint256, bytes calldata)
-        external
-        view
-        onlyWhenUnlocked
-        noDelegateCall
-        returns (BalanceDelta)
-    {
-        revert NotImplemented();
-    }
+        PoolId id = key.toId();
+        Pool.State storage pool = _getPool(id);
+        pool.checkPoolInitialized();
 
-    function updateDynamicLPFee(PoolKey memory, uint24) external pure {
-        revert NotImplemented();
+        (BalanceDelta swapDelta, uint256 amountToProtocol, uint24 swapFee) =
+            pool.swap(params.zeroForOne, params.amountSpecified);
+
+        _appendPoolBalanceDelta(key, msg.sender, swapDelta);
+
+        if (amountToProtocol > 0) {
+            Currency currencyToCollect = params.zeroForOne ? key.currency0 : key.currency1;
+            _updateProtocolFees(currencyToCollect, amountToProtocol);
+        }
+
+        emit Swap(id, msg.sender, swapDelta.amount0(), swapDelta.amount1(), pool.slot0.totalSupply(), swapFee);
+
+        return swapDelta;
     }
 
     function sync(Currency currency) external {

@@ -7,7 +7,7 @@ import {StageMath} from "../../src/libraries/StageMath.sol";
 contract StageMathTest is Test {
     using StageMath for uint256;
 
-    function test_add() public pure {
+    function testAdd() public pure {
         uint256 stage = 0;
         uint128 amount = 100;
         uint256 newStage = stage.add(amount);
@@ -16,7 +16,7 @@ contract StageMathTest is Test {
         assertEq(liquidity, amount);
     }
 
-    function test_sub() public pure {
+    function testSub() public pure {
         uint256 stage = 0;
         uint128 amount = 100;
         uint256 newStage = stage.add(amount).sub(amount);
@@ -25,7 +25,7 @@ contract StageMathTest is Test {
         assertEq(liquidity, 0, "Liquidity should be zero after subtraction");
     }
 
-    function test_isFree() public pure {
+    function testIsFree() public pure {
         uint256 stage = 0;
         uint32 leavePart = 5; // Default level part
         assertTrue(StageMath.isFree(stage, leavePart));

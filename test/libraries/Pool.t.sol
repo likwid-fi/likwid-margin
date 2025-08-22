@@ -19,7 +19,7 @@ contract PoolTest is Test {
         pool.initialize(200); // 0.02% lpFee
     }
 
-    function testModifyLiquidity_AddInitialLiquidity() public {
+    function testModifyLiquidityAddInitialLiquidity() public {
         uint256 amount0 = 1e18;
         uint256 amount1 = 4e18;
         bytes32 salt = keccak256("salt");
@@ -53,14 +53,14 @@ contract PoolTest is Test {
         assertEq(uint256(position.liquidity), uint256(expectedLiquidity), "Position liquidity should be updated");
     }
 
-    function testModifyLiquidity_RemoveLiquidity() public {
+    function testModifyLiquidityRemoveLiquidity() public {
         // --- Setup: Add initial liquidity first ---
         uint256 amount0_add = 1e18;
         uint256 amount1_add = 4e18;
         uint128 initialLiquidity = uint128(Math.sqrt(amount0_add * amount1_add));
         
         pool.slot0 = pool.slot0.setTotalSupply(initialLiquidity);
-        pool.swapReserves = toReserves(uint128(amount0_add), uint128(amount1_add));
+        pool.pairReserves = toReserves(uint128(amount0_add), uint128(amount1_add));
         pool.realReserves = toReserves(uint128(amount0_add), uint128(amount1_add));
 
         bytes32 salt = keccak256("salt");
@@ -96,4 +96,6 @@ contract PoolTest is Test {
         uint128 expectedFinalLiquidity = initialLiquidity - (initialLiquidity / 2);
         assertEq(uint256(position.liquidity), uint256(expectedFinalLiquidity), "Position liquidity should be reduced");
     }
+
+    
 }
