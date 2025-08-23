@@ -6,9 +6,11 @@ import {PoolKey} from "../types/PoolKey.sol";
 import {IERC6909Claims} from "./external/IERC6909Claims.sol";
 import {BalanceDelta} from "../types/BalanceDelta.sol";
 import {PoolId} from "../types/PoolId.sol";
+import {IExtsload} from "./IExtsload.sol";
+import {IExttload} from "./IExttload.sol";
 
 /// @notice Interface for the LikwidVault
-interface IVault is IERC6909Claims {
+interface IVault is IERC6909Claims, IExtsload, IExttload {
     /// @notice Thrown when a currency is not netted out after the contract is unlocked
     error CurrencyNotSettled();
 

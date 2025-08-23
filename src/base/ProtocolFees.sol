@@ -5,13 +5,13 @@ import {Currency} from "../types/Currency.sol";
 import {IProtocolFees} from "../interfaces/IProtocolFees.sol";
 import {PoolKey} from "../types/PoolKey.sol";
 import {ProtocolFeeLibrary} from "../libraries/ProtocolFeeLibrary.sol";
-import {Owned} from "solmate/src/auth/Owned.sol";
+import {InterestBase} from "./InterestBase.sol";
 import {PoolId} from "../types/PoolId.sol";
 import {Pool} from "../libraries/Pool.sol";
 import {CustomRevert} from "../libraries/CustomRevert.sol";
 
 /// @notice Contract handling the setting and accrual of protocol fees
-abstract contract ProtocolFees is IProtocolFees, Owned {
+abstract contract ProtocolFees is IProtocolFees, InterestBase {
     using ProtocolFeeLibrary for uint24;
     using Pool for Pool.State;
     using CustomRevert for bytes4;
@@ -25,7 +25,7 @@ abstract contract ProtocolFees is IProtocolFees, Owned {
     /// @inheritdoc IProtocolFees
     address public protocolFeeController;
 
-    constructor(address initialOwner) Owned(initialOwner) {}
+    constructor(address initialOwner) InterestBase(initialOwner) {}
 
     /// @inheritdoc IProtocolFees
     function setProtocolFeeController(address controller) external onlyOwner {

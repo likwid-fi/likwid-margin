@@ -69,4 +69,12 @@ library BalanceDeltaLibrary {
             _amount1 := signextend(15, balanceDelta)
         }
     }
+
+    function diff(BalanceDelta balanceDelta) internal pure returns (int256 _diff) {
+        assembly ("memory-safe") {
+            let _amount0 := sar(128, balanceDelta)
+            let _amount1 := signextend(15, balanceDelta)
+            _diff := sub(_amount0, _amount1)
+        }
+    }
 }

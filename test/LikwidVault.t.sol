@@ -12,11 +12,15 @@ import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
 import {Pool} from "../src/libraries/Pool.sol";
 import {BalanceDelta, toBalanceDelta} from "../src/types/BalanceDelta.sol";
+import {Reserves} from "../src/types/Reserves.sol";
+import {StateLibrary} from "../src/libraries/StateLibrary.sol";
+import {SwapMath} from "../src/libraries/SwapMath.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 contract LikwidVaultTest is Test, IUnlockCallback {
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolKey;
+    using SwapMath for *;
 
     LikwidVault vault;
     MockERC20 token0;
@@ -56,8 +60,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
                 vault.settle();
             }
         } else if (selector == this.swap_callback.selector) {
-            (PoolKey memory key, IVault.SwapParams memory swapParams) = 
-                abi.decode(params, (PoolKey, IVault.SwapParams));
+            (PoolKey memory key, IVault.SwapParams memory swapParams) = abi.decode(params, (PoolKey, IVault.SwapParams));
 
             BalanceDelta delta = vault.swap(key, swapParams, "");
 
@@ -107,30 +110,34 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         bytes memory data_liq = abi.encode(this.modifyLiquidity_callback.selector, inner_params_liq);
         vault.unlock(data_liq);
 
+        Reserves _pairReserves = StateLibrary.getPairReserves(vault, key.toId());
+        assertEq(_pairReserves.reserve0(), initialLiquidity0, "Initial reserve0 should match");
+        assertEq(_pairReserves.reserve1(), initialLiquidity1, "Initial reserve1 should match");
+
         // Mint tokens for swap
         token0.mint(address(this), amountToSwap);
 
         // 2. Action
-        IVault.SwapParams memory swapParams = IVault.SwapParams({
-            zeroForOne: true,
-            amountSpecified: -int256(amountToSwap)
-        });
+        bool zeroForOne = true; // token0 for token1
+        IVault.SwapParams memory swapParams =
+            IVault.SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(amountToSwap)});
 
-        // Calculate expected amount out
-        uint256 amountInAfterFee = amountToSwap - (amountToSwap * fee / 1_000_000);
-        uint256 expectedAmountOut = (amountInAfterFee * initialLiquidity1) / (initialLiquidity0 + amountInAfterFee);
+        uint256 initialVaultBalance1 = token1.balanceOf(address(vault));
 
         bytes memory inner_params_swap = abi.encode(key, swapParams);
         bytes memory data_swap = abi.encode(this.swap_callback.selector, inner_params_swap);
-        
+
         vault.unlock(data_swap);
 
         // 3. Assertions
+        uint256 finalVaultBalance1 = token1.balanceOf(address(vault));
+        uint256 actualAmountOut = initialVaultBalance1 - finalVaultBalance1;
+
         assertEq(token0.balanceOf(address(this)), 0, "User token0 balance should be 0");
-        assertEq(token1.balanceOf(address(this)), expectedAmountOut, "User token1 balance should be amount out");
+        assertEq(token1.balanceOf(address(this)), actualAmountOut, "User token1 balance should be amount out");
         assertEq(token0.balanceOf(address(vault)), initialLiquidity0 + amountToSwap, "Vault token0 balance");
-        assertEq(token1.balanceOf(address(vault)), initialLiquidity1 - expectedAmountOut, "Vault token1 balance");
-        
+        assertEq(token1.balanceOf(address(vault)), initialLiquidity1 - actualAmountOut, "Vault token1 balance");
+
         // Protocol fee is 0 by default
         assertEq(vault.protocolFeesAccrued(currency0), 0, "Protocol fee for token0 should be 0");
         assertEq(vault.protocolFeesAccrued(currency1), 0, "Protocol fee for token1 should be 0");
@@ -158,7 +165,16 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         bytes memory data_liq = abi.encode(this.modifyLiquidity_callback.selector, inner_params_liq);
         vault.unlock(data_liq);
 
+        Reserves _pairReserves = StateLibrary.getPairReserves(vault, key.toId());
+        assertEq(_pairReserves.reserve0(), initialLiquidity0, "Initial reserve0 should match");
+        assertEq(_pairReserves.reserve1(), initialLiquidity1, "Initial reserve1 should match");
+
         // Calculate expected amount in
+        bool zeroForOne = false; // token1 for token0
+        Reserves _truncatedReserves = StateLibrary.getTruncatedReserves(vault, key.toId());
+        uint256 degree = _pairReserves.getPriceDegree(_truncatedReserves, zeroForOne, 0, amountToReceive);
+        fee = fee.dynamicFee(degree);
+        console.log("Dynamic fee (in ppm): ", fee);
         uint256 numerator = initialLiquidity1 * amountToReceive;
         uint256 denominator = initialLiquidity0 - amountToReceive;
         uint256 amountInWithoutFee = (numerator / denominator) + 1;
@@ -176,7 +192,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
 
         bytes memory inner_params_swap = abi.encode(key, swapParams);
         bytes memory data_swap = abi.encode(this.swap_callback.selector, inner_params_swap);
-        
+
         vault.unlock(data_swap);
 
         // 3. Assertions
@@ -217,14 +233,12 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         token0.mint(address(this), amountToSwap);
 
         // 2. Action
-        IVault.SwapParams memory swapParams = IVault.SwapParams({
-            zeroForOne: true,
-            amountSpecified: -int256(amountToSwap)
-        });
+        IVault.SwapParams memory swapParams =
+            IVault.SwapParams({zeroForOne: true, amountSpecified: -int256(amountToSwap)});
 
         bytes memory inner_params_swap = abi.encode(key, swapParams);
         bytes memory data_swap = abi.encode(this.swap_callback.selector, inner_params_swap);
-        
+
         vault.unlock(data_swap);
 
         // 3. Assertions

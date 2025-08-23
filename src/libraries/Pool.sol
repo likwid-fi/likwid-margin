@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
-import {BalanceDelta, toBalanceDelta} from "../types/BalanceDelta.sol";
+import {console} from "forge-std/console.sol";
+
+import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "../types/BalanceDelta.sol";
 import {FeeType} from "../types/FeeType.sol";
 import {Reserves, toReserves} from "../types/Reserves.sol";
 import {Slot0} from "../types/Slot0.sol";
@@ -12,6 +14,7 @@ import {Math} from "./Math.sol";
 import {PairPosition} from "./PairPosition.sol";
 import {PerLibrary} from "./PerLibrary.sol";
 import {ProtocolFeeLibrary} from "./ProtocolFeeLibrary.sol";
+import {TimeLibrary} from "./TimeLibrary.sol";
 import {SafeCast} from "./SafeCast.sol";
 import {SwapMath} from "./SwapMath.sol";
 
@@ -22,6 +25,7 @@ library Pool {
     using SwapMath for *;
     using FeeLibrary for uint24;
     using PerLibrary for uint256;
+    using TimeLibrary for uint32;
     using Pool for State;
     using PairPosition for PairPosition.State;
     using PairPosition for mapping(bytes32 => PairPosition.State);
@@ -35,18 +39,25 @@ library Pool {
     /// @notice Thrown when trying to remove more liquidity than available in the pool
     error InsufficientLiquidity();
 
+    uint256 constant MAX_PRICE_MOVE_PER_SECOND = 3000; // 0.3%/second
+
     struct State {
         Slot0 slot0;
         /// @notice The cumulative borrow rate of the first currency in the pool.
-        uint256 rate0CumulativeLast;
+        uint256 borrow0CumulativeLast;
         /// @notice The cumulative borrow rate of the second currency in the pool.
-        uint256 rate1CumulativeLast;
-        mapping(bytes32 positionKey => PairPosition.State) positions;
+        uint256 borrow1CumulativeLast;
+        /// @notice The cumulative deposit rate of the first currency in the pool.
+        uint256 deposit0CumulativeLast;
+        /// @notice The cumulative deposit rate of the second currency in the pool.
+        uint256 deposit1CumulativeLast;
         Reserves realReserves;
         Reserves mirrorReserves;
-        Reserves truncatedReserves;
         Reserves pairReserves;
+        Reserves truncatedReserves;
         Reserves lendingReserves;
+        /// @notice The positions in the pool, mapped by a hash of the owner's address and a salt.
+        mapping(bytes32 positionKey => PairPosition.State) positions;
     }
 
     struct ModifyLiquidityParams {
@@ -146,8 +157,7 @@ library Pool {
             self.slot0 = _slot0.setTotalSupply(totalSupply + liquidityAdded.toUint128());
             finalLiquidityDelta = liquidityAdded.toInt128();
         }
-        self.pairReserves = _pairReserves.applyDelta(delta);
-        self.realReserves = self.realReserves.applyDelta(delta);
+        self.updateReserves(delta, BalanceDeltaLibrary.ZERO_DELTA, BalanceDeltaLibrary.ZERO_DELTA);
 
         self.positions.get(params.owner, params.salt).update(finalLiquidityDelta, delta);
     }
@@ -192,15 +202,13 @@ library Pool {
             amount0Delta = amountOut.toInt128();
             amount1Delta = -amountIn.toInt128();
         }
-
+        console.log("amount0Delta", amount0Delta);
+        console.log("amount1Delta", amount1Delta);
+        console.log("amountIn", amountIn);
+        console.log("amountOut", amountOut);
         swapDelta = toBalanceDelta(amount0Delta, amount1Delta);
 
-        BalanceDelta poolDelta = toBalanceDelta(-swapDelta.amount0(), -swapDelta.amount1());
-
-        self.pairReserves = self.pairReserves.applyDelta(poolDelta);
-        self.realReserves = self.realReserves.applyDelta(poolDelta);
-
-        self.slot0 = _slot0.setLastUpdated(uint32(block.timestamp));
+        self.updateReserves(swapDelta, BalanceDeltaLibrary.ZERO_DELTA, BalanceDeltaLibrary.ZERO_DELTA);
     }
 
     /// @notice Calculates the amount of tokens to be received for a given input amount
@@ -221,8 +229,8 @@ library Pool {
             ? (_pairReserves.reserve0(), _pairReserves.reserve1())
             : (_pairReserves.reserve1(), _pairReserves.reserve0());
         require(reserveIn > 0 && reserveOut > 0, " INSUFFICIENT_LIQUIDITY");
-        uint256 degree = _pairReserves.getPriceDegree(self.truncatedReserves, zeroForOne, amountIn, 0);
         fee = self.slot0.lpFee();
+        uint256 degree = _pairReserves.getPriceDegree(self.truncatedReserves, zeroForOne, amountIn, 0);
         fee = fee.dynamicFee(degree);
         uint256 amountInWithoutFee;
         (amountInWithoutFee, feeAmount) = fee.deduct(amountIn);
@@ -250,8 +258,8 @@ library Pool {
             : (_pairReserves.reserve1(), _pairReserves.reserve0());
         require(reserveIn > 0 && reserveOut > 0, "INSUFFICIENT_LIQUIDITY");
         require(amountOut < reserveOut, "OUTPUT_AMOUNT_OVERFLOW");
-        uint256 degree = _pairReserves.getPriceDegree(self.truncatedReserves, zeroForOne, 0, amountOut);
         fee = self.slot0.lpFee();
+        uint256 degree = _pairReserves.getPriceDegree(self.truncatedReserves, zeroForOne, 0, amountOut);
         fee = fee.dynamicFee(degree);
         uint256 numerator = reserveIn * amountOut;
         uint256 denominator = (reserveOut - amountOut);
@@ -262,5 +270,97 @@ library Pool {
     /// @notice Reverts if the given pool has not been initialized
     function checkPoolInitialized(State storage self) internal view {
         if (self.slot0.lastUpdated() == 0) PoolNotInitialized.selector.revertWith();
+    }
+
+    function transformTruncated(State storage self) internal {
+        Reserves _pairReserves = self.pairReserves;
+        Reserves _truncatedReserves = self.truncatedReserves;
+        Slot0 _slot0 = self.slot0;
+        if (_pairReserves.bothPositive()) {
+            if (!_truncatedReserves.bothPositive()) {
+                self.truncatedReserves = _pairReserves;
+            } else {
+                (uint256 truncatedReserve0, uint256 truncatedReserve1) = _truncatedReserves.reserves();
+                uint256 delta = _slot0.lastUpdated().getTimeElapsed();
+                uint256 priceMoved = MAX_PRICE_MOVE_PER_SECOND * (delta ** 2);
+                uint128 newTruncatedReserve0 = 0;
+                uint128 newTruncatedReserve1 = _pairReserves.reserve1();
+                uint256 _reserve0 = _pairReserves.reserve0();
+
+                uint256 reserve0Min =
+                    Math.mulDiv(newTruncatedReserve1, truncatedReserve0.lowerMillion(priceMoved), truncatedReserve1);
+                uint256 reserve0Max =
+                    Math.mulDiv(newTruncatedReserve1, truncatedReserve0.upperMillion(priceMoved), truncatedReserve1);
+                if (_reserve0 < reserve0Min) {
+                    newTruncatedReserve0 = reserve0Min.toUint128();
+                } else if (_reserve0 > reserve0Max) {
+                    newTruncatedReserve0 = reserve0Max.toUint128();
+                } else {
+                    newTruncatedReserve0 = _reserve0.toUint128();
+                }
+                self.truncatedReserves = toReserves(newTruncatedReserve0, newTruncatedReserve1);
+            }
+        }
+        self.slot0 = _slot0.setLastUpdated(uint32(block.timestamp));
+    }
+
+    function updateReserves(
+        State storage self,
+        BalanceDelta pairDelta,
+        BalanceDelta lendingDelta,
+        BalanceDelta marginDelta
+    ) internal {
+        if (pairDelta != BalanceDeltaLibrary.ZERO_DELTA) {
+            self.realReserves = self.realReserves.applyDelta(pairDelta);
+            self.pairReserves = self.pairReserves.applyDelta(pairDelta);
+        } else if (lendingDelta != BalanceDeltaLibrary.ZERO_DELTA) {
+            self.realReserves = self.lendingReserves.applyDelta(lendingDelta);
+            self.mirrorReserves = self.lendingReserves.applyDelta(lendingDelta);
+            self.lendingReserves = self.lendingReserves.applyDelta(lendingDelta);
+        } else if (marginDelta != BalanceDeltaLibrary.ZERO_DELTA) {
+            BalanceDelta realDelta;
+            (int128 marginAmount, int128 mirrorAmount) = (marginDelta.amount0(), marginDelta.amount1());
+            if (mirrorAmount >= 0) {
+                // margin:
+                // realReserves add marginAmount
+                // lendReserves add marginAmount,mirrorAmount
+                // mirrorReserves add marginAmount,mirrorAmount
+                // pairReserves reduce mirrorAmount
+                if (marginAmount >= 0) {
+                    // margin token is token0
+                    realDelta = toBalanceDelta(-marginAmount, 0);
+                    pairDelta = toBalanceDelta(0, mirrorAmount);
+                    lendingDelta = toBalanceDelta(-marginAmount, -mirrorAmount);
+                } else {
+                    // margin token is token1
+                    realDelta = toBalanceDelta(0, marginAmount);
+                    pairDelta = toBalanceDelta(mirrorAmount, 0);
+                    lendingDelta = toBalanceDelta(-mirrorAmount, marginAmount);
+                }
+            } else {
+                // release:
+                // realReserves reduce marginAmount
+                // lendReserves reduce marginAmount,pairReserves
+                // mirrorReserves reduce marginAmount,pairReserves
+                // pairReserves add mirrorAmount
+                if (marginAmount >= 0) {
+                    // margin token is token0
+                    realDelta = toBalanceDelta(marginAmount, 0);
+                    pairDelta = toBalanceDelta(0, mirrorAmount);
+                    lendingDelta = toBalanceDelta(marginAmount, -mirrorAmount);
+                } else {
+                    // margin token is token1
+                    realDelta = toBalanceDelta(0, -marginAmount);
+                    pairDelta = toBalanceDelta(mirrorAmount, 0);
+                    lendingDelta = toBalanceDelta(-mirrorAmount, -marginAmount);
+                }
+            }
+
+            self.realReserves = self.realReserves.applyDelta(realDelta);
+            self.mirrorReserves = self.mirrorReserves.applyDelta(lendingDelta);
+            self.pairReserves = self.lendingReserves.applyDelta(pairDelta);
+            self.lendingReserves = self.lendingReserves.applyDelta(lendingDelta);
+        }
+        self.transformTruncated();
     }
 }

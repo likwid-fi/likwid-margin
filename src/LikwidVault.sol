@@ -12,16 +12,18 @@ import {PoolId} from "./types/PoolId.sol";
 import {IVault} from "./interfaces/IVault.sol";
 import {IUnlockCallback} from "./interfaces/callback/IUnlockCallback.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
-import {CustomRevert} from "./libraries/CustomRevert.sol";
 import {CurrencyGuard} from "./libraries/CurrencyGuard.sol";
 import {Pool} from "./libraries/Pool.sol";
 import {ERC6909Claims} from "./base/ERC6909Claims.sol";
 import {NoDelegateCall} from "./base/NoDelegateCall.sol";
 import {ProtocolFees} from "./base/ProtocolFees.sol";
+import {Extsload} from "./base/Extsload.sol";
+import {Exttload} from "./base/Exttload.sol";
+import {CustomRevert} from "./libraries/CustomRevert.sol";
 
 /// @title Likwid vault
 /// @notice Holds the property for all likwid pools
-contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims {
+contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Extsload, Exttload {
     using CustomRevert for bytes4;
     using SafeCast for *;
     using CurrencyGuard for Currency;
@@ -43,7 +45,11 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims {
         _;
     }
 
-    constructor(address initialOwner) ProtocolFees(initialOwner) {}
+    constructor(address initialOwner) ProtocolFees(initialOwner) {
+        rateState = rateState.setRateBase(50000).setUseMiddleLevel(400000).setUseHighLevel(800000).setMLow(10)
+            .setMMiddle(100).setMHigh(10000);
+        protocolFeeController = initialOwner;
+    }
 
     function unlock(bytes calldata data) external override returns (bytes memory result) {
         if (unlocked) revert AlreadyUnlocked();
