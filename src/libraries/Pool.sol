@@ -5,13 +5,14 @@ import {console} from "forge-std/console.sol";
 
 import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "../types/BalanceDelta.sol";
 import {FeeType} from "../types/FeeType.sol";
-import {Reserves, toReserves} from "../types/Reserves.sol";
+import {ReservesType, Reserves, toReserves, ReservesLibrary} from "../types/Reserves.sol";
 import {Slot0} from "../types/Slot0.sol";
 import {CustomRevert} from "./CustomRevert.sol";
 import {FeeLibrary} from "./FeeLibrary.sol";
 import {FixedPoint96} from "./FixedPoint96.sol";
 import {Math} from "./Math.sol";
 import {PairPosition} from "./PairPosition.sol";
+import {LendingPosition} from "./LendingPosition.sol";
 import {PerLibrary} from "./PerLibrary.sol";
 import {ProtocolFeeLibrary} from "./ProtocolFeeLibrary.sol";
 import {TimeLibrary} from "./TimeLibrary.sol";
@@ -29,6 +30,8 @@ library Pool {
     using Pool for State;
     using PairPosition for PairPosition.State;
     using PairPosition for mapping(bytes32 => PairPosition.State);
+    using LendingPosition for LendingPosition.State;
+    using LendingPosition for mapping(bytes32 => LendingPosition.State);
 
     /// @notice Thrown when trying to initialize an already initialized pool
     error PoolAlreadyInitialized();
@@ -58,6 +61,7 @@ library Pool {
         Reserves lendingReserves;
         /// @notice The positions in the pool, mapped by a hash of the owner's address and a salt.
         mapping(bytes32 positionKey => PairPosition.State) positions;
+        mapping(bytes32 positionKey => LendingPosition.State) lendingPositions;
     }
 
     struct ModifyLiquidityParams {
@@ -75,10 +79,14 @@ library Pool {
     /// @param self The pool state
     /// @param lpFee The initial fee for the pool
     function initialize(State storage self, uint24 lpFee) internal {
-        if (self.slot0.lastUpdated() != 0) PoolAlreadyInitialized.selector.revertWith();
+        if (self.borrow0CumulativeLast != 0) PoolAlreadyInitialized.selector.revertWith();
 
         // the initial protocolFee is 0 so doesn't need to be set
         self.slot0 = Slot0.wrap(bytes32(0)).setLastUpdated(uint32(block.timestamp)).setLpFee(lpFee);
+        self.borrow0CumulativeLast = FixedPoint96.Q96;
+        self.borrow1CumulativeLast = FixedPoint96.Q96;
+        self.deposit0CumulativeLast = FixedPoint96.Q96;
+        self.deposit1CumulativeLast = FixedPoint96.Q96;
     }
 
     /// @notice Sets the protocol fee for the pool
@@ -157,36 +165,48 @@ library Pool {
             self.slot0 = _slot0.setTotalSupply(totalSupply + liquidityAdded.toUint128());
             finalLiquidityDelta = liquidityAdded.toInt128();
         }
-        self.updateReserves(delta, BalanceDeltaLibrary.ZERO_DELTA, BalanceDeltaLibrary.ZERO_DELTA);
+        ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](2);
+        deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, delta);
+        deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, delta);
+        self.updateReserves(deltaParams);
 
         self.positions.get(params.owner, params.salt).update(finalLiquidityDelta, delta);
     }
 
+    struct SwapParams {
+        address sender;
+        // zeroForOne Whether to swap token0 for token1
+        bool zeroForOne;
+        // The amount to swap, negative for exact input, positive for exact output
+        int256 amountSpecified;
+        // Whether to use the mirror reserves for the swap
+        bool useMirror;
+    }
+
     /// @notice Swaps tokens in the pool
     /// @param self The pool state
-    /// @param zeroForOne Whether to swap token0 for token1
-    /// @param amountSpecified The amount to swap, negative for exact input, positive for exact output
+    /// @param params The parameters for the swap
     /// @return swapDelta The change in balances
     /// @return amountToProtocol The amount of fees to be sent to the protocol
     /// @return swapFee The fee for the swap
-    function swap(State storage self, bool zeroForOne, int256 amountSpecified)
+    function swap(State storage self, SwapParams memory params)
         internal
         returns (BalanceDelta swapDelta, uint256 amountToProtocol, uint24 swapFee)
     {
         Slot0 _slot0 = self.slot0;
 
-        bool exactIn = amountSpecified < 0;
+        bool exactIn = params.amountSpecified < 0;
 
         uint256 amountIn;
         uint256 amountOut;
         uint256 feeAmount;
 
         if (exactIn) {
-            amountIn = uint256(-amountSpecified);
-            (amountOut, swapFee, feeAmount) = self.getAmountOut(zeroForOne, amountIn);
+            amountIn = uint256(-params.amountSpecified);
+            (amountOut, swapFee, feeAmount) = self.getAmountOut(params.zeroForOne, amountIn);
         } else {
-            amountOut = uint256(amountSpecified);
-            (amountIn, swapFee, feeAmount) = self.getAmountIn(zeroForOne, amountOut);
+            amountOut = uint256(params.amountSpecified);
+            (amountIn, swapFee, feeAmount) = self.getAmountIn(params.zeroForOne, amountOut);
         }
 
         (uint256 protocolFeeAmount,) = ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeType.SWAP, feeAmount);
@@ -195,20 +215,71 @@ library Pool {
         int128 amount0Delta;
         int128 amount1Delta;
 
-        if (zeroForOne) {
+        if (params.zeroForOne) {
             amount0Delta = -amountIn.toInt128();
             amount1Delta = amountOut.toInt128();
         } else {
             amount0Delta = amountOut.toInt128();
             amount1Delta = -amountIn.toInt128();
         }
-        console.log("amount0Delta", amount0Delta);
-        console.log("amount1Delta", amount1Delta);
-        console.log("amountIn", amountIn);
-        console.log("amountOut", amountOut);
-        swapDelta = toBalanceDelta(amount0Delta, amount1Delta);
 
-        self.updateReserves(swapDelta, BalanceDeltaLibrary.ZERO_DELTA, BalanceDeltaLibrary.ZERO_DELTA);
+        swapDelta = toBalanceDelta(amount0Delta, amount1Delta);
+        ReservesLibrary.UpdateParam[] memory deltaParams;
+        if (!params.useMirror) {
+            deltaParams = new ReservesLibrary.UpdateParam[](2);
+            deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, swapDelta);
+            deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, swapDelta);
+        } else {
+            deltaParams = new ReservesLibrary.UpdateParam[](3);
+            BalanceDelta realDelta;
+            BalanceDelta mirrorDelta;
+            if (params.zeroForOne) {
+                realDelta = toBalanceDelta(amount0Delta, 0);
+                mirrorDelta = toBalanceDelta(0, amount1Delta);
+            } else {
+                realDelta = toBalanceDelta(0, amount1Delta);
+                mirrorDelta = toBalanceDelta(amount0Delta, 0);
+            }
+            deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, realDelta);
+            deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.MIRROR, mirrorDelta);
+            deltaParams[2] = ReservesLibrary.UpdateParam(ReservesType.PAIR, swapDelta);
+        }
+        self.updateReserves(deltaParams);
+    }
+
+    struct LendingParams {
+        address sender;
+        /// False if lending token0,true if lending token1
+        bool lendingForOne;
+        /// The amount to lend, negative for deposit, positive for withdraw
+        int128 lendingAmount;
+        bytes32 salt;
+    }
+
+    function lending(State storage self, LendingParams memory params)
+        internal
+        returns (BalanceDelta lendingDelta, uint256 depositCumulativeLast)
+    {
+        int128 amount0Delta;
+        int128 amount1Delta;
+
+        if (params.lendingForOne) {
+            amount1Delta = params.lendingAmount;
+            depositCumulativeLast = self.deposit1CumulativeLast;
+        } else {
+            amount0Delta = params.lendingAmount;
+            depositCumulativeLast = self.deposit0CumulativeLast;
+        }
+
+        lendingDelta = toBalanceDelta(amount0Delta, amount1Delta);
+        ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](2);
+        deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, lendingDelta);
+        deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.LENDING, lendingDelta);
+        self.updateReserves(deltaParams);
+
+        self.lendingPositions.get(params.sender, params.lendingForOne, params.salt).update(
+            depositCumulativeLast, lendingDelta
+        );
     }
 
     /// @notice Calculates the amount of tokens to be received for a given input amount
@@ -269,7 +340,7 @@ library Pool {
 
     /// @notice Reverts if the given pool has not been initialized
     function checkPoolInitialized(State storage self) internal view {
-        if (self.slot0.lastUpdated() == 0) PoolNotInitialized.selector.revertWith();
+        if (self.borrow0CumulativeLast == 0) PoolNotInitialized.selector.revertWith();
     }
 
     function transformTruncated(State storage self) internal {
@@ -304,63 +375,73 @@ library Pool {
         self.slot0 = _slot0.setLastUpdated(uint32(block.timestamp));
     }
 
-    function updateReserves(
-        State storage self,
-        BalanceDelta pairDelta,
-        BalanceDelta lendingDelta,
-        BalanceDelta marginDelta
-    ) internal {
-        if (pairDelta != BalanceDeltaLibrary.ZERO_DELTA) {
-            self.realReserves = self.realReserves.applyDelta(pairDelta);
-            self.pairReserves = self.pairReserves.applyDelta(pairDelta);
-        } else if (lendingDelta != BalanceDeltaLibrary.ZERO_DELTA) {
-            self.realReserves = self.lendingReserves.applyDelta(lendingDelta);
-            self.mirrorReserves = self.lendingReserves.applyDelta(lendingDelta);
-            self.lendingReserves = self.lendingReserves.applyDelta(lendingDelta);
-        } else if (marginDelta != BalanceDeltaLibrary.ZERO_DELTA) {
-            BalanceDelta realDelta;
-            (int128 marginAmount, int128 mirrorAmount) = (marginDelta.amount0(), marginDelta.amount1());
-            if (mirrorAmount >= 0) {
-                // margin:
-                // realReserves add marginAmount
-                // lendReserves add marginAmount,mirrorAmount
-                // mirrorReserves add marginAmount,mirrorAmount
-                // pairReserves reduce mirrorAmount
-                if (marginAmount >= 0) {
-                    // margin token is token0
-                    realDelta = toBalanceDelta(-marginAmount, 0);
-                    pairDelta = toBalanceDelta(0, mirrorAmount);
-                    lendingDelta = toBalanceDelta(-marginAmount, -mirrorAmount);
-                } else {
-                    // margin token is token1
-                    realDelta = toBalanceDelta(0, marginAmount);
-                    pairDelta = toBalanceDelta(mirrorAmount, 0);
-                    lendingDelta = toBalanceDelta(-mirrorAmount, marginAmount);
-                }
-            } else {
-                // release:
-                // realReserves reduce marginAmount
-                // lendReserves reduce marginAmount,pairReserves
-                // mirrorReserves reduce marginAmount,pairReserves
-                // pairReserves add mirrorAmount
-                if (marginAmount >= 0) {
-                    // margin token is token0
-                    realDelta = toBalanceDelta(marginAmount, 0);
-                    pairDelta = toBalanceDelta(0, mirrorAmount);
-                    lendingDelta = toBalanceDelta(marginAmount, -mirrorAmount);
-                } else {
-                    // margin token is token1
-                    realDelta = toBalanceDelta(0, -marginAmount);
-                    pairDelta = toBalanceDelta(mirrorAmount, 0);
-                    lendingDelta = toBalanceDelta(-mirrorAmount, -marginAmount);
-                }
+    function updateReserves(State storage self, ReservesLibrary.UpdateParam[] memory params) internal {
+        if (params.length == 0) return;
+        Reserves _realReserves = self.realReserves;
+        Reserves _mirrorReserves = self.mirrorReserves;
+        Reserves _pairReserves = self.pairReserves;
+        Reserves _lendingReserves = self.lendingReserves;
+        for (uint256 i = 0; i < params.length; i++) {
+            ReservesType _type = params[i]._type;
+            BalanceDelta delta = params[i].delta;
+            if (_type == ReservesType.REAL) {
+                _realReserves = _realReserves.applyDelta(delta);
+            } else if (_type == ReservesType.MIRROR) {
+                _mirrorReserves = _mirrorReserves.applyDelta(delta);
+            } else if (_type == ReservesType.PAIR) {
+                _pairReserves = _pairReserves.applyDelta(delta);
+            } else if (_type == ReservesType.LENDING) {
+                _lendingReserves = _lendingReserves.applyDelta(delta);
             }
-
-            self.realReserves = self.realReserves.applyDelta(realDelta);
-            self.mirrorReserves = self.mirrorReserves.applyDelta(lendingDelta);
-            self.pairReserves = self.lendingReserves.applyDelta(pairDelta);
-            self.lendingReserves = self.lendingReserves.applyDelta(lendingDelta);
         }
+        self.realReserves = _realReserves;
+        self.mirrorReserves = _mirrorReserves;
+        self.pairReserves = _pairReserves;
+        self.lendingReserves = _lendingReserves;
+        // if (marginDelta != BalanceDeltaLibrary.ZERO_DELTA) {
+        //     BalanceDelta realDelta;
+        //     (int128 marginAmount, int128 mirrorAmount) = (marginDelta.amount0(), marginDelta.amount1());
+        //     if (mirrorAmount >= 0) {
+        //         // margin:
+        //         // realReserves add marginAmount
+        //         // lendReserves add marginAmount,mirrorAmount
+        //         // mirrorReserves add marginAmount,mirrorAmount
+        //         // pairReserves reduce mirrorAmount
+        //         if (marginAmount >= 0) {
+        //             // margin token is token0
+        //             realDelta = toBalanceDelta(-marginAmount, 0);
+        //             pairDelta = toBalanceDelta(0, mirrorAmount);
+        //             lendingDelta = toBalanceDelta(-marginAmount, -mirrorAmount);
+        //         } else {
+        //             // margin token is token1
+        //             realDelta = toBalanceDelta(0, marginAmount);
+        //             pairDelta = toBalanceDelta(mirrorAmount, 0);
+        //             lendingDelta = toBalanceDelta(-mirrorAmount, marginAmount);
+        //         }
+        //     } else {
+        //         // release:
+        //         // realReserves reduce marginAmount
+        //         // lendReserves reduce marginAmount,pairReserves
+        //         // mirrorReserves reduce marginAmount,pairReserves
+        //         // pairReserves add mirrorAmount
+        //         if (marginAmount >= 0) {
+        //             // margin token is token0
+        //             realDelta = toBalanceDelta(marginAmount, 0);
+        //             pairDelta = toBalanceDelta(0, mirrorAmount);
+        //             lendingDelta = toBalanceDelta(marginAmount, -mirrorAmount);
+        //         } else {
+        //             // margin token is token1
+        //             realDelta = toBalanceDelta(0, -marginAmount);
+        //             pairDelta = toBalanceDelta(mirrorAmount, 0);
+        //             lendingDelta = toBalanceDelta(-mirrorAmount, -marginAmount);
+        //         }
+        //     }
+
+        //     self.realReserves = self.realReserves.applyDelta(realDelta);
+        //     self.mirrorReserves = self.mirrorReserves.applyDelta(lendingDelta);
+        //     self.pairReserves = self.lendingReserves.applyDelta(pairDelta);
+        //     self.lendingReserves = self.lendingReserves.applyDelta(lendingDelta);
+        // }
         self.transformTruncated();
     }
 }

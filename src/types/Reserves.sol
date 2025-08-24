@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {Panic} from "@openzeppelin/contracts/utils/Panic.sol";
+
 import {Math} from "../libraries/Math.sol";
 import {FixedPoint96} from "../libraries/FixedPoint96.sol";
 import {BalanceDelta} from "./BalanceDelta.sol";
@@ -19,8 +21,20 @@ function toReserves(uint128 _reserve0, uint128 _reserve1) pure returns (Reserves
     return Reserves.wrap((uint256(_reserve0) << 128) | _reserve1);
 }
 
+enum ReservesType {
+    REAL,
+    MIRROR,
+    PAIR,
+    LENDING
+}
+
 /// @notice A library for handling the Reserves type, which packs two uint128 values into a single uint256.
 library ReservesLibrary {
+    struct UpdateParam {
+        ReservesType _type;
+        BalanceDelta delta;
+    }
+
     error NotEnoughReserves();
 
     error InvalidReserves();

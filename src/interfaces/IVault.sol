@@ -32,6 +32,8 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
     /// @notice Thrown when trying to swap amount of 0
     error SwapAmountCannotBeZero();
 
+    error LendingAmountCannotBeZero();
+
     ///@notice Thrown when native currency is passed to a non native settlement
     error NonzeroNativeValue();
 
@@ -73,6 +75,15 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
     /// @param amount1 The amount donated in currency1
     event Donate(PoolId indexed id, address indexed sender, uint256 amount0, uint256 amount1);
 
+    event Lending(
+        PoolId indexed id,
+        address indexed sender,
+        bool lendingForOne,
+        int128 lendingAmount,
+        uint256 depositCumulativeLast,
+        bytes32 salt
+    );
+
     /// @notice All interactions on the contract that account deltas require unlocking. A caller that calls `unlock` must implement
     /// `IUnlockCallback(msg.sender).unlockCallback(data)`, where they interact with the remaining functions on this contract.
     /// @dev The only functions callable without an unlocking are `initialize` and `updateDynamicLPFee`
@@ -98,9 +109,8 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
     /// @dev Poke by calling with a zero liquidityDelta
     /// @param key The pool to modify liquidity in
     /// @param params The parameters for modifying the liquidity
-    /// @param hookData The data to pass through to the add/removeLiquidity hooks
     /// @return callerDelta The balance delta of the caller of modifyLiquidity. This is the total of both principal, fee deltas, and hook deltas if applicable
-    function modifyLiquidity(PoolKey memory key, ModifyLiquidityParams memory params, bytes calldata hookData)
+    function modifyLiquidity(PoolKey memory key, ModifyLiquidityParams memory params)
         external
         returns (BalanceDelta callerDelta);
 
@@ -109,19 +119,28 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
         bool zeroForOne;
         /// The desired input amount if negative (exactIn), or the desired output amount if positive (exactOut)
         int256 amountSpecified;
+        /// Whether to use the mirror reserves for the swap
+        bool useMirror;
     }
 
     /// @notice Swap against the given pool
     /// @param key The pool to swap in
     /// @param params The parameters for swapping
-    /// @param hookData The data to pass through to the swap hooks
     /// @return swapDelta The balance delta of the address swapping
     /// @dev Swapping on low liquidity pools may cause unexpected swap amounts when liquidity available is less than amountSpecified.
     /// Additionally note that if interacting with hooks that have the BEFORE_SWAP_RETURNS_DELTA_FLAG or AFTER_SWAP_RETURNS_DELTA_FLAG
     /// the hook may alter the swap input/output. Integrators should perform checks on the returned swapDelta.
-    function swap(PoolKey memory key, SwapParams memory params, bytes calldata hookData)
-        external
-        returns (BalanceDelta swapDelta);
+    function swap(PoolKey memory key, SwapParams memory params) external returns (BalanceDelta swapDelta);
+
+    struct LendingParams {
+        /// False if lending token0,true if lending token1
+        bool lendingForOne;
+        /// The amount to lend, negative for deposit, positive for withdraw
+        int128 lendingAmount;
+        bytes32 salt;
+    }
+
+    function lending(PoolKey memory key, LendingParams memory params) external returns (BalanceDelta lendingDelta);
 
     /// @notice Writes the current ERC20 balance of the specified currency to transient storage
     /// This is used to checkpoint balances for the manager and derive deltas for the caller.

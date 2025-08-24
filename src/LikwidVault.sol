@@ -76,7 +76,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         emit Initialize(id, key.currency0, key.currency1, key.fee);
     }
 
-    function modifyLiquidity(PoolKey memory key, IVault.ModifyLiquidityParams memory params, bytes calldata)
+    function modifyLiquidity(PoolKey memory key, IVault.ModifyLiquidityParams memory params)
         external
         onlyWhenUnlocked
         noDelegateCall
@@ -99,20 +99,26 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         _appendPoolBalanceDelta(key, msg.sender, callerDelta);
     }
 
-    function swap(PoolKey memory key, IVault.SwapParams memory params, bytes calldata)
+    function swap(PoolKey memory key, IVault.SwapParams memory params)
         external
         onlyWhenUnlocked
         noDelegateCall
         returns (BalanceDelta)
     {
-        if (params.amountSpecified == 0) revert SwapAmountCannotBeZero();
+        if (params.amountSpecified == 0) SwapAmountCannotBeZero.selector.revertWith();
 
         PoolId id = key.toId();
         Pool.State storage pool = _getPool(id);
         pool.checkPoolInitialized();
 
-        (BalanceDelta swapDelta, uint256 amountToProtocol, uint24 swapFee) =
-            pool.swap(params.zeroForOne, params.amountSpecified);
+        (BalanceDelta swapDelta, uint256 amountToProtocol, uint24 swapFee) = pool.swap(
+            Pool.SwapParams({
+                sender: msg.sender,
+                zeroForOne: params.zeroForOne,
+                amountSpecified: params.amountSpecified,
+                useMirror: params.useMirror
+            })
+        );
 
         _appendPoolBalanceDelta(key, msg.sender, swapDelta);
 
@@ -124,6 +130,32 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         emit Swap(id, msg.sender, swapDelta.amount0(), swapDelta.amount1(), pool.slot0.totalSupply(), swapFee);
 
         return swapDelta;
+    }
+
+    function lending(PoolKey memory key, IVault.LendingParams memory params)
+        external
+        onlyWhenUnlocked
+        noDelegateCall
+        returns (BalanceDelta lendingDelta)
+    {
+        if (params.lendingAmount == 0) LendingAmountCannotBeZero.selector.revertWith();
+
+        PoolId id = key.toId();
+        Pool.State storage pool = _getPool(id);
+        pool.checkPoolInitialized();
+        uint256 depositCumulativeLast;
+        (lendingDelta, depositCumulativeLast) = pool.lending(
+            Pool.LendingParams({
+                sender: msg.sender,
+                lendingForOne: params.lendingForOne,
+                                lendingAmount: params.lendingAmount,
+                salt: params.salt
+            })
+        );
+
+        _appendPoolBalanceDelta(key, msg.sender, lendingDelta);
+
+        emit Lending(id, msg.sender, params.lendingForOne, params.lendingAmount, depositCumulativeLast, params.salt);
     }
 
     function sync(Currency currency) external {
