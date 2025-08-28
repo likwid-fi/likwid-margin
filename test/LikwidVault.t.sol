@@ -7,6 +7,7 @@ import {console} from "forge-std/console.sol";
 import {LikwidVault} from "../src/LikwidVault.sol";
 import {IVault} from "../src/interfaces/IVault.sol";
 import {IUnlockCallback} from "../src/interfaces/callback/IUnlockCallback.sol";
+import {FeeType} from "../src/types/FeeType.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
@@ -80,11 +81,32 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             } else if (delta.amount1() > 0) {
                 vault.take(key.currency1, address(this), uint256(int256(delta.amount1())));
             }
-        } else if (selector == this.lending_callback.selector) {
-            (PoolKey memory key, IVault.LendingParams memory lendingParams) =
-                abi.decode(params, (PoolKey, IVault.LendingParams));
+        } else if (selector == this.lend_callback.selector) {
+            (PoolKey memory key, IVault.LendParams memory lendParams) = abi.decode(params, (PoolKey, IVault.LendParams));
 
-            BalanceDelta delta = vault.lending(key, lendingParams);
+            BalanceDelta delta = vault.lend(key, lendParams);
+
+            // Settle the balances
+            if (delta.amount0() < 0) {
+                vault.sync(key.currency0);
+                token0.transfer(address(vault), uint256(-int256(delta.amount0())));
+                vault.settle();
+            } else if (delta.amount0() > 0) {
+                vault.take(key.currency0, address(this), uint256(int256(delta.amount0())));
+            }
+
+            if (delta.amount1() < 0) {
+                vault.sync(key.currency1);
+                token1.transfer(address(vault), uint256(-int256(delta.amount1())));
+                vault.settle();
+            } else if (delta.amount1() > 0) {
+                vault.take(key.currency1, address(this), uint256(int256(delta.amount1())));
+            }
+        } else if (selector == this.margin_callback.selector) {
+            (PoolKey memory key, IVault.MarginParams memory marginParams) =
+                abi.decode(params, (PoolKey, IVault.MarginParams));
+
+            (BalanceDelta delta,) = vault.margin(key, marginParams);
 
             // Settle the balances
             if (delta.amount0() < 0) {
@@ -110,7 +132,9 @@ contract LikwidVaultTest is Test, IUnlockCallback {
 
     function swap_callback(PoolKey memory, IVault.SwapParams memory) external pure {}
 
-    function lending_callback(PoolKey memory, IVault.LendingParams memory) external pure {}
+    function lend_callback(PoolKey memory, IVault.LendParams memory) external pure {}
+
+    function margin_callback(PoolKey memory, IVault.MarginParams memory) external pure {}
 
     function testSwapExactInputToken0ForToken1() public {
         // 1. Setup
@@ -233,13 +257,13 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         uint256 initialLiquidity1 = 10e18;
         uint256 amountToSwap = 1e18;
         uint24 fee = 3000; // 0.3% LP fee
-        uint24 protocolFee = 50; // Represents 25% of the LP fee (50/200)
+        uint8 swapProtocolFee = 50; // Represents 25% of the LP fee (50/200)
         PoolKey memory key = PoolKey({currency0: currency0, currency1: currency1, fee: fee});
         vault.initialize(key);
 
         // Set protocol fee
         vault.setProtocolFeeController(address(this));
-        vault.setProtocolFee(key, protocolFee);
+        vault.setProtocolFee(key, FeeType.SWAP, swapProtocolFee);
 
         // Add liquidity
         token0.mint(address(this), initialLiquidity0);
@@ -277,7 +301,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         fee = fee.dynamicFee(degree);
         console.log("Dynamic fee (in ppm): ", fee);
         uint256 totalFeeAmount = amountToSwap * fee / 1_000_000;
-        uint256 expectedProtocolFee = totalFeeAmount * protocolFee / 200;
+        uint256 expectedProtocolFee = totalFeeAmount * swapProtocolFee / 200;
         console.log("Total fee amount: ", totalFeeAmount);
         console.log("Expected protocol fee: ", expectedProtocolFee);
         assertEq(vault.protocolFeesAccrued(currency0), expectedProtocolFee, "Protocol fee accrued should be correct");
@@ -370,20 +394,22 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         token0.mint(address(this), uint256(int256(-amountToLend)));
 
         // 2. Action
-        IVault.LendingParams memory lendingParams = IVault.LendingParams({
-            lendingForOne: false, // lending token0
-            lendingAmount: amountToLend,
+        IVault.LendParams memory lendParams = IVault.LendParams({
+            lendForOne: false, // lend token0
+            lendAmount: amountToLend,
             salt: bytes32(0)
         });
 
-        bytes memory inner_params_lending = abi.encode(key, lendingParams);
-        bytes memory data_lending = abi.encode(this.lending_callback.selector, inner_params_lending);
+        bytes memory inner_params_lend = abi.encode(key, lendParams);
+        bytes memory data_lend = abi.encode(this.lend_callback.selector, inner_params_lend);
 
-        vault.unlock(data_lending);
+        vault.unlock(data_lend);
 
         // 3. Assertions
         assertEq(token0.balanceOf(address(this)), 0, "User token0 balance should be 0");
-        assertEq(token0.balanceOf(address(vault)), initialLiquidity0 + uint256(int256(-amountToLend)), "Vault token0 balance");
+        assertEq(
+            token0.balanceOf(address(vault)), initialLiquidity0 + uint256(int256(-amountToLend)), "Vault token0 balance"
+        );
     }
 
     function testLendingWithdraw() public {
@@ -411,32 +437,219 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         token0.mint(address(this), uint256(int256(-amountToDeposit)));
 
         // Deposit
-        IVault.LendingParams memory depositParams = IVault.LendingParams({
-            lendingForOne: false, // lending token0
-            lendingAmount: amountToDeposit,
+        IVault.LendParams memory depositParams = IVault.LendParams({
+            lendForOne: false, // lend token0
+            lendAmount: amountToDeposit,
             salt: bytes32(0)
         });
         bytes memory inner_params_deposit = abi.encode(key, depositParams);
-        bytes memory data_deposit = abi.encode(this.lending_callback.selector, inner_params_deposit);
+        bytes memory data_deposit = abi.encode(this.lend_callback.selector, inner_params_deposit);
         vault.unlock(data_deposit);
 
-        assertEq(token0.balanceOf(address(vault)), initialLiquidity0 + uint256(int256(-amountToDeposit)), "Vault token0 balance after deposit");
+        assertEq(
+            token0.balanceOf(address(vault)),
+            initialLiquidity0 + uint256(int256(-amountToDeposit)),
+            "Vault token0 balance after deposit"
+        );
 
         // Withdraw
         int128 amountToWithdraw = 5e17; // Withdraw 0.5 token0
-        IVault.LendingParams memory withdrawParams = IVault.LendingParams({
-            lendingForOne: false, // lending token0
-            lendingAmount: amountToWithdraw,
+        IVault.LendParams memory withdrawParams = IVault.LendParams({
+            lendForOne: false, // lend token0
+            lendAmount: amountToWithdraw,
             salt: bytes32(0)
         });
 
         bytes memory inner_params_withdraw = abi.encode(key, withdrawParams);
-        bytes memory data_withdraw = abi.encode(this.lending_callback.selector, inner_params_withdraw);
+        bytes memory data_withdraw = abi.encode(this.lend_callback.selector, inner_params_withdraw);
 
         vault.unlock(data_withdraw);
 
         // 3. Assertions
-        assertEq(token0.balanceOf(address(this)), uint256(int256(amountToWithdraw)), "User token0 balance should be withdrawn amount");
-        assertEq(token0.balanceOf(address(vault)), initialLiquidity0 + uint256(int256(-amountToDeposit)) - uint256(int256(amountToWithdraw)), "Vault token0 balance after withdraw");
+        assertEq(
+            token0.balanceOf(address(this)),
+            uint256(int256(amountToWithdraw)),
+            "User token0 balance should be withdrawn amount"
+        );
+        assertEq(
+            token0.balanceOf(address(vault)),
+            initialLiquidity0 + uint256(int256(-amountToDeposit)) - uint256(int256(amountToWithdraw)),
+            "Vault token0 balance after withdraw"
+        );
+    }
+
+    function testMarginOneLeverage() public {
+        // 1. Setup
+        uint256 initialLiquidity0 = 10e18;
+        uint256 initialLiquidity1 = 10e18;
+        uint24 fee = 3000; // 0.3%
+        PoolKey memory key = PoolKey({currency0: currency0, currency1: currency1, fee: fee});
+        vault.initialize(key);
+
+        // Add liquidity
+        token0.mint(address(this), initialLiquidity0);
+        token1.mint(address(this), initialLiquidity1);
+        IVault.ModifyLiquidityParams memory mlParams = IVault.ModifyLiquidityParams({
+            amount0: initialLiquidity0,
+            amount1: initialLiquidity1,
+            liquidityDelta: 0,
+            salt: bytes32(0)
+        });
+        bytes memory inner_params_liq = abi.encode(key, mlParams);
+        bytes memory data_liq = abi.encode(this.modifyLiquidity_callback.selector, inner_params_liq);
+        vault.unlock(data_liq);
+
+        // User provides collateral
+        uint128 collateralValue = 1e18; // 1 token1
+        token1.mint(address(this), collateralValue);
+
+        // 2. Action
+        // We want 2x leverage. We provide 1 token of collateral, and borrow 1 token's worth of the other asset.
+        // So, marginTotal is equal to the collateral value.
+        IVault.MarginParams memory marginParams = IVault.MarginParams({
+            marginForOne: true, // collateral is token1, borrow token0
+            amount: -int128(collateralValue),
+            marginTotal: collateralValue, // Borrow 1e18 worth of token0
+            borrowAmount: 0, // let the contract calculate
+            salt: bytes32(0)
+        });
+
+        bytes memory inner_params_margin = abi.encode(key, marginParams);
+        bytes memory data_margin = abi.encode(this.margin_callback.selector, inner_params_margin);
+
+        vault.unlock(data_margin);
+
+        // 3. Assertions
+        assertEq(token1.balanceOf(address(this)), 0, "User should have transferred all collateral");
+        assertEq(token0.balanceOf(address(this)), 0, "User should NOT receive borrowed token0 on margin trade");
+        assertEq(
+            token1.balanceOf(address(vault)),
+            initialLiquidity1 + collateralValue,
+            "Vault should have received collateral"
+        );
+    }
+
+    function testBorrowSimple() public {
+        // 1. Setup
+        uint256 initialLiquidity0 = 10e18;
+        uint256 initialLiquidity1 = 10e18;
+        uint24 fee = 3000;
+        PoolKey memory key = PoolKey({currency0: currency0, currency1: currency1, fee: fee});
+        vault.initialize(key);
+
+        // Add liquidity
+        token0.mint(address(this), initialLiquidity0);
+        token1.mint(address(this), initialLiquidity1);
+        IVault.ModifyLiquidityParams memory mlParams = IVault.ModifyLiquidityParams({
+            amount0: initialLiquidity0,
+            amount1: initialLiquidity1,
+            liquidityDelta: 0,
+            salt: bytes32(0)
+        });
+        bytes memory inner_params_liq = abi.encode(key, mlParams);
+        bytes memory data_liq = abi.encode(this.modifyLiquidity_callback.selector, inner_params_liq);
+        vault.unlock(data_liq);
+
+        // User provides collateral
+        uint128 collateralValue = 1e18; // 1 token1
+        token1.mint(address(this), collateralValue);
+
+        uint128 amountToBorrow = 5e17; // 0.5 token0
+
+        // 2. Action
+        IVault.MarginParams memory marginParams = IVault.MarginParams({
+            marginForOne: true, // collateral is token1, borrow token0
+            amount: -int128(collateralValue),
+            marginTotal: 0, // This makes it a borrow, not a margin trade
+            borrowAmount: amountToBorrow,
+            salt: bytes32(0)
+        });
+
+        bytes memory inner_params_margin = abi.encode(key, marginParams);
+        bytes memory data_margin = abi.encode(this.margin_callback.selector, inner_params_margin);
+
+        vault.unlock(data_margin);
+
+        // 3. Assertions
+        assertEq(token1.balanceOf(address(this)), 0, "User should have transferred all collateral");
+        assertEq(token0.balanceOf(address(this)), amountToBorrow, "User should have received borrowed token0");
+        assertEq(
+            token1.balanceOf(address(vault)),
+            initialLiquidity1 + collateralValue,
+            "Vault should have received collateral"
+        );
+        assertEq(
+            token0.balanceOf(address(vault)),
+            initialLiquidity0 - amountToBorrow,
+            "Vault should have sent borrowed token0"
+        );
+    }
+
+    function testMarginRepay() public {
+        // 1. Setup: Create a margin position (borrow token0 against token1)
+        uint256 initialLiquidity0 = 10e18;
+        uint256 initialLiquidity1 = 10e18;
+        uint24 fee = 3000;
+        PoolKey memory key = PoolKey({currency0: currency0, currency1: currency1, fee: fee});
+        vault.initialize(key);
+
+        // Add liquidity
+        token0.mint(address(this), initialLiquidity0);
+        token1.mint(address(this), initialLiquidity1);
+        IVault.ModifyLiquidityParams memory mlParams = IVault.ModifyLiquidityParams({
+            amount0: initialLiquidity0,
+            amount1: initialLiquidity1,
+            liquidityDelta: 0,
+            salt: bytes32(0)
+        });
+        bytes memory inner_params_liq = abi.encode(key, mlParams);
+        bytes memory data_liq = abi.encode(this.modifyLiquidity_callback.selector, inner_params_liq);
+        vault.unlock(data_liq);
+
+        // User provides collateral and opens a margin position
+        uint128 collateralValue = 1e18; // 1 token1
+        token1.mint(address(this), collateralValue);
+
+        // We borrow 1 token0 worth of token0, so marginTotal = collateralValue
+        IVault.MarginParams memory marginParams = IVault.MarginParams({
+            marginForOne: true, // collateral is token1, borrow token0
+            amount: -int128(collateralValue),
+            marginTotal: collateralValue,
+            borrowAmount: 0, // let the contract calculate
+            salt: bytes32(0)
+        });
+
+        bytes memory inner_params_margin = abi.encode(key, marginParams);
+        bytes memory data_margin = abi.encode(this.margin_callback.selector, inner_params_margin);
+        vault.unlock(data_margin);
+
+        uint256 vaultBalance0AfterMargin = token0.balanceOf(address(vault));
+        uint256 vaultBalance1AfterMargin = token1.balanceOf(address(vault));
+
+        // 2. Action: Repay the debt
+        // The amount borrowed is roughly 1e18 token0. We need to repay this.
+        uint128 amountToRepay = 1e18; // Repay 1 token0
+        token0.mint(address(this), amountToRepay);
+
+        IVault.MarginParams memory repayParams = IVault.MarginParams({
+            marginForOne: true, // we borrowed token0
+            amount: int128(amountToRepay), // Positive amount for repay
+            marginTotal: collateralValue, // Must match the original margin position
+            borrowAmount: 0, // Not used in repay
+            salt: bytes32(0) // Must match the original salt
+        });
+
+        bytes memory inner_params_repay = abi.encode(key, repayParams);
+        bytes memory data_repay = abi.encode(this.margin_callback.selector, inner_params_repay);
+
+        vault.unlock(data_repay);
+
+        // 3. Assertions
+        assertEq(token0.balanceOf(address(this)), 0, "User should have spent all token0 for repayment");
+        // User gets their collateral back, approximately. Due to fees, it might not be exact.
+        // For this test, we expect the full collateral back as we repay the principal.
+        assertTrue(token1.balanceOf(address(this)) > 0, "User should get collateral back");
+        assertEq(token0.balanceOf(address(vault)), vaultBalance0AfterMargin + amountToRepay, "Vault token0 balance should increase");
+        assertTrue(token1.balanceOf(address(vault)) < vaultBalance1AfterMargin, "Vault token1 balance should decrease");
     }
 }

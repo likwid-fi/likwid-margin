@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {FeeType} from "../types/FeeType.sol";
 import {Currency} from "../types/Currency.sol";
 import {IProtocolFees} from "../interfaces/IProtocolFees.sol";
 import {PoolKey} from "../types/PoolKey.sol";
@@ -34,11 +35,13 @@ abstract contract ProtocolFees is IProtocolFees, InterestBase {
     }
 
     /// @inheritdoc IProtocolFees
-    function setProtocolFee(PoolKey memory key, uint24 newProtocolFee) external {
+    function setProtocolFee(PoolKey memory key, FeeType feeType, uint8 newFee) external {
         if (msg.sender != protocolFeeController) InvalidCaller.selector.revertWith();
-        if (!newProtocolFee.isValidProtocolFee()) ProtocolFeeTooLarge.selector.revertWith(newProtocolFee);
         PoolId id = key.toId();
-        _getPool(id).setProtocolFee(newProtocolFee);
+        Pool.State storage pool = _getPool(id);
+        uint24 newProtocolFee = pool.slot0.protocolFee().setProtocolFee(feeType, newFee);
+        if (!newProtocolFee.isValidProtocolFee()) ProtocolFeeTooLarge.selector.revertWith(newProtocolFee);
+        pool.setProtocolFee(newProtocolFee);
         emit ProtocolFeeUpdated(id, newProtocolFee);
     }
 

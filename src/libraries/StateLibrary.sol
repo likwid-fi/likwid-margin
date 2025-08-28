@@ -23,7 +23,7 @@ library StateLibrary {
     uint256 internal constant MIRROR_RESERVES_OFFSET = 6;
     uint256 internal constant PAIR_RESERVES_OFFSET = 7;
     uint256 internal constant TRUNCATED_RESERVES_OFFSET = 8;
-    uint256 internal constant LENDING_RESERVES_OFFSET = 9;
+    uint256 internal constant LEND_RESERVES_OFFSET = 9;
 
     /**
      * @notice Get the unpacked Slot0 of the pool.
@@ -132,8 +132,8 @@ library StateLibrary {
      * @param poolId The ID of the pool.
      * @return reserves The packed lending reserves of the pool.
      */
-    function getLendingReserves(IVault manager, PoolId poolId) internal view returns (Reserves) {
-        bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + LENDING_RESERVES_OFFSET);
+    function getLendReserves(IVault manager, PoolId poolId) internal view returns (Reserves) {
+        bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + LEND_RESERVES_OFFSET);
         return Reserves.wrap(uint256(manager.extsload(slot)));
     }
 

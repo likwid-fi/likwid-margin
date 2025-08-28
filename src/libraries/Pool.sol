@@ -12,7 +12,8 @@ import {FeeLibrary} from "./FeeLibrary.sol";
 import {FixedPoint96} from "./FixedPoint96.sol";
 import {Math} from "./Math.sol";
 import {PairPosition} from "./PairPosition.sol";
-import {LendingPosition} from "./LendingPosition.sol";
+import {LendPosition} from "./LendPosition.sol";
+import {MarginPosition} from "./MarginPosition.sol";
 import {PerLibrary} from "./PerLibrary.sol";
 import {ProtocolFeeLibrary} from "./ProtocolFeeLibrary.sol";
 import {TimeLibrary} from "./TimeLibrary.sol";
@@ -30,8 +31,10 @@ library Pool {
     using Pool for State;
     using PairPosition for PairPosition.State;
     using PairPosition for mapping(bytes32 => PairPosition.State);
-    using LendingPosition for LendingPosition.State;
-    using LendingPosition for mapping(bytes32 => LendingPosition.State);
+    using LendPosition for LendPosition.State;
+    using LendPosition for mapping(bytes32 => LendPosition.State);
+    using MarginPosition for MarginPosition.State;
+    using MarginPosition for mapping(bytes32 => MarginPosition.State);
 
     /// @notice Thrown when trying to initialize an already initialized pool
     error PoolAlreadyInitialized();
@@ -42,7 +45,20 @@ library Pool {
     /// @notice Thrown when trying to remove more liquidity than available in the pool
     error InsufficientLiquidity();
 
+    error LeverageOverflow();
+
+    error ReservesNotEnough();
+
+    error MirrorTooMuch();
+
+    error BorrowTooMuch();
+
+    error MarginLevelError();
+
     uint256 constant MAX_PRICE_MOVE_PER_SECOND = 3000; // 0.3%/second
+    uint8 constant MAX_LEVERAGE = 5; // 5x
+    uint24 constant MIN_MARGIN_LEVEL = 1170000; // 117%
+    uint24 constant MIN_BORROW_LEVEL = 1400000; // 140%
 
     struct State {
         Slot0 slot0;
@@ -58,10 +74,11 @@ library Pool {
         Reserves mirrorReserves;
         Reserves pairReserves;
         Reserves truncatedReserves;
-        Reserves lendingReserves;
+        Reserves lendReserves;
         /// @notice The positions in the pool, mapped by a hash of the owner's address and a salt.
         mapping(bytes32 positionKey => PairPosition.State) positions;
-        mapping(bytes32 positionKey => LendingPosition.State) lendingPositions;
+        mapping(bytes32 positionKey => LendPosition.State) lendPositions;
+        mapping(bytes32 positionKey => MarginPosition.State) marginPositions;
     }
 
     struct ModifyLiquidityParams {
@@ -209,8 +226,7 @@ library Pool {
             (amountIn, swapFee, feeAmount) = self.getAmountIn(params.zeroForOne, amountOut);
         }
 
-        (uint256 protocolFeeAmount,) = ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeType.SWAP, feeAmount);
-        amountToProtocol = protocolFeeAmount;
+        (amountToProtocol,) = ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeType.SWAP, feeAmount);
 
         int128 amount0Delta;
         int128 amount1Delta;
@@ -247,39 +263,179 @@ library Pool {
         self.updateReserves(deltaParams);
     }
 
-    struct LendingParams {
+    struct LendParams {
         address sender;
-        /// False if lending token0,true if lending token1
-        bool lendingForOne;
+        /// False if lend token0,true if lend token1
+        bool lendForOne;
         /// The amount to lend, negative for deposit, positive for withdraw
-        int128 lendingAmount;
+        int128 lendAmount;
         bytes32 salt;
     }
 
-    function lending(State storage self, LendingParams memory params)
+    function lend(State storage self, LendParams memory params)
         internal
-        returns (BalanceDelta lendingDelta, uint256 depositCumulativeLast)
+        returns (BalanceDelta lendDelta, uint256 depositCumulativeLast)
     {
         int128 amount0Delta;
         int128 amount1Delta;
 
-        if (params.lendingForOne) {
-            amount1Delta = params.lendingAmount;
+        if (params.lendForOne) {
+            amount1Delta = params.lendAmount;
             depositCumulativeLast = self.deposit1CumulativeLast;
         } else {
-            amount0Delta = params.lendingAmount;
+            amount0Delta = params.lendAmount;
             depositCumulativeLast = self.deposit0CumulativeLast;
         }
 
-        lendingDelta = toBalanceDelta(amount0Delta, amount1Delta);
+        lendDelta = toBalanceDelta(amount0Delta, amount1Delta);
         ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](2);
-        deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, lendingDelta);
-        deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.LENDING, lendingDelta);
+        deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, lendDelta);
+        deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.LEND, lendDelta);
         self.updateReserves(deltaParams);
 
-        self.lendingPositions.get(params.sender, params.lendingForOne, params.salt).update(
-            depositCumulativeLast, lendingDelta
-        );
+        self.lendPositions.get(params.sender, params.lendForOne, params.salt).update(depositCumulativeLast, lendDelta);
+    }
+
+    struct MarginParams {
+        address sender;
+        /// False if margin token0,true if margin token1
+        bool marginForOne;
+        /// The amount to change, negative for margin amount, positive for repay amount
+        int128 amount;
+        // margin
+        uint128 marginTotal;
+        // borrow
+        uint128 borrowAmount;
+        bytes32 salt;
+    }
+
+    function margin(State storage self, MarginParams memory params)
+        internal
+        returns (BalanceDelta marginDelta, MarginPosition.State memory position)
+    {
+        if (params.amount == 0) {
+            return (BalanceDelta.wrap(0), position);
+        }
+
+        uint256 releaseAmount;
+        uint256 marginWithoutFee;
+        int128 amount0Delta;
+        int128 amount1Delta;
+        BalanceDelta pairDelta;
+        BalanceDelta lendDelta;
+        BalanceDelta mirrorDelta;
+
+        // --- Load storage vars into stack to reduce SLOADs ---
+        Reserves _realReserves = self.realReserves;
+        Reserves _mirrorReserves = self.mirrorReserves;
+        Reserves _pairReserves = self.pairReserves;
+        Slot0 _slot0 = self.slot0;
+
+        uint256 borrowCumulativeLast;
+        uint256 depositCumulativeLast;
+        if (params.marginForOne) {
+            borrowCumulativeLast = self.borrow0CumulativeLast;
+            depositCumulativeLast = self.deposit1CumulativeLast;
+        } else {
+            borrowCumulativeLast = self.borrow1CumulativeLast;
+            depositCumulativeLast = self.deposit0CumulativeLast;
+        }
+
+        if (params.amount < 0) {
+            // --- Margin or Borrow ---
+            uint128 marginAmount = uint128(-params.amount);
+            if (params.marginTotal > marginAmount * MAX_LEVERAGE) LeverageOverflow.selector.revertWith();
+
+            uint256 borrowRealReserves = _realReserves.reserve01(!params.marginForOne);
+            uint256 borrowAmount;
+
+            if (params.marginTotal > 0) {
+                // --- Margin ---
+                uint256 borrowMirrorReserves = _mirrorReserves.reserve01(!params.marginForOne);
+                if (Math.mulDiv(borrowMirrorReserves, 100, borrowRealReserves + borrowMirrorReserves) > 90) {
+                    MirrorTooMuch.selector.revertWith();
+                }
+
+                uint256 marginReserves = _realReserves.reserve01(params.marginForOne);
+                if (params.marginTotal > marginReserves) ReservesNotEnough.selector.revertWith();
+
+                uint24 marginFee = _slot0.marginFee();
+                (marginWithoutFee,) = marginFee.deduct(params.marginTotal);
+                (borrowAmount,,) = self.getAmountIn(params.marginForOne, params.marginTotal);
+                params.borrowAmount = borrowAmount.toUint128();
+
+                (uint128 reserve0, uint128 reserve1) = _pairReserves.reserves();
+                (uint256 reserveBorrow, uint256 reserveMargin) =
+                    params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+
+                uint256 positionValue = Math.mulDiv(reserveBorrow, marginAmount + params.marginTotal, reserveMargin);
+                uint256 marginLevel = Math.mulDiv(positionValue, PerLibrary.ONE_MILLION, borrowAmount);
+                if (marginLevel < MIN_MARGIN_LEVEL) MarginLevelError.selector.revertWith();
+            } else {
+                // --- Borrow ---
+                uint256 borrowMAXAmount =
+                    _pairReserves.getAmountOut(!params.marginForOne, marginAmount).mulMillionDiv(MIN_BORROW_LEVEL);
+                borrowMAXAmount = Math.min(borrowMAXAmount, borrowRealReserves * 20 / 100);
+                if (params.borrowAmount > borrowMAXAmount) BorrowTooMuch.selector.revertWith();
+                if (params.borrowAmount == 0) params.borrowAmount = borrowMAXAmount.toUint128();
+                borrowAmount = params.borrowAmount;
+            }
+
+            int128 lendAmount = params.amount - marginWithoutFee.toInt128();
+            if (params.marginForOne) {
+                amount1Delta = params.amount;
+                lendDelta = toBalanceDelta(0, lendAmount);
+                mirrorDelta = toBalanceDelta(-borrowAmount.toInt128(), 0);
+            } else {
+                amount0Delta = params.amount;
+                lendDelta = toBalanceDelta(lendAmount, 0);
+                mirrorDelta = toBalanceDelta(0, -borrowAmount.toInt128());
+            }
+
+            if (params.marginTotal == 0) {
+                if (params.marginForOne) {
+                    // Borrowed token0
+                    amount0Delta = borrowAmount.toInt128();
+                } else {
+                    // Borrowed token1
+                    amount1Delta = borrowAmount.toInt128();
+                }
+            } else {
+                pairDelta = mirrorDelta;
+            }
+        } else {
+            // --- Repay Debt ---
+            uint128 repayAmount = uint128(params.amount);
+            if (params.marginForOne) {
+                amount0Delta = -params.amount;
+                mirrorDelta = toBalanceDelta(repayAmount.toInt128(), 0);
+            } else {
+                amount1Delta = -params.amount;
+                mirrorDelta = toBalanceDelta(0, repayAmount.toInt128());
+            }
+        }
+
+        (position, releaseAmount) = self.marginPositions.get(
+            params.sender, params.marginForOne, params.marginTotal, params.salt
+        ).update(borrowCumulativeLast, depositCumulativeLast, params.amount, marginWithoutFee, params.borrowAmount);
+
+        if (releaseAmount > 0) {
+            if (params.marginForOne) {
+                amount1Delta = releaseAmount.toInt128();
+                lendDelta = toBalanceDelta(0, amount1Delta);
+            } else {
+                amount0Delta = releaseAmount.toInt128();
+                lendDelta = toBalanceDelta(amount0Delta, 0);
+            }
+        }
+
+        marginDelta = toBalanceDelta(amount0Delta, amount1Delta);
+        ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](4);
+        deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, marginDelta);
+        deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, pairDelta);
+        deltaParams[2] = ReservesLibrary.UpdateParam(ReservesType.LEND, lendDelta);
+        deltaParams[3] = ReservesLibrary.UpdateParam(ReservesType.MIRROR, mirrorDelta);
+        self.updateReserves(deltaParams);
     }
 
     /// @notice Calculates the amount of tokens to be received for a given input amount
@@ -380,7 +536,7 @@ library Pool {
         Reserves _realReserves = self.realReserves;
         Reserves _mirrorReserves = self.mirrorReserves;
         Reserves _pairReserves = self.pairReserves;
-        Reserves _lendingReserves = self.lendingReserves;
+        Reserves _lendReserves = self.lendReserves;
         for (uint256 i = 0; i < params.length; i++) {
             ReservesType _type = params[i]._type;
             BalanceDelta delta = params[i].delta;
@@ -390,14 +546,14 @@ library Pool {
                 _mirrorReserves = _mirrorReserves.applyDelta(delta);
             } else if (_type == ReservesType.PAIR) {
                 _pairReserves = _pairReserves.applyDelta(delta);
-            } else if (_type == ReservesType.LENDING) {
-                _lendingReserves = _lendingReserves.applyDelta(delta);
+            } else if (_type == ReservesType.LEND) {
+                _lendReserves = _lendReserves.applyDelta(delta);
             }
         }
         self.realReserves = _realReserves;
         self.mirrorReserves = _mirrorReserves;
         self.pairReserves = _pairReserves;
-        self.lendingReserves = _lendingReserves;
+        self.lendReserves = _lendReserves;
         // if (marginDelta != BalanceDeltaLibrary.ZERO_DELTA) {
         //     BalanceDelta realDelta;
         //     (int128 marginAmount, int128 mirrorAmount) = (marginDelta.amount0(), marginDelta.amount1());
@@ -411,12 +567,12 @@ library Pool {
         //             // margin token is token0
         //             realDelta = toBalanceDelta(-marginAmount, 0);
         //             pairDelta = toBalanceDelta(0, mirrorAmount);
-        //             lendingDelta = toBalanceDelta(-marginAmount, -mirrorAmount);
+        //             lendDelta = toBalanceDelta(-marginAmount, -mirrorAmount);
         //         } else {
         //             // margin token is token1
         //             realDelta = toBalanceDelta(0, marginAmount);
         //             pairDelta = toBalanceDelta(mirrorAmount, 0);
-        //             lendingDelta = toBalanceDelta(-mirrorAmount, marginAmount);
+        //             lendDelta = toBalanceDelta(-mirrorAmount, marginAmount);
         //         }
         //     } else {
         //         // release:
@@ -428,19 +584,19 @@ library Pool {
         //             // margin token is token0
         //             realDelta = toBalanceDelta(marginAmount, 0);
         //             pairDelta = toBalanceDelta(0, mirrorAmount);
-        //             lendingDelta = toBalanceDelta(marginAmount, -mirrorAmount);
+        //             lendDelta = toBalanceDelta(marginAmount, -mirrorAmount);
         //         } else {
         //             // margin token is token1
         //             realDelta = toBalanceDelta(0, -marginAmount);
         //             pairDelta = toBalanceDelta(mirrorAmount, 0);
-        //             lendingDelta = toBalanceDelta(-mirrorAmount, -marginAmount);
+        //             lendDelta = toBalanceDelta(-mirrorAmount, -marginAmount);
         //         }
         //     }
 
         //     self.realReserves = self.realReserves.applyDelta(realDelta);
-        //     self.mirrorReserves = self.mirrorReserves.applyDelta(lendingDelta);
-        //     self.pairReserves = self.lendingReserves.applyDelta(pairDelta);
-        //     self.lendingReserves = self.lendingReserves.applyDelta(lendingDelta);
+        //     self.mirrorReserves = self.mirrorReserves.applyDelta(lendDelta);
+        //     self.pairReserves = self.lendReserves.applyDelta(pairDelta);
+        //     self.lendReserves = self.lendReserves.applyDelta(lendDelta);
         // }
         self.transformTruncated();
     }

@@ -29,10 +29,8 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
     /// @notice PoolKey must have currencies where address(currency0) < address(currency1)
     error CurrenciesOutOfOrderOrEqual(address currency0, address currency1);
 
-    /// @notice Thrown when trying to swap amount of 0
-    error SwapAmountCannotBeZero();
-
-    error LendingAmountCannotBeZero();
+    /// @notice Thrown when trying to amount of 0
+    error AmountCannotBeZero();
 
     ///@notice Thrown when native currency is passed to a non native settlement
     error NonzeroNativeValue();
@@ -84,6 +82,16 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
         bytes32 salt
     );
 
+    event Margin(
+        PoolId indexed id,
+        address indexed sender,
+        bool marginForOne,
+        int128 amount,
+        uint128 marginTotal,
+        uint128 borrowAmount,
+        bytes32 salt
+    );
+
     /// @notice All interactions on the contract that account deltas require unlocking. A caller that calls `unlock` must implement
     /// `IUnlockCallback(msg.sender).unlockCallback(data)`, where they interact with the remaining functions on this contract.
     /// @dev The only functions callable without an unlocking are `initialize` and `updateDynamicLPFee`
@@ -132,15 +140,27 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
     /// the hook may alter the swap input/output. Integrators should perform checks on the returned swapDelta.
     function swap(PoolKey memory key, SwapParams memory params) external returns (BalanceDelta swapDelta);
 
-    struct LendingParams {
-        /// False if lending token0,true if lending token1
-        bool lendingForOne;
+    struct LendParams {
+        /// False if lend token0,true if lend token1
+        bool lendForOne;
         /// The amount to lend, negative for deposit, positive for withdraw
-        int128 lendingAmount;
+        int128 lendAmount;
         bytes32 salt;
     }
 
-    function lending(PoolKey memory key, LendingParams memory params) external returns (BalanceDelta lendingDelta);
+    function lend(PoolKey memory key, LendParams memory params) external returns (BalanceDelta lendDelta);
+
+    struct MarginParams {
+        /// False if margin token0,true if margin token1
+        bool marginForOne;
+        /// The amount to change, negative for margin amount, positive for repay amount
+        int128 amount;
+        // margin
+        uint128 marginTotal;
+        // borrow
+        uint128 borrowAmount;
+        bytes32 salt;
+    }
 
     /// @notice Writes the current ERC20 balance of the specified currency to transient storage
     /// This is used to checkpoint balances for the manager and derive deltas for the caller.

@@ -25,7 +25,7 @@ enum ReservesType {
     REAL,
     MIRROR,
     PAIR,
-    LENDING
+    LEND
 }
 
 /// @notice A library for handling the Reserves type, which packs two uint128 values into a single uint256.
@@ -51,6 +51,10 @@ library ReservesLibrary {
     /// @return The reserve1 value (lower 128 bits).
     function reserve1(Reserves self) internal pure returns (uint128) {
         return uint128(Reserves.unwrap(self));
+    }
+
+    function reserve01(Reserves self, bool forOne) internal pure returns (uint128) {
+        return forOne ? self.reserve1() : self.reserve0();
     }
 
     function reserves(Reserves self) internal pure returns (uint128 _reserve0, uint128 _reserve1) {
