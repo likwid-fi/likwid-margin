@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.28;
 
-import {PoolId} from "likwid-v2-core/types/PoolId.sol";
-import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
-import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
-import {IHooks} from "likwid-v2-core/interfaces/IHooks.sol";
-
+import {PoolId} from "../types/PoolId.sol";
+import {PoolKey} from "..//types/PoolKey.sol";
+import {Currency, CurrencyLibrary} from "../types/Currency.sol";
 import {IStatusBase} from "./IStatusBase.sol";
 import {IMarginFees} from "./IMarginFees.sol";
 import {BalanceStatus} from "../types/BalanceStatus.sol";
@@ -13,8 +11,6 @@ import {PoolStatus} from "../types/PoolStatus.sol";
 import {GlobalStatus} from "../types/GlobalStatus.sol";
 
 interface IPoolStatusManager is IStatusBase {
-    function hooks() external view returns (IHooks hook);
-
     /// @notice Get current IMarginFees
     function marginFees() external view returns (IMarginFees hook);
 

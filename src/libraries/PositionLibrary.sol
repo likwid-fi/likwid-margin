@@ -67,45 +67,4 @@ library PositionLibrary {
             mstore(add(ptr, 0x20), 0)
         }
     }
-
-    function calculatePositionKey(address owner, bool isForOne, bool hasLeverage, bytes32 salt)
-        internal
-        pure
-        returns (bytes32 positionKey)
-    {
-        assembly ("memory-safe") {
-            // Get a pointer to some free memory
-            let ptr := mload(0x40)
-
-            // abi.encodePacked(owner, isForOne, hasLeverage, salt) is 54 bytes:
-            // | owner (20 bytes) | isForOne (1 byte) | hasLeverage (1 byte) | salt (32 bytes) |
-
-            // We construct the first 32 bytes of the packed data:
-            // | owner (20 bytes) | isForOne (1 byte) | hasLeverage (1 byte) | salt (first 10 bytes) |
-            // Shift owner left by 12 bytes (96 bits) to align it to the start of the word.
-            let word1 := shl(96, owner)
-            // Shift isForOne left by 11 bytes (88 bits) to place it right after the owner.
-            word1 := or(word1, shl(88, isForOne))
-            // Shift hasLeverage left by 10 bytes (80 bits) to place it right after isForOne.
-            word1 := or(word1, shl(80, hasLeverage))
-            // Take the top 10 bytes (80 bits) of the salt and place them after hasLeverage.
-            word1 := or(word1, shr(176, salt))
-
-            // We construct the second 32 bytes of the packed data:
-            // | salt (last 22 bytes) | padding (10 bytes) |
-            // Shift the salt left by 80 bits to get the last 22 bytes at the start of the word.
-            let word2 := shl(80, salt)
-
-            // Store the two constructed words in memory
-            mstore(ptr, word1)
-            mstore(add(ptr, 0x20), word2)
-
-            // Hash the 54 bytes of packed data
-            positionKey := keccak256(ptr, 54)
-
-            // Clean the memory that we used
-            mstore(ptr, 0)
-            mstore(add(ptr, 0x20), 0)
-        }
-    }
 }

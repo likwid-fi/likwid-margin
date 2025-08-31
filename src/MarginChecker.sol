@@ -8,8 +8,8 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Likwid V2 core
-import {PoolId} from "likwid-v2-core/types/PoolId.sol";
-import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
+import {PoolId} from "./types/PoolId.sol";
+import {Currency, CurrencyLibrary} from "./types/Currency.sol";
 // Local
 import {GlobalStatus} from "./types/GlobalStatus.sol";
 import {PoolStatus} from "./types/PoolStatus.sol";

@@ -3,12 +3,12 @@
 pragma solidity ^0.8.26;
 
 // Likwid V2 core
-import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
-import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
-import {BalanceDelta, BalanceDeltaLibrary} from "likwid-v2-core/types/BalanceDelta.sol";
-import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
-import {PoolId} from "likwid-v2-core/types/PoolId.sol";
-import {SafeCallback} from "likwid-v2-core/base/SafeCallback.sol";
+import {Currency, CurrencyLibrary} from "./types/Currency.sol";
+import {IVault} from "./interfaces/IVault.sol";
+import {BalanceDelta, BalanceDeltaLibrary} from "./types/BalanceDelta.sol";
+import {PoolKey} from "./types/PoolKey.sol";
+import {PoolId} from "./types/PoolId.sol";
+import {SafeCallback} from "./base/SafeCallback.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
@@ -32,7 +32,7 @@ contract MarginRouter is SafeCallback, Owned {
 
     IPairPoolManager public immutable pairPoolManager;
 
-    constructor(address initialOwner, IPoolManager _manager, IPairPoolManager _pairPoolManager)
+    constructor(address initialOwner, IVault _manager, IPairPoolManager _pairPoolManager)
         Owned(initialOwner)
         SafeCallback(_manager)
     {
@@ -83,7 +83,7 @@ contract MarginRouter is SafeCallback, Owned {
     {
         require(params.amountIn > 0, "AMOUNT_ERROR");
         amountOut =
-            abi.decode(poolManager.unlock(abi.encodeCall(this.handelSwap, (msg.sender, msg.value, params))), (uint256));
+            abi.decode(vault.unlock(abi.encodeCall(this.handelSwap, (msg.sender, msg.value, params))), (uint256));
     }
 
     function exactOutput(SwapParams calldata params)
@@ -93,8 +93,7 @@ contract MarginRouter is SafeCallback, Owned {
         returns (uint256 amountIn)
     {
         require(params.amountOut > 0 && params.amountIn == 0, "AMOUNT_ERROR");
-        amountIn =
-            abi.decode(poolManager.unlock(abi.encodeCall(this.handelSwap, (msg.sender, msg.value, params))), (uint256));
+        amountIn = abi.decode(vault.unlock(abi.encodeCall(this.handelSwap, (msg.sender, msg.value, params))), (uint256));
     }
 
     function handelSwap(address sender, uint256 msgValue, SwapParams calldata params)
@@ -102,8 +101,7 @@ contract MarginRouter is SafeCallback, Owned {
         selfOnly
         returns (uint256)
     {
-        PoolStatus memory _status = pairPoolManager.getStatus(params.poolId);
-        PoolKey memory key = _status.key;
+        PoolKey memory key;
         int256 amountSpecified;
         if (params.amountIn > 0) {
             amountSpecified = -int256(params.amountIn);
@@ -115,20 +113,17 @@ contract MarginRouter is SafeCallback, Owned {
         bool inputNative = inputCurrency.isAddressZero();
         if (!inputNative && msgValue > 0) transferNative(sender, msgValue);
         if (amountSpecified != 0) {
-            IPoolManager.SwapParams memory swapParams = IPoolManager.SwapParams({
-                zeroForOne: params.zeroForOne,
-                amountSpecified: amountSpecified,
-                sqrtPriceLimitX96: 0
-            });
+            IVault.SwapParams memory swapParams =
+                IVault.SwapParams({zeroForOne: params.zeroForOne, amountSpecified: amountSpecified, useMirror: false});
             uint256 amountIn;
             uint256 amountOut;
-            BalanceDelta delta = poolManager.swap(key, swapParams, "");
+            (BalanceDelta delta,,) = vault.swap(key, swapParams);
             if (params.amountIn > 0) {
                 if (inputNative && params.amountIn != msgValue) revert InsufficientInput();
                 amountOut = params.zeroForOne ? uint256(int256(delta.amount1())) : uint256(int256(delta.amount0()));
                 if (params.amountOutMin > 0 && amountOut < params.amountOutMin) revert InsufficientOutputReceived();
-                inputCurrency.settle(poolManager, sender, params.amountIn, false);
-                outputCurrency.take(poolManager, params.to, amountOut, false);
+                inputCurrency.settle(vault, sender, params.amountIn, false);
+                outputCurrency.take(vault, params.to, amountOut, false);
                 amountIn = params.amountIn;
                 (uint256 amount0, uint256 amount1) = params.zeroForOne ? (amountIn, amountOut) : (amountOut, amountIn);
                 emit Swap(key.toId(), sender, amount0, amount1, key.fee);
@@ -139,8 +134,8 @@ contract MarginRouter is SafeCallback, Owned {
                     inputCurrency.transfer(sender, msgValue - amountIn);
                 }
                 if (params.amountInMax > 0 && amountIn > params.amountInMax) revert InsufficientInputReceived();
-                inputCurrency.settle(poolManager, sender, amountIn, false);
-                outputCurrency.take(poolManager, params.to, params.amountOut, false);
+                inputCurrency.settle(vault, sender, amountIn, false);
+                outputCurrency.take(vault, params.to, params.amountOut, false);
                 amountOut = params.amountOut;
                 (uint256 amount0, uint256 amount1) = params.zeroForOne ? (amountOut, amountIn) : (amountIn, amountOut);
                 emit Swap(key.toId(), sender, amount0, amount1, key.fee);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {PoolId} from "likwid-v2-core/types/PoolId.sol";
+import {PoolId} from "../types/PoolId.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {MarginPosition} from "../types/MarginPosition.sol";
 import {MarginParams} from "../types/MarginParams.sol";

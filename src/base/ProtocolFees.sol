@@ -38,7 +38,7 @@ abstract contract ProtocolFees is IProtocolFees, InterestBase {
     function setProtocolFee(PoolKey memory key, FeeType feeType, uint8 newFee) external {
         if (msg.sender != protocolFeeController) InvalidCaller.selector.revertWith();
         PoolId id = key.toId();
-        Pool.State storage pool = _getPool(id);
+        Pool.State storage pool = _getPool(key);
         uint24 newProtocolFee = pool.slot0.protocolFee().setProtocolFee(feeType, newFee);
         if (!newProtocolFee.isValidProtocolFee()) ProtocolFeeTooLarge.selector.revertWith(newProtocolFee);
         pool.setProtocolFee(newProtocolFee);
@@ -65,8 +65,7 @@ abstract contract ProtocolFees is IProtocolFees, InterestBase {
     function _isUnlocked() internal virtual returns (bool);
 
     /// @dev abstract internal function to allow the ProtocolFees contract to access pool state
-    /// @dev this is overridden in PoolManager.sol to give access to the _pools mapping
-    function _getPool(PoolId id) internal virtual returns (Pool.State storage);
+    function _getPool(PoolKey memory key) internal virtual returns (Pool.State storage);
 
     function _updateProtocolFees(Currency currency, uint256 amount) internal {
         unchecked {

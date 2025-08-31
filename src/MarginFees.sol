@@ -6,9 +6,9 @@ pragma solidity ^0.8.26;
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 // Likwid V2 core
-import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "likwid-v2-core/types/PoolId.sol";
-import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
+import {PoolKey} from "./types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "./types/PoolId.sol";
+import {Currency, CurrencyLibrary} from "./types/Currency.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local

@@ -9,8 +9,10 @@ import {PoolKey} from "./types/PoolKey.sol";
 import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "./types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "./types/BeforeSwapDelta.sol";
 import {PoolId} from "./types/PoolId.sol";
+import {FeeType} from "./types/FeeType.sol";
 import {IVault} from "./interfaces/IVault.sol";
 import {IUnlockCallback} from "./interfaces/callback/IUnlockCallback.sol";
+import {DoubleEndedQueue} from "./libraries/external/DoubleEndedQueue.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
 import {CurrencyGuard} from "./libraries/CurrencyGuard.sol";
 import {Pool} from "./libraries/Pool.sol";
@@ -20,6 +22,8 @@ import {NoDelegateCall} from "./base/NoDelegateCall.sol";
 import {ProtocolFees} from "./base/ProtocolFees.sol";
 import {Extsload} from "./base/Extsload.sol";
 import {Exttload} from "./base/Exttload.sol";
+import {Math} from "./libraries/Math.sol";
+import {StageMath} from "./libraries/StageMath.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
 
 /// @title Likwid vault
@@ -27,17 +31,23 @@ import {CustomRevert} from "./libraries/CustomRevert.sol";
 contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Extsload, Exttload {
     using CustomRevert for bytes4;
     using SafeCast for *;
+    using DoubleEndedQueue for DoubleEndedQueue.Uint256Deque;
+    using StageMath for uint256;
     using CurrencyGuard for Currency;
     using BalanceDeltaLibrary for BalanceDelta;
     using BeforeSwapDeltaLibrary for BeforeSwapDelta;
     using Pool for Pool.State;
 
-    error NotImplemented();
-
-    error ManagerLacksRole(uint8 role);
+    error LiquidityLocked();
 
     mapping(PoolId id => Pool.State) private _pools;
-    mapping(address manager => bool) public managers;
+    address public marginController;
+
+    uint32 public stageDuration = 1 hours; // default: 1 hour seconds
+    uint32 public stageSize = 5; // default: 5 stages
+    uint32 public stageLeavePart = 5; // default: 5, meaning 20% of the total liquidity is free
+    mapping(PoolId id => uint256) public lastStageTimestampStore; // Timestamp of the last stage
+    mapping(PoolId id => DoubleEndedQueue.Uint256Deque) liquidityLockedQueue;
 
     /// transient storage
     bool transient unlocked;
@@ -50,7 +60,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     }
 
     modifier onlyManager() {
-        require(managers[msg.sender], "UNAUTHORIZED");
+        require(msg.sender == marginController, "UNAUTHORIZED");
         _;
     }
 
@@ -92,8 +102,49 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         returns (BalanceDelta callerDelta)
     {
         PoolId id = key.toId();
-        Pool.State storage pool = _getPool(id);
+        Pool.State storage pool = _getPool(key);
         pool.checkPoolInitialized();
+        if (params.liquidityDelta > 0) {
+            _lockLiquidity(id, uint256(params.liquidityDelta));
+        } else if (stageDuration * stageSize > 0) {
+            uint256 liquidityRemoved = uint256(-params.liquidityDelta);
+            (uint128 releasedLiquidity, uint128 nextReleasedLiquidity) = _getReleasedLiquidity(id);
+            uint256 availableLiquidity = releasedLiquidity + nextReleasedLiquidity;
+            if (availableLiquidity < liquidityRemoved) {
+                LiquidityLocked.selector.revertWith();
+            }
+            DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
+            if (!queue.empty()) {
+                if (nextReleasedLiquidity > 0) {
+                    // If next stage is free, we can release the next stage liquidity
+                    uint256 currentStage = queue.popFront(); // Remove the current stage
+                    uint256 nextStage = queue.front();
+                    (, uint128 currentLiquidity) = currentStage.decode();
+                    if (currentLiquidity > liquidityRemoved) {
+                        nextStage = nextStage.add((currentLiquidity - liquidityRemoved).toUint128());
+                    } else {
+                        nextStage = nextStage.sub((liquidityRemoved - currentLiquidity).toUint128());
+                    }
+                    queue.set(0, nextStage);
+                    // Update lastStageTimestamp to the next stage time
+                    lastStageTimestampStore[id] = block.timestamp;
+                } else {
+                    // If next stage is not free, we just reduce the current stage liquidity
+                    uint256 currentStage = queue.front();
+                    uint256 afterStage;
+                    if (queue.length() == 1) {
+                        afterStage = currentStage.subTotal(liquidityRemoved.toUint128());
+                    } else {
+                        afterStage = currentStage.sub(liquidityRemoved.toUint128());
+                    }
+                    if (!currentStage.isFree(stageLeavePart) || queue.length() == 1) {
+                        // Update lastStageTimestamp
+                        lastStageTimestampStore[id] = block.timestamp;
+                    }
+                    queue.set(0, afterStage);
+                }
+            }
+        }
 
         callerDelta = pool.modifyLiquidity(
             Pool.ModifyLiquidityParams({
@@ -112,15 +163,15 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         external
         onlyWhenUnlocked
         noDelegateCall
-        returns (BalanceDelta)
+        returns (BalanceDelta swapDelta, uint24 swapFee, uint256 feeAmount)
     {
         if (params.amountSpecified == 0) AmountCannotBeZero.selector.revertWith();
 
         PoolId id = key.toId();
-        Pool.State storage pool = _getPool(id);
+        Pool.State storage pool = _getPool(key);
         pool.checkPoolInitialized();
-
-        (BalanceDelta swapDelta, uint256 amountToProtocol, uint24 swapFee) = pool.swap(
+        uint256 amountToProtocol;
+        (swapDelta, amountToProtocol, swapFee, feeAmount) = pool.swap(
             Pool.SwapParams({
                 sender: msg.sender,
                 zeroForOne: params.zeroForOne,
@@ -131,14 +182,15 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
 
         _appendPoolBalanceDelta(key, msg.sender, swapDelta);
 
-        if (amountToProtocol > 0) {
-            Currency currencyToCollect = params.zeroForOne ? key.currency0 : key.currency1;
-            _updateProtocolFees(currencyToCollect, amountToProtocol);
+        if (feeAmount > 0) {
+            Currency feeCurrency = params.zeroForOne ? key.currency0 : key.currency1;
+            if (amountToProtocol > 0) {
+                _updateProtocolFees(feeCurrency, amountToProtocol);
+            }
+            emit Fees(id, feeCurrency, msg.sender, uint8(FeeType.SWAP), feeAmount);
         }
 
         emit Swap(id, msg.sender, swapDelta.amount0(), swapDelta.amount1(), pool.slot0.totalSupply(), swapFee);
-
-        return swapDelta;
     }
 
     function lend(PoolKey memory key, IVault.LendParams memory params)
@@ -150,7 +202,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         if (params.lendAmount == 0) AmountCannotBeZero.selector.revertWith();
 
         PoolId id = key.toId();
-        Pool.State storage pool = _getPool(id);
+        Pool.State storage pool = _getPool(key);
         pool.checkPoolInitialized();
         uint256 depositCumulativeLast;
         (lendingDelta, depositCumulativeLast) = pool.lend(
@@ -171,14 +223,16 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         external
         onlyWhenUnlocked
         noDelegateCall
-        returns (BalanceDelta marginDelta, MarginPosition.State memory _state)
+        onlyManager
+        returns (BalanceDelta marginDelta, uint256 feeAmount)
     {
         if (params.amount == 0) AmountCannotBeZero.selector.revertWith();
 
         PoolId id = key.toId();
-        Pool.State storage pool = _getPool(id);
+        Pool.State storage pool = _getPool(key);
         pool.checkPoolInitialized();
-        (marginDelta, _state) = pool.margin(
+        uint256 amountToProtocol;
+        (marginDelta, amountToProtocol, feeAmount) = pool.margin(
             Pool.MarginParams({
                 sender: msg.sender,
                 marginForOne: params.marginForOne,
@@ -189,6 +243,14 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
             })
         );
 
+        if (feeAmount > 0) {
+            Currency feeCurrency = params.marginForOne ? key.currency1 : key.currency0;
+            if (amountToProtocol > 0) {
+                _updateProtocolFees(feeCurrency, amountToProtocol);
+            }
+            emit Fees(id, feeCurrency, msg.sender, uint8(FeeType.MARGIN), feeAmount);
+        }
+
         _appendPoolBalanceDelta(key, msg.sender, marginDelta);
 
         emit Margin(
@@ -196,30 +258,30 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         );
     }
 
-    function close(PoolKey memory key, IVault.LendParams memory params)
+    function close(PoolKey memory key, IVault.CloseParams memory params)
         external
         onlyWhenUnlocked
         noDelegateCall
-        returns (BalanceDelta lendingDelta)
+        returns (BalanceDelta closeDelta)
     {
-        if (params.lendAmount == 0) AmountCannotBeZero.selector.revertWith();
+        if (params.closeMillionth == 0) AmountCannotBeZero.selector.revertWith();
 
         PoolId id = key.toId();
-        Pool.State storage pool = _getPool(id);
+        Pool.State storage pool = _getPool(key);
         pool.checkPoolInitialized();
-        uint256 depositCumulativeLast;
-        (lendingDelta, depositCumulativeLast) = pool.lend(
-            Pool.LendParams({
+        closeDelta = pool.close(
+            Pool.CloseParams({
                 sender: msg.sender,
-                lendForOne: params.lendForOne,
-                lendAmount: params.lendAmount,
-                salt: params.salt
+                positionKey: params.positionKey,
+                salt: params.salt,
+                rewardAmount: params.rewardAmount,
+                closeMillionth: params.closeMillionth
             })
         );
 
-        _appendPoolBalanceDelta(key, msg.sender, lendingDelta);
+        _appendPoolBalanceDelta(key, msg.sender, closeDelta);
 
-        emit Lending(id, msg.sender, params.lendForOne, params.lendAmount, depositCumulativeLast, params.salt);
+        emit Close(id, msg.sender, params.positionKey, params.rewardAmount, params.closeMillionth, params.salt);
     }
 
     function sync(Currency currency) external {
@@ -310,12 +372,92 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     }
 
     /// @notice Implementation of the _getPool function defined in ProtocolFees
-    function _getPool(PoolId id) internal view override returns (Pool.State storage) {
-        return _pools[id];
+    function _getPool(PoolKey memory key) internal override returns (Pool.State storage _pool) {
+        PoolId id = key.toId();
+        _pool = _pools[id];
+        (uint256 pairInterest0, uint256 pairInterest1) = _pool.updateInterests(rateState);
+        if (pairInterest0 > 0) {
+            emit Fees(id, key.currency0, address(this), uint8(FeeType.INTERESTS), pairInterest0);
+        }
+        if (pairInterest1 > 0) {
+            emit Fees(id, key.currency1, address(this), uint8(FeeType.INTERESTS), pairInterest1);
+        }
     }
 
     /// @notice Implementation of the _isUnlocked function defined in ProtocolFees
     function _isUnlocked() internal view override returns (bool) {
         return unlocked;
+    }
+
+    function _lockLiquidity(PoolId id, uint256 amount) internal {
+        if (stageDuration * stageSize == 0) {
+            return; // No locking if stageDuration or stageSize is zero
+        }
+        uint256 lastStageTimestamp = lastStageTimestampStore[id];
+        if (lastStageTimestamp == 0) {
+            // Initialize lastStageTimestamp if it's not set
+            lastStageTimestampStore[id] = block.timestamp;
+        }
+        DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
+        uint128 lockAmount = Math.ceilDiv(amount, stageSize).toUint128(); // Ensure at least 1 unit is locked per stage
+        uint256 zeroStage = 0;
+        if (queue.empty()) {
+            for (uint32 i = 0; i < stageSize; i++) {
+                queue.pushBack(zeroStage.add(lockAmount));
+            }
+        } else {
+            uint256 queueSize = Math.min(queue.length(), stageSize);
+            // If the queue is not empty, we need to update the existing stages
+            // and add new stages if necessary
+            for (uint256 i = 0; i < queueSize; i++) {
+                uint256 stage = queue.at(i);
+                queue.set(i, stage.add(lockAmount));
+            }
+            for (uint256 i = queueSize; i < stageSize; i++) {
+                queue.pushBack(zeroStage.add(lockAmount));
+            }
+        }
+    }
+
+    function _getReleasedLiquidity(PoolId id)
+        internal
+        view
+        returns (uint128 releasedLiquidity, uint128 nextReleasedLiquidity)
+    {
+        releasedLiquidity = type(uint128).max;
+        if (stageDuration * stageSize > 0) {
+            DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
+            uint256 lastStageTimestamp = lastStageTimestampStore[id];
+            if (!queue.empty()) {
+                uint256 currentStage = queue.front();
+                uint256 total;
+                (total, releasedLiquidity) = currentStage.decode();
+                if (
+                    queue.length() > 1 && currentStage.isFree(stageLeavePart)
+                        && block.timestamp >= lastStageTimestamp + stageDuration
+                ) {
+                    uint256 nextStage = queue.at(1);
+                    (, nextReleasedLiquidity) = nextStage.decode();
+                }
+            }
+        }
+    }
+
+    // ******************** OWNER CALL ********************
+    function setMarginController(address controller) external onlyOwner {
+        marginController = controller;
+        emit MarginControllerUpdated(controller);
+    }
+
+    function setStageDuration(uint32 _stageDuration) external onlyOwner {
+        stageDuration = _stageDuration;
+    }
+
+    function setStageSize(uint32 _stageSize) external onlyOwner {
+        stageSize = _stageSize;
+    }
+
+    function setStageLeavePart(uint32 _stageLeavePart) external onlyOwner {
+        stageLeavePart = _stageLeavePart;
     }
 }

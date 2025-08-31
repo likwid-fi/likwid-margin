@@ -6,9 +6,9 @@ pragma solidity ^0.8.26;
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 // Likwid V2 core
-import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
-import {PoolId, PoolIdLibrary} from "likwid-v2-core/types/PoolId.sol";
-import {Currency} from "likwid-v2-core/types/Currency.sol";
+import {IVault} from "./interfaces/IVault.sol";
+import {PoolId, PoolIdLibrary} from "./types/PoolId.sol";
+import {Currency} from "./types/Currency.sol";
 // Local
 import {BasePoolManager} from "./base/BasePoolManager.sol";
 import {ERC6909Accrues} from "./base/ERC6909Accrues.sol";
@@ -82,7 +82,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     IMirrorTokenManager public immutable mirrorTokenManager;
     IPairPoolManager public pairPoolManager;
 
-    constructor(address initialOwner, IPoolManager _manager, IMirrorTokenManager _mirrorTokenManager)
+    constructor(address initialOwner, IVault _manager, IMirrorTokenManager _mirrorTokenManager)
         BasePoolManager(initialOwner, _manager)
     {
         mirrorTokenManager = _mirrorTokenManager;
@@ -232,7 +232,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         }
         exchangeAmount = Math.min(balance, amount);
         if (exchangeAmount > 0) {
-            poolManager.transfer(msg.sender, id, exchangeAmount);
+            vault.transfer(msg.sender, id, exchangeAmount);
             mirrorTokenManager.transferFrom(msg.sender, address(this), currency.toTokenId(poolId), exchangeAmount);
         }
     }
@@ -243,7 +243,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         returns (uint256 originalAmount)
     {
         uint256 id = currency.toTokenId(poolId);
-        poolManager.transferFrom(msg.sender, address(this), currency.toId(), amount);
+        vault.transferFrom(msg.sender, address(this), currency.toId(), amount);
         originalAmount = _mint(caller, recipient, id, amount);
         emit Deposit(poolId, currency, caller, id, recipient, amount, originalAmount, accruesRatioX112Of[id]);
     }
@@ -267,10 +267,10 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         }
         uint256 transferAmount = amount;
         if (transferAmount > realReserve) {
-            poolManager.transfer(msg.sender, currency.toId(), realReserve);
+            vault.transfer(msg.sender, currency.toId(), realReserve);
             transferAmount -= realReserve;
         } else {
-            poolManager.transfer(msg.sender, currency.toId(), transferAmount);
+            vault.transfer(msg.sender, currency.toId(), transferAmount);
             transferAmount = 0;
         }
         if (transferAmount > 0) {
@@ -288,7 +288,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     {
         uint256 sendAmount = currency.checkAmount(amount);
         bytes memory result =
-            poolManager.unlock(abi.encodeCall(this.handleDeposit, (sender, recipient, poolId, currency, amount)));
+            vault.unlock(abi.encodeCall(this.handleDeposit, (sender, recipient, poolId, currency, amount)));
         originalAmount = abi.decode(result, (uint256));
         if (msg.value > sendAmount) transferNative(sender, msg.value - sendAmount);
     }
@@ -318,8 +318,8 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         IPoolStatusManager statusManager = pairPoolManager.statusManager();
         statusManager.setBalances(sender, poolId);
         uint256 id = currency.toTokenId(poolId);
-        currency.settle(poolManager, sender, amount, false);
-        currency.take(poolManager, address(this), amount, true);
+        currency.settle(vault, sender, amount, false);
+        currency.take(vault, address(this), amount, true);
         originalAmount = _mint(sender, recipient, id, amount);
         statusManager.update(poolId);
         emit Deposit(poolId, currency, sender, id, recipient, amount, originalAmount, accruesRatioX112Of[id]);
@@ -330,7 +330,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         returns (uint256 originalAmount)
     {
         bytes memory result =
-            poolManager.unlock(abi.encodeCall(this.handleWithdraw, (msg.sender, recipient, poolId, currency, amount)));
+            vault.unlock(abi.encodeCall(this.handleWithdraw, (msg.sender, recipient, poolId, currency, amount)));
         originalAmount = abi.decode(result, (uint256));
     }
 
@@ -354,15 +354,15 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
             require(success, "NOT_ENOUGH_RESERVE");
             realAmount = realReserve + exchangeAmount;
         }
-        currency.settle(poolManager, address(this), realAmount, true);
-        currency.take(poolManager, recipient, realAmount, false);
+        currency.settle(vault, address(this), realAmount, true);
+        currency.take(vault, recipient, realAmount, false);
         originalAmount = _burn(sender, sender, id, realAmount);
         emit Withdraw(poolId, currency, sender, id, recipient, realAmount, originalAmount, accruesRatioX112Of[id]);
         statusManager.update(poolId);
     }
 
     function balanceMirror(PoolId poolId, Currency currency, uint256 amount) external payable {
-        poolManager.unlock(abi.encodeCall(this.handleBalanceMirror, (msg.sender, poolId, currency, amount)));
+        vault.unlock(abi.encodeCall(this.handleBalanceMirror, (msg.sender, poolId, currency, amount)));
     }
 
     function handleBalanceMirror(address sender, PoolId poolId, Currency currency, uint256 amount) external selfOnly {
@@ -370,8 +370,8 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
         statusManager.setBalances(sender, poolId);
         uint256 id = currency.toTokenId(poolId);
         mirrorTokenManager.burn(id, amount);
-        currency.settle(poolManager, sender, amount, false);
-        currency.take(poolManager, address(this), amount, true);
+        currency.settle(vault, sender, amount, false);
+        currency.take(vault, address(this), amount, true);
         statusManager.update(poolId);
     }
 
@@ -380,7 +380,7 @@ contract LendingPoolManager is BasePoolManager, ERC6909Accrues, ILendingPoolMana
     function setPairPoolManger(IPairPoolManager _manager) external onlyOwner {
         if (address(pairPoolManager) != address(0)) revert PairPoolAlreadySet();
         pairPoolManager = _manager;
-        poolManager.setOperator(address(_manager), true);
+        vault.setOperator(address(_manager), true);
         mirrorTokenManager.setOperator(address(_manager), true);
     }
 }

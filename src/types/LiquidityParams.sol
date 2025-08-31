@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Currency} from "likwid-v2-core/types/Currency.sol";
-import {PoolId} from "likwid-v2-core/types/PoolId.sol";
+import {Currency} from "../types/Currency.sol";
+import {PoolId} from "../types/PoolId.sol";
 
 /// @notice Liquidity parameters for addLiquidity
 struct AddLiquidityParams {

@@ -5,6 +5,8 @@ pragma solidity ^0.8.0;
 import {Math} from "./Math.sol";
 
 library PerLibrary {
+    error InvalidMillionth();
+
     uint256 public constant ONE_MILLION = 10 ** 6;
     uint256 public constant ONE_TRILLION = 10 ** 12;
     uint256 public constant TRILLION_YEAR_SECONDS = ONE_TRILLION * 365 * 24 * 3600;

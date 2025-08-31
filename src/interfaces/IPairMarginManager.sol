@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.28;
 
-import {Currency} from "likwid-v2-core/types/Currency.sol";
-import {PoolId} from "likwid-v2-core/types/PoolId.sol";
+import {Currency} from "../types/Currency.sol";
+import {PoolId} from "../types/PoolId.sol";
 
 import {MarginParamsVo} from "../types/MarginParams.sol";
 import {ReleaseParams} from "../types/ReleaseParams.sol";

@@ -8,11 +8,10 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Likwid V2 core
-import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "likwid-v2-core/types/PoolId.sol";
-import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
-import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
-import {IHooks} from "likwid-v2-core/interfaces/IPoolManager.sol";
+import {PoolKey} from "./types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "./types/PoolId.sol";
+import {Currency, CurrencyLibrary} from "./types/Currency.sol";
+import {IVault} from "./interfaces/IVault.sol";
 // Local
 import {BaseFees} from "./base/BaseFees.sol";
 import {BasePoolManager} from "./base/BasePoolManager.sol";
@@ -58,14 +57,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     error HookAlreadySet();
     error LowFeePoolMarginBanned();
 
-    event Initialize(
-        PoolId indexed id,
-        Currency indexed currency0,
-        Currency indexed currency1,
-        uint24 fee,
-        int24 tickSpacing,
-        IHooks hooks
-    );
+    event Initialize(PoolId indexed id, Currency indexed currency0, Currency indexed currency1, uint24 fee);
 
     event Mint(
         PoolId indexed poolId,
@@ -100,14 +92,13 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     IMirrorTokenManager public immutable mirrorTokenManager;
     ILendingPoolManager public immutable lendingPoolManager;
     IMarginLiquidity public immutable marginLiquidity;
-    IHooks public hooks;
     IPoolStatusManager public statusManager;
 
     mapping(address => bool) public positionManagers;
 
     constructor(
         address initialOwner,
-        IPoolManager _manager,
+        IVault _manager,
         IMirrorTokenManager _mirrorTokenManager,
         ILendingPoolManager _lendingPoolManager,
         IMarginLiquidity _marginLiquidity
@@ -115,7 +106,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         mirrorTokenManager = _mirrorTokenManager;
         lendingPoolManager = _lendingPoolManager;
         marginLiquidity = _marginLiquidity;
-        poolManager.setOperator(address(lendingPoolManager), true);
+        vault.setOperator(address(lendingPoolManager), true);
         mirrorTokenManager.setOperator(address(lendingPoolManager), true);
     }
 
@@ -130,11 +121,6 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
 
     modifier onlyFees() {
         require(msg.sender == address(marginFees()), "UNAUTHORIZED");
-        _;
-    }
-
-    modifier onlyHooks() {
-        require(msg.sender == address(hooks), "UNAUTHORIZED");
         _;
     }
 
@@ -164,14 +150,13 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
 
     // ******************** HOOK CALL ********************
 
-    function initialize(PoolKey calldata key) external onlyHooks {
+    function initialize(PoolKey calldata key) external {
         statusManager.initialize(key);
-        emit Initialize(key.toId(), key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks);
+        emit Initialize(key.toId(), key.currency0, key.currency1, key.fee);
     }
 
-    function swap(address sender, PoolKey calldata key, IPoolManager.SwapParams calldata params)
+    function swap(address sender, PoolKey calldata key, IVault.SwapParams calldata params)
         external
-        onlyHooks
         returns (
             Currency specified,
             Currency unspecified,
@@ -191,11 +176,11 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         if (exactInput) {
             (unspecifiedAmount, swapFee, feeAmount) =
                 statusManager.getAmountOut(_status, params.zeroForOne, specifiedAmount);
-            poolManager.approve(address(hooks), unspecified.toId(), unspecifiedAmount);
+            //vault.approve(address(hooks), unspecified.toId(), unspecifiedAmount);
         } else {
             (unspecifiedAmount, swapFee, feeAmount) =
                 statusManager.getAmountIn(_status, params.zeroForOne, specifiedAmount);
-            poolManager.approve(address(hooks), specified.toId(), specifiedAmount);
+            //vault.approve(address(hooks), specified.toId(), specifiedAmount);
         }
         if (feeAmount > 0) {
             Currency feeCurrency = params.zeroForOne ? key.currency0 : key.currency1;
@@ -229,7 +214,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         }
         if (liquidity == 0) revert InsufficientLiquidityMinted();
         marginLiquidity.addLiquidity(msg.sender, params.poolId, liquidity);
-        poolManager.unlock(abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, amount0In, amount1In)));
+        vault.unlock(abi.encodeCall(this.handleAddLiquidity, (msg.sender, status.key, amount0In, amount1In)));
         statusManager.update(params.poolId);
         emit Mint(params.poolId, params.source, msg.sender, liquidity, amount0In, amount1In);
     }
@@ -239,10 +224,10 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         external
         selfOnly
     {
-        key.currency0.settle(poolManager, sender, amount0, false);
-        key.currency0.take(poolManager, address(this), amount0, true);
-        key.currency1.settle(poolManager, sender, amount1, false);
-        key.currency1.take(poolManager, address(this), amount1, true);
+        key.currency0.settle(vault, sender, amount0, false);
+        key.currency0.take(vault, address(this), amount0, true);
+        key.currency1.settle(vault, sender, amount1, false);
+        key.currency1.take(vault, address(this), amount1, true);
     }
 
     /// @inheritdoc IPairPoolManager
@@ -269,7 +254,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             }
         }
 
-        poolManager.unlock(abi.encodeCall(this.handleRemoveLiquidity, (msg.sender, status.key, amount0, amount1)));
+        vault.unlock(abi.encodeCall(this.handleRemoveLiquidity, (msg.sender, status.key, amount0, amount1)));
         statusManager.update(params.poolId);
         emit Burn(params.poolId, msg.sender, params.liquidity, amount0, amount1);
     }
@@ -279,18 +264,14 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         selfOnly
     {
         // burn 6909s
-        poolManager.burn(address(this), key.currency0.toId(), amount0);
-        poolManager.burn(address(this), key.currency1.toId(), amount1);
+        vault.burn(address(this), key.currency0.toId(), amount0);
+        vault.burn(address(this), key.currency1.toId(), amount1);
         // transfer token to liquidity from address
-        key.currency0.take(poolManager, sender, amount0, false);
-        key.currency1.take(poolManager, sender, amount1, false);
+        key.currency0.take(vault, sender, amount0, false);
+        key.currency1.take(vault, sender, amount1, false);
     }
 
     // ******************** OWNER CALL ********************
-    function setHooks(IHooks _hooks) external onlyOwner {
-        if (address(hooks) != address(0)) revert HookAlreadySet();
-        hooks = _hooks;
-    }
 
     function setStatusManager(IPoolStatusManager _poolStatusManager) external onlyOwner {
         if (address(statusManager) != address(0)) revert StatusManagerAlreadySet();
@@ -318,8 +299,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         returns (MarginParamsVo memory)
     {
         if (status.key.fee < 3000) revert LowFeePoolMarginBanned();
-        bytes memory result =
-            poolManager.unlock(abi.encodeCall(this.handleMargin, (msg.sender, sender, status, paramsVo)));
+        bytes memory result = vault.unlock(abi.encodeCall(this.handleMargin, (msg.sender, sender, status, paramsVo)));
         (paramsVo.params.marginAmount, paramsVo.marginTotal, paramsVo.params.borrowAmount) =
             abi.decode(result, (uint256, uint256, uint256));
         return paramsVo;
@@ -337,8 +317,8 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             : (status.key.currency1, status.key.currency0);
         uint256 marginFeeAmount;
         // transfer marginAmount to lendingPoolManager
-        marginCurrency.settle(poolManager, sender, params.marginAmount, false);
-        marginCurrency.take(poolManager, address(this), params.marginAmount, true);
+        marginCurrency.settle(vault, sender, params.marginAmount, false);
+        marginCurrency.take(vault, address(this), params.marginAmount, true);
 
         if (params.leverage > 0) {
             uint256 marginReserves = params.marginForOne ? status.realReserve1 : status.realReserve0;
@@ -369,8 +349,8 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             }
             if (borrowAmount > 0) {
                 // transfer borrowAmount to user
-                borrowCurrency.settle(poolManager, address(this), borrowAmount, true);
-                borrowCurrency.take(poolManager, sender, borrowAmount, false);
+                borrowCurrency.settle(vault, address(this), borrowAmount, true);
+                borrowCurrency.take(vault, sender, borrowAmount, false);
             }
             marginWithoutFee = 0;
         }
@@ -423,7 +403,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
                 lendingPoolManager.updateInterests(borrowTokenId, lendingInterest);
                 lendingInterest += lendingAmount.toInt256();
                 if (lendingInterest > 0) {
-                    poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), uint256(lendingInterest));
+                    vault.transfer(address(lendingPoolManager), borrowCurrency.toId(), uint256(lendingInterest));
                 } else {
                     uint256 moveAmount = uint256(-lendingInterest);
                     if (moveAmount > 0) {
@@ -431,12 +411,12 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
                         uint256 lendingRealReserve =
                             params.marginForOne ? status.lendingRealReserve0 : status.lendingRealReserve1;
                         if (lendingRealReserve >= moveAmount) {
-                            poolManager.transferFrom(
+                            vault.transferFrom(
                                 address(lendingPoolManager), address(this), borrowCurrency.toId(), moveAmount
                             );
                             moveAmount = 0;
                         } else {
-                            poolManager.transferFrom(
+                            vault.transferFrom(
                                 address(lendingPoolManager), address(this), borrowCurrency.toId(), lendingRealReserve
                             );
                             moveAmount -= lendingRealReserve;
@@ -453,7 +433,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
                 }
             }
         } else {
-            poolManager.transfer(address(lendingPoolManager), borrowCurrency.toId(), lendingAmount);
+            vault.transfer(address(lendingPoolManager), borrowCurrency.toId(), lendingAmount);
         }
 
         emit Release(params.poolId, borrowCurrency, params.debtAmount, repayAmount, burnAmount, params.rawBorrowAmount);
@@ -465,7 +445,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         onlyPosition
         returns (uint256)
     {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleRelease, (sender, status, params)));
+        bytes memory result = vault.unlock(abi.encodeCall(this.handleRelease, (sender, status, params)));
         return abi.decode(result, (uint256));
     }
 
@@ -491,8 +471,8 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
             );
         } else if (repayAmount > 0) {
             // repay borrow
-            borrowCurrency.settle(poolManager, params.payer, repayAmount, false);
-            borrowCurrency.take(poolManager, address(this), repayAmount, true);
+            borrowCurrency.settle(vault, params.payer, repayAmount, false);
+            borrowCurrency.take(vault, address(this), repayAmount, true);
         }
         _releaseToPool(params, status, borrowCurrency, repayAmount);
         statusManager.update(params.poolId);
@@ -507,9 +487,9 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         returns (bool success)
     {
         uint256 id = currency.toId();
-        uint256 balance = poolManager.balanceOf(address(this), id);
+        uint256 balance = vault.balanceOf(address(this), id);
         if (balance > amount) {
-            poolManager.transfer(msg.sender, id, amount);
+            vault.transfer(msg.sender, id, amount);
             mirrorTokenManager.transferFrom(msg.sender, address(this), currency.toTokenId(poolId), amount);
             success = true;
         }
@@ -536,7 +516,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
                 transferNative(sender, msg.value - sendValue);
             }
         }
-        poolManager.unlock(abi.encodeCall(this.handleSwapMirror, (sender, inputCurrency, amountIn)));
+        vault.unlock(abi.encodeCall(this.handleSwapMirror, (sender, inputCurrency, amountIn)));
         lendingPoolManager.mirrorIn(sender, recipient, poolId, outputCurrency, amountOut);
         if (feeAmount > 0) {
             feeAmount = statusManager.updateSwapProtocolFees(inputCurrency, feeAmount);
@@ -546,8 +526,8 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
     }
 
     function handleSwapMirror(address sender, Currency currency, uint256 amount) external selfOnly {
-        currency.settle(poolManager, sender, amount, false);
-        currency.take(poolManager, address(this), amount, true);
+        currency.settle(vault, sender, amount, false);
+        currency.take(vault, address(this), amount, true);
     }
 
     /// @inheritdoc IPairPoolManager
@@ -556,7 +536,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         onlyFees
         returns (uint256)
     {
-        bytes memory result = poolManager.unlock(abi.encodeCall(this.handleCollectFees, (recipient, currency, amount)));
+        bytes memory result = vault.unlock(abi.encodeCall(this.handleCollectFees, (recipient, currency, amount)));
         return abi.decode(result, (uint256));
     }
 
@@ -566,7 +546,7 @@ contract PairPoolManager is IPairPoolManager, BaseFees, BasePoolManager {
         returns (uint256 amountCollected)
     {
         amountCollected = statusManager.collectProtocolFees(currency, amount);
-        currency.settle(poolManager, address(this), amountCollected, true);
-        currency.take(poolManager, recipient, amountCollected, false);
+        currency.settle(vault, address(this), amountCollected, true);
+        currency.take(vault, recipient, amountCollected, false);
     }
 }

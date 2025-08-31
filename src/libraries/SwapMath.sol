@@ -80,9 +80,8 @@ library SwapMath {
     {
         (uint128 _reserve0, uint128 _reserve1) = pairReserves.reserves();
         (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
-        uint256 amountInWithoutFee = amountIn;
-        uint256 numerator = amountInWithoutFee * reserveOut;
-        uint256 denominator = reserveIn + amountInWithoutFee;
+        uint256 numerator = amountIn * reserveOut;
+        uint256 denominator = reserveIn + amountIn;
         amountOut = numerator / denominator;
     }
 
@@ -95,7 +94,6 @@ library SwapMath {
         (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
         uint256 numerator = reserveIn * amountOut;
         uint256 denominator = (reserveOut - amountOut);
-        uint256 amountInWithoutFee = (numerator / denominator) + 1;
-        amountIn = amountInWithoutFee;
+        amountIn = (numerator / denominator) + 1;
     }
 }

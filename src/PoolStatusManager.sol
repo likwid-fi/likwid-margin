@@ -7,11 +7,10 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {TransientSlot} from "@openzeppelin/contracts/utils/TransientSlot.sol";
 // Likwid V2 core
-import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
-import {IHooks} from "likwid-v2-core/interfaces/IHooks.sol";
-import {PoolId} from "likwid-v2-core/types/PoolId.sol";
-import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
-import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
+import {IVault} from "./interfaces/IVault.sol";
+import {PoolId} from "./types/PoolId.sol";
+import {PoolKey} from "./types/PoolKey.sol";
+import {Currency, CurrencyLibrary} from "./types/Currency.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
@@ -63,7 +62,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
 
     event MarginFeesChanged(address indexed oldMarginFees, address indexed newMarginFees);
 
-    IPoolManager public immutable poolManager;
+    IVault public immutable poolManager;
     IMirrorTokenManager public immutable mirrorTokenManager;
     ILendingPoolManager public immutable lendingPoolManager;
     IMarginLiquidity public immutable marginLiquidity;
@@ -84,7 +83,7 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
 
     constructor(
         address initialOwner,
-        IPoolManager _poolManager,
+        IVault _poolManager,
         IMirrorTokenManager _mirrorTokenManager,
         ILendingPoolManager _lendingPoolManager,
         IMarginLiquidity _marginLiquidity,
@@ -100,19 +99,10 @@ contract PoolStatusManager is IPoolStatusManager, BaseFees, Owned {
     }
 
     modifier onlyPoolManager() {
-        if (
-            !(
-                msg.sender == pairPoolManager || msg.sender == address(lendingPoolManager)
-                    || msg.sender == address(hooks())
-            )
-        ) {
+        if (!(msg.sender == pairPoolManager || msg.sender == address(lendingPoolManager))) {
             revert NotPoolManager();
         }
         _;
-    }
-
-    function hooks() public view returns (IHooks hook) {
-        return IPairPoolManager(pairPoolManager).hooks();
     }
 
     function _transform(PoolStatus memory status)

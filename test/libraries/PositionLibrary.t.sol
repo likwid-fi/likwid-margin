@@ -29,18 +29,4 @@ contract PositionLibraryTest is Test {
         expectedKey = keccak256(abi.encodePacked(owner, true, salt));
         assertEq(positionKey, expectedKey, "Position key with true should match expected hash");
     }
-
-    function testCalculatePositionKeyWithIsOneAndLeverage() public pure {
-        address owner = address(0x123);
-        bytes32 salt = keccak256("testSalt");
-        bytes32 positionKey = PositionLibrary.calculatePositionKey(owner, false, false, salt);
-        bytes32 expectedKey = keccak256(abi.encodePacked(owner, false, false, salt));
-        assertEq(positionKey, expectedKey, "Position key with false should match expected hash");
-        positionKey = PositionLibrary.calculatePositionKey(owner, true, false, salt);
-        expectedKey = keccak256(abi.encodePacked(owner, true, false, salt));
-        assertEq(positionKey, expectedKey, "Position key with true should match expected hash");
-        positionKey = PositionLibrary.calculatePositionKey(owner, true, true, salt);
-        expectedKey = keccak256(abi.encodePacked(owner, true, true, salt));
-        assertEq(positionKey, expectedKey, "Position key with true should match expected hash");
-    }
 }

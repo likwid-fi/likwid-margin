@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 
 import {Owned} from "solmate/src/auth/Owned.sol";
 
-import {ERC6909} from "likwid-v2-core/ERC6909.sol";
+import {ERC6909} from "./base/ERC6909.sol";
 import {IMirrorTokenManager} from "./interfaces/IMirrorTokenManager.sol";
 import {IPairPoolManager} from "./interfaces/IPairPoolManager.sol";
 

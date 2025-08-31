@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {Currency} from "likwid-v2-core/types/Currency.sol";
-import {PoolId} from "likwid-v2-core/types/PoolId.sol";
+import {Currency} from "../types/Currency.sol";
+import {PoolId} from "../types/PoolId.sol";
 // Local
 import {IERC6909Accrues} from "../interfaces/external/IERC6909Accrues.sol";
 import {PoolStatus} from "../types/PoolStatus.sol";

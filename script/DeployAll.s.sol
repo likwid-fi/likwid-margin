@@ -2,10 +2,8 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Script.sol";
-import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
-import {Hooks} from "likwid-v2-core/libraries/Hooks.sol";
+import {IVault} from "../src/interfaces/IVault.sol";
 import {HookMiner} from "../test/utils/HookMiner.sol";
-import {MarginHook} from "../src/MarginHook.sol";
 import {PairPoolManager} from "../src/PairPoolManager.sol";
 import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
 import {LendingPoolManager} from "../src/LendingPoolManager.sol";
@@ -71,55 +69,26 @@ contract DeployAllScript is Script {
         marginFees = new MarginFees(owner);
         console2.log("marginFees:", address(marginFees));
 
-        lendingPoolManager = new LendingPoolManager(owner, IPoolManager(manager), mirrorTokenManager);
+        lendingPoolManager = new LendingPoolManager(owner, IVault(manager), mirrorTokenManager);
         console2.log("lendingPoolManager:", address(lendingPoolManager));
 
         pairPoolManager =
-            new PairPoolManager(owner, IPoolManager(manager), mirrorTokenManager, lendingPoolManager, marginLiquidity);
+            new PairPoolManager(owner, IVault(manager), mirrorTokenManager, lendingPoolManager, marginLiquidity);
         console2.log("pairPoolManager:", address(pairPoolManager));
 
         marginPositionManager = new MarginPositionManager(owner, pairPoolManager, marginChecker);
         console2.log("marginPositionManager:", address(marginPositionManager));
 
         poolStatusManager = new PoolStatusManager(
-            owner,
-            IPoolManager(manager),
-            mirrorTokenManager,
-            lendingPoolManager,
-            marginLiquidity,
-            pairPoolManager,
-            marginFees
+            owner, IVault(manager), mirrorTokenManager, lendingPoolManager, marginLiquidity, pairPoolManager, marginFees
         );
         console2.log("poolStatusManager:", address(poolStatusManager));
 
-        MarginRouter swapRouter = new MarginRouter(owner, IPoolManager(manager), pairPoolManager);
+        MarginRouter swapRouter = new MarginRouter(owner, IVault(manager), pairPoolManager);
         console2.log("swapRouter:", address(swapRouter));
-
-        bytes memory constructorArgs = abi.encode(owner, manager, address(pairPoolManager));
-        uint160 flags = uint160(
-            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG
-                | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
-        );
-
-        // Mine a salt that will produce a hook address with the correct flags
-        bytes memory creationCode = vm.getCode("MarginHook.sol:MarginHook");
-        (address hookAddress, bytes32 salt) = HookMiner.find(CREATE2_DEPLOYER, flags, creationCode, constructorArgs);
-
-        // Deploy the hook using CREATE2
-        bytes memory bytecode = abi.encodePacked(creationCode, constructorArgs);
-
-        address deployedHook;
-        assembly {
-            deployedHook := create2(0, add(bytecode, 0x20), mload(bytecode), salt)
-        }
-
-        // verify proper create2 usage
-        require(deployedHook == hookAddress, "DeployScript: hook address mismatch");
-        console2.log("hookAddress:", hookAddress);
 
         // config pairPoolManager
         pairPoolManager.addPositionManager(address(marginPositionManager));
-        pairPoolManager.setHooks(MarginHook(hookAddress));
         pairPoolManager.setStatusManager(poolStatusManager);
         // config lendingPoolManager
         lendingPoolManager.setPairPoolManger(pairPoolManager);

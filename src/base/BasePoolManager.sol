@@ -3,8 +3,8 @@
 pragma solidity ^0.8.26;
 
 // Likwid V2 Core
-import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
-import {SafeCallback} from "likwid-v2-core/base/SafeCallback.sol";
+import {IVault} from "../interfaces/IVault.sol";
+import {SafeCallback} from "./SafeCallback.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 
@@ -28,7 +28,7 @@ abstract contract BasePoolManager is SafeCallback, Owned {
         _;
     }
 
-    constructor(address initialOwner, IPoolManager _poolManager) Owned(initialOwner) SafeCallback(_poolManager) {}
+    constructor(address initialOwner, IVault _vault) Owned(initialOwner) SafeCallback(_vault) {}
 
     function _unlockCallback(bytes calldata data) internal virtual override returns (bytes memory) {
         (bool success, bytes memory returnData) = address(this).call(data);

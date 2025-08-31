@@ -2,6 +2,7 @@
 
 pragma solidity ^0.8.20;
 
+import {Panic} from "@openzeppelin/contracts/utils/Panic.sol";
 import {SafeCast} from "./SafeCast.sol";
 
 library Math {
@@ -264,6 +265,28 @@ library Math {
             // ε_6 ≤ 2**(e-144) < 1. Given we're operating on integers, then we can ensure that xn is now either
             // sqrt(a) or sqrt(a) + 1.
             return xn - SafeCast.toUint(xn > a / xn);
+        }
+    }
+
+    /**
+     * @dev Returns the ceiling of the division of two numbers.
+     *
+     * This differs from standard division with `/` in that it rounds towards infinity instead
+     * of rounding towards zero.
+     */
+    function ceilDiv(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (b == 0) {
+            // Guarantee the same behavior as in a regular Solidity division.
+            Panic.panic(Panic.DIVISION_BY_ZERO);
+        }
+
+        // The following calculation ensures accurate ceiling division without overflow.
+        // Since a is non-zero, (a - 1) / b will not overflow.
+        // The largest possible result occurs when (a - 1) / b is type(uint256).max,
+        // but the largest value we can obtain is type(uint256).max - 1, which happens
+        // when a = type(uint256).max and b = 1.
+        unchecked {
+            return SafeCast.toUint(a > 0) * ((a - 1) / b + 1);
         }
     }
 }

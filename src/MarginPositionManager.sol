@@ -9,8 +9,8 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
-import {Currency, CurrencyLibrary} from "likwid-v2-core/types/Currency.sol";
-import {PoolId} from "likwid-v2-core/types/PoolId.sol";
+import {Currency, CurrencyLibrary} from "./types/Currency.sol";
+import {PoolId} from "./types/PoolId.sol";
 // Local
 import {CurrencyExtLibrary} from "./libraries/CurrencyExtLibrary.sol";
 import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";

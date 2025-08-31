@@ -2,8 +2,8 @@
 pragma solidity ^0.8.26;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {Currency} from "likwid-v2-core/types/Currency.sol";
-import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
+import {Currency} from "../types/Currency.sol";
+import {PoolKey} from "../types/PoolKey.sol";
 
 import {UQ112x112} from "../libraries/UQ112x112.sol";
 import {PerLibrary} from "../libraries/PerLibrary.sol";
@@ -101,7 +101,7 @@ library PoolStatusLibrary {
     {
         (uint256 reserveIn, uint256 reserveOut) =
             zeroForOne ? (reserve0(status), reserve1(status)) : (reserve1(status), reserve0(status));
-        uint256 amountInWithoutFee = status.key.fee.deductFrom(amountIn);
+        uint256 amountInWithoutFee = amountIn;
         uint256 numerator = amountInWithoutFee * reserveOut;
         uint256 denominator = reserveIn + amountInWithoutFee;
         amountOut = numerator / denominator;
@@ -117,6 +117,6 @@ library PoolStatusLibrary {
         uint256 numerator = reserveIn * amountOut;
         uint256 denominator = (reserveOut - amountOut);
         uint256 amountInWithoutFee = (numerator / denominator) + 1;
-        amountIn = status.key.fee.attachFrom(amountInWithoutFee);
+        amountIn = amountInWithoutFee;
     }
 }

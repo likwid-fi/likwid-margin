@@ -33,8 +33,11 @@ contract LikwidVaultTest is Test, IUnlockCallback {
     function setUp() public {
         skip(1); // Skip the first block to ensure block.timestamp is not zero
         vault = new LikwidVault(address(this));
+        vault.setMarginController(address(this));
         token0 = new MockERC20("Token0", "TKN0", 18);
         token1 = new MockERC20("Token1", "TKN1", 18);
+        token0.approve(address(vault), type(uint256).max);
+        token1.approve(address(vault), type(uint256).max);
         currency0 = Currency.wrap(address(token0));
         currency1 = Currency.wrap(address(token1));
     }
@@ -63,7 +66,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         } else if (selector == this.swap_callback.selector) {
             (PoolKey memory key, IVault.SwapParams memory swapParams) = abi.decode(params, (PoolKey, IVault.SwapParams));
 
-            BalanceDelta delta = vault.swap(key, swapParams);
+            (BalanceDelta delta,,) = vault.swap(key, swapParams);
 
             // Settle the balances
             if (delta.amount0() < 0) {
@@ -124,6 +127,20 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             } else if (delta.amount1() > 0) {
                 vault.take(key.currency1, address(this), uint256(int256(delta.amount1())));
             }
+        } else if (selector == this.close_callback.selector) {
+            (PoolKey memory key, IVault.CloseParams memory closeParams) =
+                abi.decode(params, (PoolKey, IVault.CloseParams));
+
+            BalanceDelta delta = vault.close(key, closeParams);
+
+            // Settle the balances
+            // When closing a position, the delta represents the profit returned to the user.
+            if (delta.amount0() > 0) {
+                vault.take(key.currency0, address(this), uint256(int256(delta.amount0())));
+            }
+            if (delta.amount1() > 0) {
+                vault.take(key.currency1, address(this), uint256(int256(delta.amount1())));
+            }
         }
         return "";
     }
@@ -135,6 +152,15 @@ contract LikwidVaultTest is Test, IUnlockCallback {
     function lend_callback(PoolKey memory, IVault.LendParams memory) external pure {}
 
     function margin_callback(PoolKey memory, IVault.MarginParams memory) external pure {}
+
+    function close_callback(PoolKey memory, IVault.CloseParams memory) external pure {}
+
+    function empty_callback(bytes calldata) external pure {}
+
+    function testUnlockReverts() public {
+        bytes memory data = abi.encode(this.empty_callback.selector, bytes(""));
+        vault.unlock(data);
+    }
 
     function testSwapExactInputToken0ForToken1() public {
         // 1. Setup
@@ -649,7 +675,75 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         // User gets their collateral back, approximately. Due to fees, it might not be exact.
         // For this test, we expect the full collateral back as we repay the principal.
         assertTrue(token1.balanceOf(address(this)) > 0, "User should get collateral back");
-        assertEq(token0.balanceOf(address(vault)), vaultBalance0AfterMargin + amountToRepay, "Vault token0 balance should increase");
+        assertEq(
+            token0.balanceOf(address(vault)),
+            vaultBalance0AfterMargin + amountToRepay,
+            "Vault token0 balance should increase"
+        );
         assertTrue(token1.balanceOf(address(vault)) < vaultBalance1AfterMargin, "Vault token1 balance should decrease");
+    }
+
+    function testMarginAndClose() public {
+        // 1. Setup
+        uint256 initialLiquidity0 = 10e18;
+        uint256 initialLiquidity1 = 10e18;
+        uint24 fee = 3000; // 0.3%
+        PoolKey memory key = PoolKey({currency0: currency0, currency1: currency1, fee: fee});
+        vault.initialize(key);
+
+        // Add liquidity
+        token0.mint(address(this), initialLiquidity0);
+        token1.mint(address(this), initialLiquidity1);
+        IVault.ModifyLiquidityParams memory mlParams = IVault.ModifyLiquidityParams({
+            amount0: initialLiquidity0,
+            amount1: initialLiquidity1,
+            liquidityDelta: 0,
+            salt: bytes32(0)
+        });
+        bytes memory inner_params_liq = abi.encode(key, mlParams);
+        bytes memory data_liq = abi.encode(this.modifyLiquidity_callback.selector, inner_params_liq);
+        vault.unlock(data_liq);
+
+        // User provides collateral
+        uint128 collateralValue = 1e18; // 1 token1
+        token1.mint(address(this), collateralValue);
+        bytes32 testSalt = keccak256("test_salt");
+
+        // 2. Action: Margin
+        IVault.MarginParams memory marginParams = IVault.MarginParams({
+            marginForOne: true, // collateral is token1, borrow token0
+            amount: -int128(collateralValue),
+            marginTotal: collateralValue, // Borrow 1e18 worth of token0
+            borrowAmount: 0, // let the contract calculate
+            salt: testSalt
+        });
+
+        bytes memory inner_params_margin = abi.encode(key, marginParams);
+        bytes memory data_margin = abi.encode(this.margin_callback.selector, inner_params_margin);
+        vault.unlock(data_margin);
+
+        assertEq(token1.balanceOf(address(this)), 0, "User should have transferred all collateral");
+
+        skip(1 days); // Simulate time passing to accrue some interest
+
+        // 3. Action: Close
+        bytes32 positionKey = keccak256(abi.encodePacked(address(this), true, testSalt));
+        IVault.CloseParams memory closeParams = IVault.CloseParams({
+            positionKey: positionKey,
+            salt: testSalt,
+            rewardAmount: 0,
+            closeMillionth: 1_000_000 // Close 100%
+        });
+
+        bytes memory inner_params_close = abi.encode(key, closeParams);
+        bytes memory data_close = abi.encode(this.close_callback.selector, inner_params_close);
+        vault.unlock(data_close);
+
+        // 4. Assertions
+        uint256 finalBalance = token1.balanceOf(address(this));
+        assertTrue(finalBalance > 0, "User should receive some collateral back");
+        assertTrue(
+            finalBalance < collateralValue, "User should receive slightly less than initial collateral due to fees"
+        );
     }
 }

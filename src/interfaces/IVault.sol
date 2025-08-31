@@ -38,6 +38,8 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
     /// @notice Thrown when `clear` is called with an amount that is not exactly equal to the open currency delta.
     error MustClearExactPositiveDelta();
 
+    event MarginControllerUpdated(address indexed marginController);
+
     /// @notice Emitted when a new pool is initialized
     /// @param id The abi encoded hash of the pool key struct for the new pool
     /// @param currency0 The first currency of the pool by address sort order
@@ -66,12 +68,7 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
         PoolId indexed id, address indexed sender, int128 amount0, int128 amount1, uint128 liquidity, uint24 fee
     );
 
-    /// @notice Emitted for donations
-    /// @param id The abi encoded hash of the pool key struct for the pool that was donated to
-    /// @param sender The address that initiated the donate call
-    /// @param amount0 The amount donated in currency0
-    /// @param amount1 The amount donated in currency1
-    event Donate(PoolId indexed id, address indexed sender, uint256 amount0, uint256 amount1);
+    event Fees(PoolId indexed id, Currency indexed currency, address indexed sender, uint8 feeType, uint256 feeAmount);
 
     event Lending(
         PoolId indexed id,
@@ -89,6 +86,15 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
         int128 amount,
         uint128 marginTotal,
         uint128 borrowAmount,
+        bytes32 salt
+    );
+
+    event Close(
+        PoolId indexed id,
+        address indexed sender,
+        bytes32 positionKey,
+        uint256 rewardAmount,
+        uint24 closeMillionth,
         bytes32 salt
     );
 
@@ -135,10 +141,9 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
     /// @param key The pool to swap in
     /// @param params The parameters for swapping
     /// @return swapDelta The balance delta of the address swapping
-    /// @dev Swapping on low liquidity pools may cause unexpected swap amounts when liquidity available is less than amountSpecified.
-    /// Additionally note that if interacting with hooks that have the BEFORE_SWAP_RETURNS_DELTA_FLAG or AFTER_SWAP_RETURNS_DELTA_FLAG
-    /// the hook may alter the swap input/output. Integrators should perform checks on the returned swapDelta.
-    function swap(PoolKey memory key, SwapParams memory params) external returns (BalanceDelta swapDelta);
+    function swap(PoolKey memory key, SwapParams memory params)
+        external
+        returns (BalanceDelta swapDelta, uint24 swapFee, uint256 feeAmount);
 
     struct LendParams {
         /// False if lend token0,true if lend token1
@@ -160,6 +165,17 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
         // borrow
         uint128 borrowAmount;
         bytes32 salt;
+    }
+
+    function margin(PoolKey memory key, MarginParams memory params)
+        external
+        returns (BalanceDelta marginDelta, uint256 feeAmount);
+
+    struct CloseParams {
+        bytes32 positionKey;
+        bytes32 salt;
+        uint256 rewardAmount;
+        uint24 closeMillionth;
     }
 
     /// @notice Writes the current ERC20 balance of the specified currency to transient storage

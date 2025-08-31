@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.28;
 
-import {IPoolManager} from "likwid-v2-core/interfaces/IPoolManager.sol";
-import {IHooks} from "likwid-v2-core/interfaces/IHooks.sol";
-import {Currency} from "likwid-v2-core/types/Currency.sol";
-import {PoolId} from "likwid-v2-core/types/PoolId.sol";
-import {PoolKey} from "likwid-v2-core/types/PoolKey.sol";
-import {BeforeSwapDelta, toBeforeSwapDelta} from "likwid-v2-core/types/BeforeSwapDelta.sol";
+import {IVault} from "./IVault.sol";
+import {Currency} from "../types/Currency.sol";
+import {PoolId} from "../types/PoolId.sol";
+import {PoolKey} from "../types/PoolKey.sol";
+import {BeforeSwapDelta, toBeforeSwapDelta} from "../types/BeforeSwapDelta.sol";
 
 import {AddLiquidityParams, RemoveLiquidityParams} from "../types/LiquidityParams.sol";
 import {ReleaseParams} from "../types/ReleaseParams.sol";
@@ -18,8 +17,6 @@ import {ILendingPoolManager} from "./ILendingPoolManager.sol";
 import {IPoolStatusManager} from "./IPoolStatusManager.sol";
 
 interface IPairPoolManager is IPairMarginManager {
-    function hooks() external view returns (IHooks hook);
-
     function positionManagers(address _positionManager) external view returns (bool);
 
     function lendingPoolManager() external view returns (ILendingPoolManager);
@@ -61,7 +58,7 @@ interface IPairPoolManager is IPairMarginManager {
 
     function initialize(PoolKey calldata key) external;
 
-    function swap(address sender, PoolKey calldata key, IPoolManager.SwapParams calldata params)
+    function swap(address sender, PoolKey calldata key, IVault.SwapParams calldata params)
         external
         returns (
             Currency specified,

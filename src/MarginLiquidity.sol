@@ -8,7 +8,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Likwid V2 core
-import {PoolId} from "likwid-v2-core/types/PoolId.sol";
+import {PoolId} from "./types/PoolId.sol";
 // Local
 import {ERC6909Liquidity} from "./base/ERC6909Liquidity.sol";
 import {StageMath} from "./libraries/StageMath.sol";
