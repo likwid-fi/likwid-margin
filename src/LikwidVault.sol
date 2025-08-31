@@ -128,11 +128,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         Pool.State storage pool = _getPool(key);
         pool.checkPoolInitialized();
 
-        if (params.liquidityDelta > 0) {
-            _handleAddLiquidity(id, params.liquidityDelta);
-        } else if (params.liquidityDelta < 0) {
-            _handleRemoveLiquidity(id, params.liquidityDelta);
-        }
+        uint256 liquidityBefore = pool.slot0.totalSupply();
 
         callerDelta = pool.modifyLiquidity(
             Pool.ModifyLiquidityParams({
@@ -143,6 +139,14 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
                 salt: params.salt
             })
         );
+
+        uint256 liquidityAfter = pool.slot0.totalSupply();
+
+        if (liquidityAfter > liquidityBefore) {
+            _handleAddLiquidity(id, liquidityAfter - liquidityBefore);
+        } else if (liquidityAfter < liquidityBefore) {
+            _handleRemoveLiquidity(id, liquidityBefore - liquidityAfter);
+        }
         emit ModifyLiquidity(id, msg.sender, BalanceDelta.unwrap(callerDelta), params.liquidityDelta, params.salt);
         _appendPoolBalanceDelta(key, msg.sender, callerDelta);
     }
@@ -150,18 +154,17 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     /// @notice Handles the addition of liquidity to a pool.
     /// @dev Locks the liquidity according to the staging mechanism.
     /// @param id The ID of the pool.
-    /// @param liquidityDelta The amount of liquidity to add.
-    function _handleAddLiquidity(PoolId id, int256 liquidityDelta) internal {
-        _lockLiquidity(id, uint256(liquidityDelta));
+    /// @param liquidityAdded The amount of liquidity to add.
+    function _handleAddLiquidity(PoolId id, uint256 liquidityAdded) internal {
+        _lockLiquidity(id, liquidityAdded);
     }
 
     /// @notice Handles the removal of liquidity from a pool.
     /// @dev Checks if the requested amount of liquidity is available for withdrawal and updates the liquidity queue.
     /// @param id The ID of the pool.
-    /// @param liquidityDelta The amount of liquidity to remove (a negative value).
-    function _handleRemoveLiquidity(PoolId id, int256 liquidityDelta) internal {
+    /// @param liquidityRemoved The amount of liquidity to remove .
+    function _handleRemoveLiquidity(PoolId id, uint256 liquidityRemoved) internal {
         if (stageDuration * stageSize > 0) {
-            uint256 liquidityRemoved = uint256(-liquidityDelta);
             (uint128 releasedLiquidity, uint128 nextReleasedLiquidity) = _getReleasedLiquidity(id);
             uint256 availableLiquidity = releasedLiquidity + nextReleasedLiquidity;
             if (availableLiquidity < liquidityRemoved) {

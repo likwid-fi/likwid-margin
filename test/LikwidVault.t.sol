@@ -45,7 +45,12 @@ contract LikwidVaultTest is Test, IUnlockCallback {
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
         (bytes4 selector, bytes memory params) = abi.decode(data, (bytes4, bytes));
 
-        if (selector == this.modifyLiquidity_callback.selector) {
+        if (selector == this.reentrant_unlock_test.selector) {
+            vault.unlock(params);
+        } else if (selector == this.unsettled_take_callback.selector) {
+            (Currency currency, address to, uint256 amount) = abi.decode(params, (Currency, address, uint256));
+            vault.take(currency, to, amount);
+        } else if (selector == this.modifyLiquidity_callback.selector) {
             (PoolKey memory key, IVault.ModifyLiquidityParams memory mlParams) =
                 abi.decode(params, (PoolKey, IVault.ModifyLiquidityParams));
 
@@ -56,12 +61,16 @@ contract LikwidVaultTest is Test, IUnlockCallback {
                 vault.sync(key.currency0);
                 token0.transfer(address(vault), uint256(-int256(delta.amount0())));
                 vault.settle();
+            } else if (delta.amount0() > 0) {
+                vault.take(key.currency0, address(this), uint256(int256(delta.amount0())));
             }
 
             if (delta.amount1() < 0) {
                 vault.sync(key.currency1);
                 token1.transfer(address(vault), uint256(-int256(delta.amount1())));
                 vault.settle();
+            } else if (delta.amount1() > 0) {
+                vault.take(key.currency1, address(this), uint256(int256(delta.amount1())));
             }
         } else if (selector == this.swap_callback.selector) {
             (PoolKey memory key, IVault.SwapParams memory swapParams) = abi.decode(params, (PoolKey, IVault.SwapParams));
@@ -157,6 +166,10 @@ contract LikwidVaultTest is Test, IUnlockCallback {
 
     function empty_callback(bytes calldata) external pure {}
 
+    function reentrant_unlock_test(bytes calldata) external pure {}
+
+    function unsettled_take_callback(Currency, address, uint256) external pure {}
+
     function _addLiquidity(PoolKey memory key, uint256 amount0, uint256 amount1) internal {
         token0.mint(address(this), amount0);
         token1.mint(address(this), amount1);
@@ -185,6 +198,53 @@ contract LikwidVaultTest is Test, IUnlockCallback {
     function testUnlockReverts() public {
         bytes memory data = abi.encode(this.empty_callback.selector, bytes(""));
         vault.unlock(data);
+    }
+
+    function testInterestAccruesOnBorrow() public {
+        // 1. Setup: Create a margin position (borrow token0 against token1)
+        (PoolKey memory key, ,) = _setupStandardPool();
+
+        // User provides collateral and opens a margin position
+        uint128 collateralValue = 1e18; // 1 token1
+        token1.mint(address(this), collateralValue);
+
+        // We borrow 1 token0 worth of token0, so marginTotal = collateralValue
+        IVault.MarginParams memory marginParams = IVault.MarginParams({
+            marginForOne: true, // collateral is token1, borrow token0
+            amount: -int128(collateralValue),
+            marginTotal: collateralValue,
+            borrowAmount: 0, // let the contract calculate
+            salt: bytes32(0)
+        });
+
+        bytes memory inner_params_margin = abi.encode(key, marginParams);
+        bytes memory data_margin = abi.encode(this.margin_callback.selector, inner_params_margin);
+        vault.unlock(data_margin);
+
+        Reserves initialRealReserves = StateLibrary.getRealReserves(vault, key.toId());
+        uint256 initialReserve0 = initialRealReserves.reserve0();
+
+        // 2. Action: Advance time
+        uint256 timeToSkip = 1 days;
+        skip(timeToSkip);
+
+        // 3. Trigger interest update
+        // Any interaction with the pool will trigger the interest update.
+        // Let's perform a small swap.
+        uint256 amountToSwap = 1;
+        token0.mint(address(this), amountToSwap);
+        IVault.SwapParams memory swapParams =
+            IVault.SwapParams({zeroForOne: true, amountSpecified: -int256(amountToSwap), useMirror: false});
+        
+        bytes memory inner_params_swap = abi.encode(key, swapParams);
+        bytes memory data_swap = abi.encode(this.swap_callback.selector, inner_params_swap);
+        vault.unlock(data_swap);
+
+        // 4. Assertions
+        Reserves finalRealReserves = StateLibrary.getRealReserves(vault, key.toId());
+        uint256 finalReserve0 = finalRealReserves.reserve0();
+
+        assertTrue(finalReserve0 > initialReserve0, "Real reserve of borrowed currency should increase due to interest");
     }
 
     function testSwapExactInputToken0ForToken1() public {
@@ -616,5 +676,195 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         assertTrue(
             finalBalance < collateralValue, "User should receive slightly less than initial collateral due to fees"
         );
+    }
+
+    // =============================================================
+    // REVERT TESTS
+    // =============================================================
+
+    function testRevertIfUnlockCalledWhenAlreadyUnlocked() public {
+        bytes memory empty_data = abi.encode(this.empty_callback.selector, bytes(""));
+        bytes memory callback_params = abi.encode(this.reentrant_unlock_test.selector, empty_data);
+
+        vm.expectRevert(abi.encodeWithSelector(IVault.AlreadyUnlocked.selector));
+        vault.unlock(callback_params);
+    }
+
+    function testRevertIfCurrencyNotSettledAfterUnlock() public {
+        (PoolKey memory key, , ) = _setupStandardPool();
+        uint256 amountToTake = 1e17;
+
+        bytes memory inner_params = abi.encode(key.currency0, address(this), amountToTake);
+        bytes memory data = abi.encode(this.unsettled_take_callback.selector, inner_params);
+
+        vm.expectRevert(abi.encodeWithSelector(IVault.CurrencyNotSettled.selector));
+        vault.unlock(data);
+    }
+
+    function testRevertIfSwapCalledWhenLocked() public {
+        (PoolKey memory key, , ) = _setupStandardPool();
+        IVault.SwapParams memory swapParams =
+            IVault.SwapParams({zeroForOne: true, amountSpecified: -1e18, useMirror: false});
+
+        vm.expectRevert(abi.encodeWithSelector(IVault.VaultLocked.selector));
+        vault.swap(key, swapParams);
+    }
+
+    function testRevertIfModifyLiquidityCalledWhenLocked() public {
+        (PoolKey memory key, , ) = _setupStandardPool();
+        IVault.ModifyLiquidityParams memory mlParams = IVault.ModifyLiquidityParams({
+            amount0: 1e18,
+            amount1: 1e18,
+            liquidityDelta: 0,
+            salt: bytes32(0)
+        });
+
+        vm.expectRevert(abi.encodeWithSelector(IVault.VaultLocked.selector));
+        vault.modifyLiquidity(key, mlParams);
+    }
+
+    function testRevertIfLendCalledWhenLocked() public {
+        (PoolKey memory key, , ) = _setupStandardPool();
+        IVault.LendParams memory lendParams = IVault.LendParams({
+            lendForOne: false,
+            lendAmount: -1e18,
+            salt: bytes32(0)
+        });
+
+        vm.expectRevert(abi.encodeWithSelector(IVault.VaultLocked.selector));
+        vault.lend(key, lendParams);
+    }
+
+    function testRevertIfMarginCalledWhenLocked() public {
+        (PoolKey memory key, , ) = _setupStandardPool();
+        IVault.MarginParams memory marginParams = IVault.MarginParams({
+            marginForOne: true,
+            amount: -1e18,
+            marginTotal: 1e18,
+            borrowAmount: 0,
+            salt: bytes32(0)
+        });
+
+        vm.expectRevert(abi.encodeWithSelector(IVault.VaultLocked.selector));
+        vault.margin(key, marginParams);
+    }
+
+    function testRevertIfCloseCalledWhenLocked() public {
+        (PoolKey memory key, , ) = _setupStandardPool();
+        IVault.CloseParams memory closeParams = IVault.CloseParams({
+            positionKey: bytes32(0),
+            salt: bytes32(0),
+            rewardAmount: 0,
+            closeMillionth: 1_000_000
+        });
+
+        vm.expectRevert(abi.encodeWithSelector(IVault.VaultLocked.selector));
+        vault.close(key, closeParams);
+    }
+
+    function testRevertSwapIfAmountIsZero() public {
+        (PoolKey memory key, , ) = _setupStandardPool();
+        IVault.SwapParams memory swapParams =
+            IVault.SwapParams({zeroForOne: true, amountSpecified: 0, useMirror: false});
+
+        bytes memory inner_params = abi.encode(key, swapParams);
+        bytes memory data = abi.encode(this.swap_callback.selector, inner_params);
+
+        vm.expectRevert(abi.encodeWithSelector(IVault.AmountCannotBeZero.selector));
+        vault.unlock(data);
+    }
+
+    function testRevertLendIfAmountIsZero() public {
+        (PoolKey memory key, , ) = _setupStandardPool();
+        IVault.LendParams memory lendParams = IVault.LendParams({
+            lendForOne: false,
+            lendAmount: 0,
+            salt: bytes32(0)
+        });
+
+        bytes memory inner_params = abi.encode(key, lendParams);
+        bytes memory data = abi.encode(this.lend_callback.selector, inner_params);
+
+        vm.expectRevert(abi.encodeWithSelector(IVault.AmountCannotBeZero.selector));
+        vault.unlock(data);
+    }
+
+    function testRevertMarginIfAmountIsZero() public {
+        (PoolKey memory key, , ) = _setupStandardPool();
+        IVault.MarginParams memory marginParams = IVault.MarginParams({
+            marginForOne: true,
+            amount: 0,
+            marginTotal: 1e18,
+            borrowAmount: 0,
+            salt: bytes32(0)
+        });
+
+        bytes memory inner_params = abi.encode(key, marginParams);
+        bytes memory data = abi.encode(this.margin_callback.selector, inner_params);
+
+        vm.expectRevert(abi.encodeWithSelector(IVault.AmountCannotBeZero.selector));
+        vault.unlock(data);
+    }
+
+    function testRevertCloseIfAmountIsZero() public {
+        (PoolKey memory key, , ) = _setupStandardPool();
+        IVault.CloseParams memory closeParams = IVault.CloseParams({
+            positionKey: bytes32(0),
+            salt: bytes32(0),
+            rewardAmount: 0,
+            closeMillionth: 0
+        });
+
+        bytes memory inner_params = abi.encode(key, closeParams);
+        bytes memory data = abi.encode(this.close_callback.selector, inner_params);
+
+        vm.expectRevert(abi.encodeWithSelector(IVault.AmountCannotBeZero.selector));
+        vault.unlock(data);
+    }
+
+    function testRevertMarginIfNotManager() public {
+        (PoolKey memory key, , ) = _setupStandardPool();
+        vault.setMarginController(address(uint160(address(this)) + 1)); // Set a different manager
+
+        IVault.MarginParams memory marginParams = IVault.MarginParams({
+            marginForOne: true,
+            amount: -1e18,
+            marginTotal: 1e18,
+            borrowAmount: 0,
+            salt: bytes32(0)
+        });
+
+        bytes memory inner_params = abi.encode(key, marginParams);
+        bytes memory data = abi.encode(this.margin_callback.selector, inner_params);
+
+        vm.expectRevert(abi.encodeWithSelector(LikwidVault.Unauthorized.selector));
+        vault.unlock(data);
+    }
+
+    function testRevertRemoveLiquidityIfLocked() public {
+        // 1. Setup
+        vault.setStageDuration(1 hours);
+        vault.setStageSize(5);
+        (PoolKey memory key, , ) = _setupStandardPool();
+
+        // From PoolTest, we know initial liquidity is sqrt(amount0 * amount1)
+        uint256 liquidity = 10e18;
+
+        // 2. Action: Try to remove more liquidity than is available
+        // By default, only a part of the liquidity is available for withdrawal immediately.
+        // Removing the full amount should fail.
+        IVault.ModifyLiquidityParams memory mlParams = IVault.ModifyLiquidityParams({
+            amount0: 0,
+            amount1: 0,
+            liquidityDelta: -int256(liquidity),
+            salt: bytes32(0)
+        });
+
+        bytes memory inner_params = abi.encode(key, mlParams);
+        bytes memory data = abi.encode(this.modifyLiquidity_callback.selector, inner_params);
+
+        // 3. Assertions
+        vm.expectRevert(abi.encodeWithSelector(LikwidVault.LiquidityLocked.selector));
+        vault.unlock(data);
     }
 }
