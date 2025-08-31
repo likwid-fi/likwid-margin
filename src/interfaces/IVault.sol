@@ -24,7 +24,7 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
     error AlreadyUnlocked();
 
     /// @notice Thrown when a function is called that requires the contract to be unlocked, but it is not
-    error ManagerLocked();
+    error VaultLocked();
 
     /// @notice PoolKey must have currencies where address(currency0) < address(currency1)
     error CurrenciesOutOfOrderOrEqual(address currency0, address currency1);

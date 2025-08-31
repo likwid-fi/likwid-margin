@@ -6,7 +6,8 @@ import {IVault} from "../interfaces/IVault.sol";
 import {Slot0, Slot0Library} from "../types/Slot0.sol";
 import {Reserves, ReservesLibrary} from "../types/Reserves.sol";
 
-/// @notice A helper library to provide state getters for a Likwid pool
+/// @title A helper library to provide state getters for a Likwid pool
+/// @notice This library provides functions to read the state of a Likwid pool from storage.
 library StateLibrary {
     using Slot0Library for Slot0;
     using ReservesLibrary for Reserves;
@@ -24,6 +25,7 @@ library StateLibrary {
     uint256 internal constant PAIR_RESERVES_OFFSET = 7;
     uint256 internal constant TRUNCATED_RESERVES_OFFSET = 8;
     uint256 internal constant LEND_RESERVES_OFFSET = 9;
+    uint256 internal constant INTEREST_RESERVES_OFFSET = 10;
 
     /**
      * @notice Get the unpacked Slot0 of the pool.
@@ -86,7 +88,7 @@ library StateLibrary {
      * @notice Retrieves the pair reserves of a pool.
      * @param manager The vault contract.
      * @param poolId The ID of the pool.
-     * @return reserves The packed pair reserves of the pool.
+     * @return The packed pair reserves of the pool.
      */
     function getPairReserves(IVault manager, PoolId poolId) internal view returns (Reserves) {
         bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + PAIR_RESERVES_OFFSET);
@@ -97,7 +99,7 @@ library StateLibrary {
      * @notice Retrieves the real reserves of a pool.
      * @param manager The vault contract.
      * @param poolId The ID of the pool.
-     * @return reserves The packed real reserves of the pool.
+     * @return The packed real reserves of the pool.
      */
     function getRealReserves(IVault manager, PoolId poolId) internal view returns (Reserves) {
         bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + REAL_RESERVES_OFFSET);
@@ -108,7 +110,7 @@ library StateLibrary {
      * @notice Retrieves the mirror reserves of a pool.
      * @param manager The vault contract.
      * @param poolId The ID of the pool.
-     * @return reserves The packed mirror reserves of the pool.
+     * @return The packed mirror reserves of the pool.
      */
     function getMirrorReserves(IVault manager, PoolId poolId) internal view returns (Reserves) {
         bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + MIRROR_RESERVES_OFFSET);
@@ -119,7 +121,7 @@ library StateLibrary {
      * @notice Retrieves the truncated reserves of a pool.
      * @param manager The vault contract.
      * @param poolId The ID of the pool.
-     * @return reserves The packed truncated reserves of the pool.
+     * @return The packed truncated reserves of the pool.
      */
     function getTruncatedReserves(IVault manager, PoolId poolId) internal view returns (Reserves) {
         bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + TRUNCATED_RESERVES_OFFSET);
@@ -130,10 +132,21 @@ library StateLibrary {
      * @notice Retrieves the lending reserves of a pool.
      * @param manager The vault contract.
      * @param poolId The ID of the pool.
-     * @return reserves The packed lending reserves of the pool.
+     * @return The packed lending reserves of the pool.
      */
     function getLendReserves(IVault manager, PoolId poolId) internal view returns (Reserves) {
         bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + LEND_RESERVES_OFFSET);
+        return Reserves.wrap(uint256(manager.extsload(slot)));
+    }
+
+    /**
+     * @notice Retrieves the interest reserves of a pool.
+     * @param manager The vault contract.
+     * @param poolId The ID of the pool.
+     * @return The packed interest reserves of the pool.
+     */
+    function getInterestReserves(IVault manager, PoolId poolId) internal view returns (Reserves) {
+        bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + INTEREST_RESERVES_OFFSET);
         return Reserves.wrap(uint256(manager.extsload(slot)));
     }
 

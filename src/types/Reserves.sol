@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {console} from "forge-std/console.sol";
-
 import {Panic} from "@openzeppelin/contracts/utils/Panic.sol";
 
 import {Math} from "../libraries/Math.sol";
@@ -55,10 +53,18 @@ library ReservesLibrary {
         return uint128(Reserves.unwrap(self));
     }
 
+    /// @notice Retrieves one of the reserves based on a boolean flag.
+    /// @param self The Reserves object.
+    /// @param forOne If true, returns reserve1; otherwise, returns reserve0.
+    /// @return The selected reserve value.
     function reserve01(Reserves self, bool forOne) internal pure returns (uint128) {
         return forOne ? self.reserve1() : self.reserve0();
     }
 
+    /// @notice Retrieves both reserve values from a Reserves object.
+    /// @param self The Reserves object.
+    /// @return _reserve0 The reserve0 value.
+    /// @return _reserve1 The reserve1 value.
     function reserves(Reserves self) internal pure returns (uint128 _reserve0, uint128 _reserve1) {
         _reserve0 = self.reserve0();
         _reserve1 = self.reserve1();
@@ -80,7 +86,11 @@ library ReservesLibrary {
         return toReserves(self.reserve0(), newReserve1);
     }
 
-    function applyDelta(Reserves self, BalanceDelta delta) internal pure returns (Reserves) {
+    /// @notice Applies a balance delta to the reserves.
+    /// @param self The Reserves object.
+    /// @param delta The balance delta to apply.
+    /// @return The updated Reserves object.
+        function applyDelta(Reserves self, BalanceDelta delta) internal pure returns (Reserves) {
         (uint128 r0, uint128 r1) = self.reserves();
         int128 d0 = delta.amount0();
         int128 d1 = delta.amount1();
@@ -89,8 +99,6 @@ library ReservesLibrary {
             if (d0 > 0) {
                 uint128 amount0 = uint128(d0);
                 if (r0 < amount0) {
-                    console.log("r0:", r0);
-                    console.log("amount0:", amount0);
                     revert NotEnoughReserves();
                 }
                 r0 -= amount0;
@@ -101,8 +109,6 @@ library ReservesLibrary {
             if (d1 > 0) {
                 uint128 amount1 = uint128(d1);
                 if (r1 < amount1) {
-                    console.log("r1:", r1);
-                    console.log("amount1:", amount1);
                     revert NotEnoughReserves();
                 }
                 r1 -= amount1;
@@ -114,18 +120,27 @@ library ReservesLibrary {
         return toReserves(r0, r1);
     }
 
-    function getPrice0X96(Reserves self) internal pure returns (uint256) {
+    /// @notice Calculates the price of token0 in terms of token1, scaled by Q96.
+    /// @param self The Reserves object.
+    /// @return The price of token0, scaled by Q96.
+    function getPrice0X96(Reserves self) public pure returns (uint256) {
         (uint128 r0, uint128 r1) = self.reserves();
         if (r0 == 0 || r1 == 0) revert InvalidReserves();
         return Math.mulDiv(r1, FixedPoint96.Q96, r0);
     }
 
+    /// @notice Calculates the price of token1 in terms of token0, scaled by Q96.
+    /// @param self The Reserves object.
+    /// @return The price of token1, scaled by Q96.
     function getPrice1X96(Reserves self) internal pure returns (uint256) {
         (uint128 r0, uint128 r1) = self.reserves();
         if (r0 == 0 || r1 == 0) revert InvalidReserves();
         return Math.mulDiv(r0, FixedPoint96.Q96, r1);
     }
 
+    /// @notice Checks if both reserves are positive.
+    /// @param self The Reserves object.
+    /// @return True if both reserves are positive, false otherwise.
     function bothPositive(Reserves self) internal pure returns (bool) {
         (uint128 r0, uint128 r1) = self.reserves();
         return r0 > 0 && r1 > 0;

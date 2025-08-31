@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
-import {console} from "forge-std/console.sol";
-
 import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "../types/BalanceDelta.sol";
 import {FeeType} from "../types/FeeType.sol";
 import {RateState} from "../types/RateState.sol";
@@ -22,7 +20,8 @@ import {SafeCast} from "./SafeCast.sol";
 import {SwapMath} from "./SwapMath.sol";
 import {InterestMath} from "./InterestMath.sol";
 
-/// @notice a library with all actions that can be performed on a pool
+/// @title A library for managing Likwid pools.
+/// @notice This library contains all the functions for interacting with a Likwid pool.
 library Pool {
     using CustomRevert for bytes4;
     using SafeCast for *;
@@ -209,6 +208,7 @@ library Pool {
     /// @return swapDelta The change in balances
     /// @return amountToProtocol The amount of fees to be sent to the protocol
     /// @return swapFee The fee for the swap
+    /// @return feeAmount The total fee amount for the swap.
     function swap(State storage self, SwapParams memory params)
         internal
         returns (BalanceDelta swapDelta, uint256 amountToProtocol, uint24 swapFee, uint256 feeAmount)
@@ -274,6 +274,11 @@ library Pool {
         bytes32 salt;
     }
 
+    /// @notice Lends tokens to the pool.
+    /// @param self The pool state.
+    /// @param params The parameters for the lending operation.
+    /// @return lendDelta The change in the lender's balance.
+    /// @return depositCumulativeLast The last cumulative deposit rate.
     function lend(State storage self, LendParams memory params)
         internal
         returns (BalanceDelta lendDelta, uint256 depositCumulativeLast)
@@ -311,6 +316,12 @@ library Pool {
         bytes32 salt;
     }
 
+    /// @notice Opens or modifies a margin position.
+    /// @param self The pool state.
+    /// @param params The parameters for the margin operation.
+    /// @return marginDelta The change in the user's balance.
+    /// @return amountToProtocol The amount of fees to be sent to the protocol.
+    /// @return feeAmount The total fee amount for the margin operation.
     function margin(State storage self, MarginParams memory params)
         internal
         returns (BalanceDelta marginDelta, uint256 amountToProtocol, uint256 feeAmount)
@@ -365,8 +376,6 @@ library Pool {
                 (amountToProtocol,) = ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeType.MARGIN, feeAmount);
                 uint24 swapFee;
                 (borrowAmount, swapFee, feeAmount) = self.getAmountIn(params.marginForOne, params.marginTotal);
-                console.log("swapFee:", swapFee);
-                console.log("feeAmount:", feeAmount);
                 params.borrowAmount = borrowAmount.toUint128();
 
                 (uint128 reserve0, uint128 reserve1) = _pairReserves.reserves();
@@ -457,6 +466,15 @@ library Pool {
         uint24 closeMillionth;
     }
 
+    /// @notice Handles the closing of a normal (non-liquidated) margin position.
+    /// @param position The margin position to close.
+    /// @param releaseAmount The amount of collateral to release.
+    /// @param repayAmount The amount of debt to repay.
+    /// @param profitAmount The profit from the position.
+    /// @return closeDelta The change in the user's balance.
+    /// @return pairDelta The change in the pair reserves.
+    /// @return lendDelta The change in the lending reserves.
+    /// @return mirrorDelta The change in the mirror reserves.
     function _handleNormalClose(
         MarginPosition.State storage position,
         uint256 releaseAmount,
@@ -481,6 +499,18 @@ library Pool {
         }
     }
 
+    /// @notice Handles the liquidation of a margin position.
+    /// @param self The pool state.
+    /// @param position The margin position to liquidate.
+    /// @param releaseAmount The amount of collateral to release.
+    /// @param repayAmount The amount of debt to repay.
+    /// @param profitAmount The profit from the position.
+    /// @param lossAmount The loss from the position.
+    /// @param rewardAmount The reward for the liquidator.
+    /// @return closeDelta The change in the liquidator's balance.
+    /// @return pairDelta The change in the pair reserves.
+    /// @return lendDelta The change in the lending reserves.
+    /// @return mirrorDelta The change in the mirror reserves.
     function _handleLiquidation(
         State storage self,
         MarginPosition.State storage position,
@@ -521,6 +551,10 @@ library Pool {
         }
     }
 
+    /// @notice Closes a margin position.
+    /// @param self The pool state.
+    /// @param params The parameters for closing the position.
+    /// @return closeDelta The change in the user's balance.
     function close(State storage self, CloseParams memory params) internal returns (BalanceDelta closeDelta) {
         MarginPosition.State storage position = self.marginPositions.get(params.sender, params.positionKey, params.salt);
         (uint256 releaseAmount, uint256 repayAmount, uint256 profitAmount, uint256 lossAmount) = position.close(
@@ -609,10 +643,13 @@ library Pool {
     }
 
     /// @notice Reverts if the given pool has not been initialized
+    /// @param self The pool state
     function checkPoolInitialized(State storage self) internal view {
         if (self.borrow0CumulativeLast == 0) PoolNotInitialized.selector.revertWith();
     }
 
+    /// @notice Transforms the truncated reserves based on the current pair reserves.
+    /// @param self The pool state.
     function transformTruncated(State storage self) internal {
         Reserves _pairReserves = self.pairReserves;
         Reserves _truncatedReserves = self.truncatedReserves;
@@ -645,13 +682,17 @@ library Pool {
         self.slot0 = _slot0.setLastUpdated(uint32(block.timestamp));
     }
 
+    /// @notice Updates the interest rates for the pool.
+    /// @param self The pool state.
+    /// @param rateState The current rate state.
+    /// @return pairInterest0 The interest earned by the pair for token0.
+    /// @return pairInterest1 The interest earned by the pair for token1.
     function updateInterests(State storage self, RateState rateState)
         internal
         returns (uint256 pairInterest0, uint256 pairInterest1)
     {
         Slot0 _slot0 = self.slot0;
         uint256 timeElapsed = _slot0.lastUpdated().getTimeElapsedMicrosecond();
-        console.log("timeElapsed:", timeElapsed);
         if (timeElapsed == 0) return (0, 0);
         Reserves _realReserves = self.realReserves;
         Reserves _mirrorReserves = self.mirrorReserves;
@@ -676,7 +717,6 @@ library Pool {
             ) - mirrorReserve0 * FixedPoint96.Q96 + interestReserve0 * FixedPoint96.Q96;
             (uint256 protocolInterest,) =
                 ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeType.INTERESTS, allInterest0);
-            console.log("protocolInterest0:", protocolInterest);
             allInterest0 = allInterest0 / FixedPoint96.Q96;
             if (protocolInterest == 0 || protocolInterest > FixedPoint96.Q96) {
                 protocolInterest = protocolInterest / FixedPoint96.Q96;
@@ -732,6 +772,9 @@ library Pool {
         self.slot0 = self.slot0.setLastUpdated(uint32(block.timestamp));
     }
 
+    /// @notice Updates the reserves of the pool.
+    /// @param self The pool state.
+    /// @param params An array of parameters for updating the reserves.
     function updateReserves(State storage self, ReservesLibrary.UpdateParam[] memory params) internal {
         if (params.length == 0) return;
         Reserves _realReserves = self.realReserves;
@@ -742,19 +785,12 @@ library Pool {
             ReservesType _type = params[i]._type;
             BalanceDelta delta = params[i].delta;
             if (_type == ReservesType.REAL) {
-                console.log("ReservesType.REAL");
                 _realReserves = _realReserves.applyDelta(delta);
             } else if (_type == ReservesType.MIRROR) {
-                console.log("ReservesType.MIRROR");
                 _mirrorReserves = _mirrorReserves.applyDelta(delta);
-                (uint256 mirror0, uint256 mirror1) = _mirrorReserves.reserves();
-                console.log("mirror0:", mirror0);
-                console.log("mirror1:", mirror1);
             } else if (_type == ReservesType.PAIR) {
-                console.log("ReservesType.PAIR");
                 _pairReserves = _pairReserves.applyDelta(delta);
             } else if (_type == ReservesType.LEND) {
-                console.log("ReservesType.LEND");
                 _lendReserves = _lendReserves.applyDelta(delta);
             }
         }

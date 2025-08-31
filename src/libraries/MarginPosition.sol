@@ -2,8 +2,6 @@
 // Likwid Contracts
 pragma solidity ^0.8.0;
 
-import {console} from "forge-std/console.sol";
-
 import {Math} from "./Math.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "../types/BalanceDelta.sol";
 import {Reserves} from "../types/Reserves.sol";
@@ -47,13 +45,7 @@ library MarginPosition {
         returns (State storage position)
     {
         position = self[positionKey];
-        console.log("get.positionKey:");
-        console.logBytes32(positionKey);
-        console.log("position.marginForOne:", position.marginForOne);
-        console.log("position.marginTotal:", position.marginTotal);
         bytes32 _positionKey = owner.calculatePositionKey(position.marginForOne, salt);
-        console.log("close.positionKey:");
-        console.logBytes32(_positionKey);
         if (positionKey != _positionKey) {
             InvalidPositionKey.selector.revertWith();
         }
@@ -64,11 +56,8 @@ library MarginPosition {
         view
         returns (State storage position)
     {
-        console.log("get.marginForOne:", marginForOne);
         bytes32 positionKey = owner.calculatePositionKey(marginForOne, salt);
         position = self[positionKey];
-        console.log("margin.positionKey:");
-        console.logBytes32(positionKey);
     }
 
     function update(
@@ -133,7 +122,6 @@ library MarginPosition {
             }
         }
 
-        console.log("margin.marginAmount:", marginAmount);
         self.marginAmount = marginAmount.toUint128();
         self.marginTotal = marginTotal.toUint128();
         self.depositCumulativeLast = depositCumulativeLast;
@@ -160,9 +148,6 @@ library MarginPosition {
             if (self.depositCumulativeLast != 0) {
                 marginAmount = Math.mulDiv(self.marginAmount, depositCumulativeLast, self.depositCumulativeLast);
                 marginTotal = Math.mulDiv(self.marginTotal, depositCumulativeLast, self.depositCumulativeLast);
-                console.log("self.marginAmount:", self.marginAmount);
-                console.log("marginAmount:", marginAmount);
-                console.log("marginTotal:", marginTotal);
                 positionValue = marginAmount + marginTotal;
             }
             if (self.borrowCumulativeLast != 0) {
@@ -177,17 +162,8 @@ library MarginPosition {
             } else {
                 // releaseAmount == positionValue or repayAmount <= payedAmount
                 uint256 costAmount = SwapMath.getAmountIn(pairReserves, !self.marginForOne, repayAmount);
-                uint256 testRepayAmount = SwapMath.getAmountOut(pairReserves, !self.marginForOne, costAmount);
-                (uint256 reserve0, uint256 reserve1) = pairReserves.reserves();
-                console.log("pairReserves:", reserve0, reserve1);
-                console.log("releaseAmount:", releaseAmount);
-                console.log("payedAmount:", payedAmount);
-                console.log("repayAmount:", repayAmount);
-                console.log("costAmount:", costAmount);
-                console.log("testRepayAmount:", testRepayAmount);
                 if (releaseAmount > costAmount) {
                     profitAmount = releaseAmount - costAmount;
-                    console.log("profitAmount:", profitAmount);
                 } else if (repayAmount > payedAmount) {
                     lossAmount = repayAmount - payedAmount;
                 }

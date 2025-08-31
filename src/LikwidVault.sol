@@ -39,6 +39,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     using Pool for Pool.State;
 
     error LiquidityLocked();
+    error Unauthorized();
 
     mapping(PoolId id => Pool.State) private _pools;
     address public marginController;
@@ -55,21 +56,35 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
 
     /// @notice This will revert if the contract is locked
     modifier onlyWhenUnlocked() {
-        if (!unlocked) ManagerLocked.selector.revertWith();
+        if (!unlocked) VaultLocked.selector.revertWith();
         _;
     }
 
     modifier onlyManager() {
-        require(msg.sender == marginController, "UNAUTHORIZED");
+        if (msg.sender != marginController) Unauthorized.selector.revertWith();
         _;
     }
 
+    uint24 private constant RATE_BASE = 50000;
+    uint24 private constant USE_MIDDLE_LEVEL = 400000;
+    uint24 private constant USE_HIGH_LEVEL = 800000;
+    uint24 private constant M_LOW = 10;
+    uint24 private constant M_MIDDLE = 100;
+    uint24 private constant M_HIGH = 10000;
+
     constructor(address initialOwner) ProtocolFees(initialOwner) {
-        rateState = rateState.setRateBase(50000).setUseMiddleLevel(400000).setUseHighLevel(800000).setMLow(10)
-            .setMMiddle(100).setMHigh(10000);
+        rateState = rateState.setRateBase(RATE_BASE).setUseMiddleLevel(USE_MIDDLE_LEVEL).setUseHighLevel(USE_HIGH_LEVEL)
+            .setMLow(M_LOW).setMMiddle(M_MIDDLE).setMHigh(M_HIGH);
         protocolFeeController = initialOwner;
     }
 
+    /// @notice Unlocks the contract for a single transaction.
+    /// @dev This function is called by an external contract to perform a series of actions within the vault.
+    /// The vault is locked by default and this function temporarily unlocks it.
+    /// It requires a callback to the sender, which will perform the desired actions.
+    /// After the callback is finished, the vault is locked again.
+    /// @param data The data to be passed to the callback function.
+    /// @return result The data returned by the callback function.
     function unlock(bytes calldata data) external override returns (bytes memory result) {
         if (unlocked) revert AlreadyUnlocked();
 
@@ -82,6 +97,9 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         unlocked = false;
     }
 
+    /// @notice Initializes a new pool.
+    /// @dev Creates a new liquidity pool for a pair of currencies. The currencies must be provided in a specific order.
+    /// @param key The key of the pool to initialize, containing the two currencies and the fee.
     function initialize(PoolKey memory key) external noDelegateCall {
         if (key.currency0 >= key.currency1) {
             CurrenciesOutOfOrderOrEqual.selector.revertWith(
@@ -95,6 +113,11 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         emit Initialize(id, key.currency0, key.currency1, key.fee);
     }
 
+    /// @notice Modifies liquidity in a pool.
+    /// @dev Adds or removes liquidity from a pool. The caller must be authorized.
+    /// @param key The key of the pool to modify.
+    /// @param params The parameters for modifying liquidity, including the amount of liquidity to add or remove.
+    /// @return callerDelta The change in the caller's balance.
     function modifyLiquidity(PoolKey memory key, IVault.ModifyLiquidityParams memory params)
         external
         onlyWhenUnlocked
@@ -104,10 +127,41 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         PoolId id = key.toId();
         Pool.State storage pool = _getPool(key);
         pool.checkPoolInitialized();
+
         if (params.liquidityDelta > 0) {
-            _lockLiquidity(id, uint256(params.liquidityDelta));
-        } else if (stageDuration * stageSize > 0) {
-            uint256 liquidityRemoved = uint256(-params.liquidityDelta);
+            _handleAddLiquidity(id, params.liquidityDelta);
+        } else if (params.liquidityDelta < 0) {
+            _handleRemoveLiquidity(id, params.liquidityDelta);
+        }
+
+        callerDelta = pool.modifyLiquidity(
+            Pool.ModifyLiquidityParams({
+                owner: msg.sender,
+                amount0: params.amount0,
+                amount1: params.amount1,
+                liquidityDelta: params.liquidityDelta.toInt128(),
+                salt: params.salt
+            })
+        );
+        emit ModifyLiquidity(id, msg.sender, BalanceDelta.unwrap(callerDelta), params.liquidityDelta, params.salt);
+        _appendPoolBalanceDelta(key, msg.sender, callerDelta);
+    }
+
+    /// @notice Handles the addition of liquidity to a pool.
+    /// @dev Locks the liquidity according to the staging mechanism.
+    /// @param id The ID of the pool.
+    /// @param liquidityDelta The amount of liquidity to add.
+    function _handleAddLiquidity(PoolId id, int256 liquidityDelta) internal {
+        _lockLiquidity(id, uint256(liquidityDelta));
+    }
+
+    /// @notice Handles the removal of liquidity from a pool.
+    /// @dev Checks if the requested amount of liquidity is available for withdrawal and updates the liquidity queue.
+    /// @param id The ID of the pool.
+    /// @param liquidityDelta The amount of liquidity to remove (a negative value).
+    function _handleRemoveLiquidity(PoolId id, int256 liquidityDelta) internal {
+        if (stageDuration * stageSize > 0) {
+            uint256 liquidityRemoved = uint256(-liquidityDelta);
             (uint128 releasedLiquidity, uint128 nextReleasedLiquidity) = _getReleasedLiquidity(id);
             uint256 availableLiquidity = releasedLiquidity + nextReleasedLiquidity;
             if (availableLiquidity < liquidityRemoved) {
@@ -145,20 +199,15 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
                 }
             }
         }
-
-        callerDelta = pool.modifyLiquidity(
-            Pool.ModifyLiquidityParams({
-                owner: msg.sender,
-                amount0: params.amount0,
-                amount1: params.amount1,
-                liquidityDelta: params.liquidityDelta.toInt128(),
-                salt: params.salt
-            })
-        );
-        emit ModifyLiquidity(id, msg.sender, BalanceDelta.unwrap(callerDelta), params.liquidityDelta, params.salt);
-        _appendPoolBalanceDelta(key, msg.sender, callerDelta);
     }
 
+    /// @notice Swaps tokens in a pool.
+    /// @dev Executes a token swap in the specified pool.
+    /// @param key The key of the pool to swap in.
+    /// @param params The parameters for the swap, including the amount and direction of the swap.
+    /// @return swapDelta The change in the caller's balance.
+    /// @return swapFee The fee applied to the swap.
+    /// @return feeAmount The amount of the fee.
     function swap(PoolKey memory key, IVault.SwapParams memory params)
         external
         onlyWhenUnlocked
@@ -193,6 +242,11 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         emit Swap(id, msg.sender, swapDelta.amount0(), swapDelta.amount1(), pool.slot0.totalSupply(), swapFee);
     }
 
+    /// @notice Lends tokens to a pool.
+    /// @dev Allows a user to lend tokens to a pool and earn interest.
+    /// @param key The key of the pool to lend to.
+    /// @param params The parameters for the lending operation, including the amount to lend.
+    /// @return lendingDelta The change in the lender's balance.
     function lend(PoolKey memory key, IVault.LendParams memory params)
         external
         onlyWhenUnlocked
@@ -219,6 +273,12 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         emit Lending(id, msg.sender, params.lendForOne, params.lendAmount, depositCumulativeLast, params.salt);
     }
 
+    /// @notice Opens a margin position.
+    /// @dev Allows a user to open a margin position, borrowing tokens to leverage their position.
+    /// @param key The key of the pool to open the margin position in.
+    /// @param params The parameters for the margin position, including the amount and leverage.
+    /// @return marginDelta The change in the user's balance.
+    /// @return feeAmount The fee charged for opening the margin position.
     function margin(PoolKey memory key, IVault.MarginParams memory params)
         external
         onlyWhenUnlocked
@@ -258,6 +318,11 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         );
     }
 
+    /// @notice Closes a margin position.
+    /// @dev Allows a user to close an existing margin position.
+    /// @param key The key of the pool where the position is held.
+    /// @param params The parameters for closing the position.
+    /// @return closeDelta The change in the user's balance.
     function close(PoolKey memory key, IVault.CloseParams memory params)
         external
         onlyWhenUnlocked
@@ -284,6 +349,9 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         emit Close(id, msg.sender, params.positionKey, params.rewardAmount, params.closeMillionth, params.salt);
     }
 
+    /// @notice Synchronizes the balance of a currency.
+    /// @dev Updates the contract's record of its balance for a specific currency.
+    /// @param currency The currency to synchronize.
     function sync(Currency currency) external {
         // address(0) is used for the native currency
         if (currency.isAddressZero()) {
@@ -295,6 +363,11 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         }
     }
 
+    /// @notice Takes a specified amount of a currency from the contract.
+    /// @dev Allows a user to withdraw a currency from their balance in the contract.
+    /// @param currency The currency to take.
+    /// @param to The address to send the currency to.
+    /// @param amount The amount of the currency to take.
     function take(Currency currency, address to, uint256 amount) external onlyWhenUnlocked {
         unchecked {
             // negation must be safe as amount is not negative
@@ -303,14 +376,25 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         }
     }
 
+    /// @notice Settles the caller's balance.
+    /// @dev Allows a user to settle their balance, receiving any due payments.
+    /// @return The amount paid to the user.
     function settle() external payable onlyWhenUnlocked returns (uint256) {
         return _settle(msg.sender);
     }
 
+    /// @notice Settles the balance for a specific recipient.
+    /// @dev Allows settling the balance on behalf of another address.
+    /// @param recipient The address whose balance is to be settled.
+    /// @return The amount paid to the recipient.
     function settleFor(address recipient) external payable onlyWhenUnlocked returns (uint256) {
         return _settle(recipient);
     }
 
+    /// @notice Clears a positive balance delta.
+    /// @dev Allows a user to clear a positive balance delta they have in a specific currency.
+    /// @param currency The currency to clear the delta for.
+    /// @param amount The amount of the delta to clear.
     function clear(Currency currency, uint256 amount) external onlyWhenUnlocked {
         int256 current = currency.currentDelta(msg.sender);
         int256 amountDelta = amount.toInt256();
@@ -321,6 +405,11 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         }
     }
 
+    /// @notice Mints new tokens.
+    /// @dev Mints a specified amount of a token to a given address.
+    /// @param to The address to mint the tokens to.
+    /// @param id The ID of the token to mint.
+    /// @param amount The amount of tokens to mint.
     function mint(address to, uint256 id, uint256 amount) external onlyWhenUnlocked {
         unchecked {
             Currency currency = CurrencyLibrary.fromId(id);
@@ -330,12 +419,21 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         }
     }
 
+    /// @notice Burns existing tokens.
+    /// @dev Burns a specified amount of a token from a given address.
+    /// @param from The address to burn the tokens from.
+    /// @param id The ID of the token to burn.
+    /// @param amount The amount of tokens to burn.
     function burn(address from, uint256 id, uint256 amount) external onlyWhenUnlocked {
         Currency currency = CurrencyLibrary.fromId(id);
         _appendDelta(currency, msg.sender, amount.toInt256());
         _burnFrom(from, currency.toId(), amount);
     }
 
+    /// @notice Settles a user's balance for a specific currency.
+    /// @dev Internal function to handle the logic of settling a user's balance.
+    /// @param recipient The address of the user to settle the balance for.
+    /// @return paid The amount paid to the user.
     function _settle(address recipient) internal returns (uint256 paid) {
         Currency currency = syncedCurrency;
 
@@ -353,6 +451,9 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     }
 
     /// @notice Appends a balance delta in a currency for a target address
+    /// @param currency The currency to update the balance for.
+    /// @param target The address whose balance is to be updated.
+    /// @param delta The change in balance.
     function _appendDelta(Currency currency, address target, int256 delta) internal {
         if (delta == 0) return;
 
@@ -366,12 +467,17 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     }
 
     /// @notice Appends the deltas of 2 currencies to a target address
+    /// @param key The key of the pool.
+    /// @param target The address whose balance is to be updated.
+    /// @param delta The change in balance for both currencies.
     function _appendPoolBalanceDelta(PoolKey memory key, address target, BalanceDelta delta) internal {
         _appendDelta(key.currency0, target, delta.amount0());
         _appendDelta(key.currency1, target, delta.amount1());
     }
 
     /// @notice Implementation of the _getPool function defined in ProtocolFees
+    /// @param key The key of the pool to retrieve.
+    /// @return _pool The state of the pool.
     function _getPool(PoolKey memory key) internal override returns (Pool.State storage _pool) {
         PoolId id = key.toId();
         _pool = _pools[id];
@@ -385,10 +491,15 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     }
 
     /// @notice Implementation of the _isUnlocked function defined in ProtocolFees
+    /// @return A boolean indicating whether the contract is unlocked.
     function _isUnlocked() internal view override returns (bool) {
         return unlocked;
     }
 
+    /// @notice Locks a certain amount of liquidity in stages.
+    /// @dev Internal function to manage the staged locking of liquidity.
+    /// @param id The ID of the pool.
+    /// @param amount The amount of liquidity to lock.
     function _lockLiquidity(PoolId id, uint256 amount) internal {
         if (stageDuration * stageSize == 0) {
             return; // No locking if stageDuration or stageSize is zero
@@ -419,6 +530,11 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         }
     }
 
+    /// @notice Gets the amount of released and next-to-be-released liquidity.
+    /// @dev Internal view function to calculate the amount of liquidity that is currently released and the amount that will be released in the next stage.
+    /// @param id The ID of the pool.
+    /// @return releasedLiquidity The amount of liquidity that is currently released.
+    /// @return nextReleasedLiquidity The amount of liquidity that will be released in the next stage.
     function _getReleasedLiquidity(PoolId id)
         internal
         view
@@ -444,19 +560,31 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     }
 
     // ******************** OWNER CALL ********************
+    /// @notice Sets the margin controller address.
+    /// @dev Only the owner can call this function.
+    /// @param controller The address of the new margin controller.
     function setMarginController(address controller) external onlyOwner {
         marginController = controller;
         emit MarginControllerUpdated(controller);
     }
 
+    /// @notice Sets the duration of each liquidity stage.
+    /// @dev Only the owner can call this function.
+    /// @param _stageDuration The new duration for each stage.
     function setStageDuration(uint32 _stageDuration) external onlyOwner {
         stageDuration = _stageDuration;
     }
 
+    /// @notice Sets the number of liquidity stages.
+    /// @dev Only the owner can call this function.
+    /// @param _stageSize The new number of stages.
     function setStageSize(uint32 _stageSize) external onlyOwner {
         stageSize = _stageSize;
     }
 
+    /// @notice Sets the part of liquidity that is free to leave in each stage.
+    /// @dev Only the owner can call this function.
+    /// @param _stageLeavePart The new leave part for each stage.
     function setStageLeavePart(uint32 _stageLeavePart) external onlyOwner {
         stageLeavePart = _stageLeavePart;
     }
