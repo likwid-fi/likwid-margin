@@ -297,14 +297,13 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         // Calculate expected amount in
         bool zeroForOne = false; // token1 for token0
         Reserves _truncatedReserves = StateLibrary.getTruncatedReserves(vault, key.toId());
-        uint256 degree = _pairReserves.getPriceDegree(_truncatedReserves, zeroForOne, 0, amountToReceive);
-        uint24 fee = key.fee.dynamicFee(degree);
-        console.log("Dynamic fee (in ppm): ", fee);
-        uint256 numerator = initialLiquidity1 * amountToReceive;
-        uint256 denominator = initialLiquidity0 - amountToReceive;
-        uint256 amountInWithoutFee = (numerator / denominator) + 1;
-        // Reverse fee calculation: amountIn = amountInWithoutFee * 1e6 / (1e6 - fee)
-        uint256 expectedAmountIn = (amountInWithoutFee * 1_000_000) / (1_000_000 - fee);
+        (uint256 expectedAmountIn, ,) = SwapMath.getAmountIn(
+            _pairReserves,
+            _truncatedReserves,
+            key.fee,
+            zeroForOne,
+            amountToReceive
+        );
 
         // Mint tokens for swap
         token1.mint(address(this), expectedAmountIn);
@@ -356,7 +355,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
 
         // 3. Assertions
         Reserves _truncatedReserves = StateLibrary.getTruncatedReserves(vault, key.toId());
-        uint256 degree = _pairReserves.getPriceDegree(_truncatedReserves, zeroForOne, amountToSwap, 0);
+        uint256 degree = _pairReserves.getPriceDegree(_truncatedReserves, key.fee, zeroForOne, amountToSwap, 0);
         uint24 fee = key.fee.dynamicFee(degree);
         console.log("Dynamic fee (in ppm): ", fee);
         uint256 totalFeeAmount = amountToSwap * fee / 1_000_000;

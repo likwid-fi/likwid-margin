@@ -124,9 +124,9 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         noDelegateCall
         returns (BalanceDelta callerDelta)
     {
-        PoolId id = key.toId();
-        Pool.State storage pool = _getPool(key);
+        Pool.State storage pool = _getAndUpdatePool(key);
         pool.checkPoolInitialized();
+        PoolId id = key.toId();
 
         uint256 liquidityBefore = pool.slot0.totalSupply();
 
@@ -220,7 +220,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         if (params.amountSpecified == 0) AmountCannotBeZero.selector.revertWith();
 
         PoolId id = key.toId();
-        Pool.State storage pool = _getPool(key);
+        Pool.State storage pool = _getAndUpdatePool(key);
         pool.checkPoolInitialized();
         uint256 amountToProtocol;
         (swapDelta, amountToProtocol, swapFee, feeAmount) = pool.swap(
@@ -259,7 +259,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         if (params.lendAmount == 0) AmountCannotBeZero.selector.revertWith();
 
         PoolId id = key.toId();
-        Pool.State storage pool = _getPool(key);
+        Pool.State storage pool = _getAndUpdatePool(key);
         pool.checkPoolInitialized();
         uint256 depositCumulativeLast;
         (lendingDelta, depositCumulativeLast) = pool.lend(
@@ -292,7 +292,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         if (params.amount == 0) AmountCannotBeZero.selector.revertWith();
 
         PoolId id = key.toId();
-        Pool.State storage pool = _getPool(key);
+        Pool.State storage pool = _getAndUpdatePool(key);
         pool.checkPoolInitialized();
         uint256 amountToProtocol;
         (marginDelta, amountToProtocol, feeAmount) = pool.margin(
@@ -335,7 +335,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         if (params.closeMillionth == 0) AmountCannotBeZero.selector.revertWith();
 
         PoolId id = key.toId();
-        Pool.State storage pool = _getPool(key);
+        Pool.State storage pool = _getAndUpdatePool(key);
         pool.checkPoolInitialized();
         closeDelta = pool.close(
             Pool.CloseParams({
@@ -478,10 +478,10 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         _appendDelta(key.currency1, target, delta.amount1());
     }
 
-    /// @notice Implementation of the _getPool function defined in ProtocolFees
+    /// @notice Implementation of the _getAndUpdatePool function defined in ProtocolFees
     /// @param key The key of the pool to retrieve.
     /// @return _pool The state of the pool.
-    function _getPool(PoolKey memory key) internal override returns (Pool.State storage _pool) {
+    function _getAndUpdatePool(PoolKey memory key) internal override returns (Pool.State storage _pool) {
         PoolId id = key.toId();
         _pool = _pools[id];
         (uint256 pairInterest0, uint256 pairInterest1) = _pool.updateInterests(rateState);

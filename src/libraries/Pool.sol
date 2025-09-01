@@ -213,7 +213,10 @@ library Pool {
         internal
         returns (BalanceDelta swapDelta, uint256 amountToProtocol, uint24 swapFee, uint256 feeAmount)
     {
+        Reserves _pairReserves = self.pairReserves;
+        Reserves _truncatedReserves = self.truncatedReserves;
         Slot0 _slot0 = self.slot0;
+        uint24 _lpFee = _slot0.lpFee();
 
         bool exactIn = params.amountSpecified < 0;
 
@@ -222,10 +225,12 @@ library Pool {
 
         if (exactIn) {
             amountIn = uint256(-params.amountSpecified);
-            (amountOut, swapFee, feeAmount) = self.getAmountOut(params.zeroForOne, amountIn);
+            (amountOut, swapFee, feeAmount) =
+                SwapMath.getAmountOut(_pairReserves, _truncatedReserves, _lpFee, params.zeroForOne, amountIn);
         } else {
             amountOut = uint256(params.amountSpecified);
-            (amountIn, swapFee, feeAmount) = self.getAmountIn(params.zeroForOne, amountOut);
+            (amountIn, swapFee, feeAmount) =
+                SwapMath.getAmountIn(_pairReserves, _truncatedReserves, _lpFee, params.zeroForOne, amountOut);
         }
 
         (amountToProtocol, feeAmount) = ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeType.SWAP, feeAmount);
@@ -341,6 +346,7 @@ library Pool {
         Reserves _realReserves = self.realReserves;
         Reserves _mirrorReserves = self.mirrorReserves;
         Reserves _pairReserves = self.pairReserves;
+        Reserves _truncatedReserves = self.truncatedReserves;
         Slot0 _slot0 = self.slot0;
 
         uint256 borrowCumulativeLast;
@@ -375,7 +381,9 @@ library Pool {
                 (marginWithoutFee, feeAmount) = marginFee.deduct(params.marginTotal);
                 (amountToProtocol,) = ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeType.MARGIN, feeAmount);
                 uint24 swapFee;
-                (borrowAmount, swapFee, feeAmount) = self.getAmountIn(params.marginForOne, params.marginTotal);
+                (borrowAmount, swapFee, feeAmount) = SwapMath.getAmountIn(
+                    _pairReserves, _truncatedReserves, _slot0.lpFee(), !params.marginForOne, params.marginTotal
+                );
                 params.borrowAmount = borrowAmount.toUint128();
 
                 (uint128 reserve0, uint128 reserve1) = _pairReserves.reserves();
@@ -584,62 +592,6 @@ library Pool {
         deltaParams[2] = ReservesLibrary.UpdateParam(ReservesType.LEND, lendDelta);
         deltaParams[3] = ReservesLibrary.UpdateParam(ReservesType.MIRROR, mirrorDelta);
         self.updateReserves(deltaParams);
-    }
-
-    /// @notice Calculates the amount of tokens to be received for a given input amount
-    /// @param self The pool state
-    /// @param zeroForOne Whether to swap token0 for token1
-    /// @param amountIn The amount of tokens to swap
-    /// @return amountOut The amount of tokens to be received
-    /// @return fee The fee for the swap
-    /// @return feeAmount The amount of fees to be paid
-    function getAmountOut(State storage self, bool zeroForOne, uint256 amountIn)
-        internal
-        view
-        returns (uint256 amountOut, uint24 fee, uint256 feeAmount)
-    {
-        require(amountIn > 0, "INSUFFICIENT_INPUT_AMOUNT");
-        Reserves _pairReserves = self.pairReserves;
-        (uint256 reserveIn, uint256 reserveOut) = zeroForOne
-            ? (_pairReserves.reserve0(), _pairReserves.reserve1())
-            : (_pairReserves.reserve1(), _pairReserves.reserve0());
-        require(reserveIn > 0 && reserveOut > 0, " INSUFFICIENT_LIQUIDITY");
-        fee = self.slot0.lpFee();
-        uint256 degree = _pairReserves.getPriceDegree(self.truncatedReserves, zeroForOne, amountIn, 0);
-        fee = fee.dynamicFee(degree);
-        uint256 amountInWithoutFee;
-        (amountInWithoutFee, feeAmount) = fee.deduct(amountIn);
-        uint256 numerator = amountInWithoutFee * reserveOut;
-        uint256 denominator = reserveIn + amountInWithoutFee;
-        amountOut = numerator / denominator;
-    }
-
-    /// @notice Calculates the amount of tokens to be paid for a given output amount
-    /// @param self The pool state
-    /// @param zeroForOne Whether to swap token0 for token1
-    /// @param amountOut The amount of tokens to receive
-    /// @return amountIn The amount of tokens to be paid
-    /// @return fee The fee for the swap
-    /// @return feeAmount The amount of fees to be paid
-    function getAmountIn(State storage self, bool zeroForOne, uint256 amountOut)
-        internal
-        view
-        returns (uint256 amountIn, uint24 fee, uint256 feeAmount)
-    {
-        require(amountOut > 0, "INSUFFICIENT_OUTPUT_AMOUNT");
-        Reserves _pairReserves = self.pairReserves;
-        (uint256 reserveIn, uint256 reserveOut) = zeroForOne
-            ? (_pairReserves.reserve0(), _pairReserves.reserve1())
-            : (_pairReserves.reserve1(), _pairReserves.reserve0());
-        require(reserveIn > 0 && reserveOut > 0, "INSUFFICIENT_LIQUIDITY");
-        require(amountOut < reserveOut, "OUTPUT_AMOUNT_OVERFLOW");
-        fee = self.slot0.lpFee();
-        uint256 degree = _pairReserves.getPriceDegree(self.truncatedReserves, zeroForOne, 0, amountOut);
-        fee = fee.dynamicFee(degree);
-        uint256 numerator = reserveIn * amountOut;
-        uint256 denominator = (reserveOut - amountOut);
-        uint256 amountInWithoutFee = (numerator / denominator) + 1;
-        (amountIn, feeAmount) = fee.attach(amountInWithoutFee);
     }
 
     /// @notice Reverts if the given pool has not been initialized
