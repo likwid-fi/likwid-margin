@@ -58,8 +58,6 @@ library Pool {
     error MarginLevelError();
 
     uint8 constant MAX_LEVERAGE = 5; // 5x
-    uint24 constant MIN_MARGIN_LEVEL = 1170000; // 117%
-    uint24 constant MIN_BORROW_LEVEL = 1400000; // 140%
 
     struct State {
         Slot0 slot0;
@@ -392,11 +390,10 @@ library Pool {
 
                 uint256 positionValue = Math.mulDiv(reserveBorrow, marginAmount + params.marginTotal, reserveMargin);
                 uint256 marginLevel = Math.mulDiv(positionValue, PerLibrary.ONE_MILLION, borrowAmount);
-                if (marginLevel < MIN_MARGIN_LEVEL) MarginLevelError.selector.revertWith();
+                if (marginLevel < PerLibrary.ONE_MILLION) MarginLevelError.selector.revertWith();
             } else {
                 // --- Borrow ---
-                uint256 borrowMAXAmount =
-                    _pairReserves.getAmountOut(!params.marginForOne, marginAmount).mulMillionDiv(MIN_BORROW_LEVEL);
+                uint256 borrowMAXAmount = _pairReserves.getAmountOut(!params.marginForOne, marginAmount);
                 borrowMAXAmount = Math.min(borrowMAXAmount, borrowRealReserves * 20 / 100);
                 if (params.borrowAmount > borrowMAXAmount) BorrowTooMuch.selector.revertWith();
                 if (params.borrowAmount == 0) params.borrowAmount = borrowMAXAmount.toUint128();
