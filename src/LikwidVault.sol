@@ -65,6 +65,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         _;
     }
 
+    uint24 private constant MAX_PRICE_MOVE_PER_SECOND = 3000; // 0.3%/second
     uint24 private constant RATE_BASE = 50000;
     uint24 private constant USE_MIDDLE_LEVEL = 400000;
     uint24 private constant USE_HIGH_LEVEL = 800000;
@@ -73,8 +74,9 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     uint24 private constant M_HIGH = 10000;
 
     constructor(address initialOwner) ProtocolFees(initialOwner) {
-        rateState = rateState.setRateBase(RATE_BASE).setUseMiddleLevel(USE_MIDDLE_LEVEL).setUseHighLevel(USE_HIGH_LEVEL)
-            .setMLow(M_LOW).setMMiddle(M_MIDDLE).setMHigh(M_HIGH);
+        marginState = marginState.setMaxPriceMovePerSecond(MAX_PRICE_MOVE_PER_SECOND).setRateBase(RATE_BASE)
+            .setUseMiddleLevel(USE_MIDDLE_LEVEL).setUseHighLevel(USE_HIGH_LEVEL).setMLow(M_LOW).setMMiddle(M_MIDDLE)
+            .setMHigh(M_HIGH);
         protocolFeeController = initialOwner;
     }
 
@@ -484,7 +486,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     function _getAndUpdatePool(PoolKey memory key) internal override returns (Pool.State storage _pool) {
         PoolId id = key.toId();
         _pool = _pools[id];
-        (uint256 pairInterest0, uint256 pairInterest1) = _pool.updateInterests(rateState);
+        (uint256 pairInterest0, uint256 pairInterest1) = _pool.updateInterests(marginState);
         if (pairInterest0 > 0) {
             emit Fees(id, key.currency0, address(this), uint8(FeeType.INTERESTS), pairInterest0);
         }

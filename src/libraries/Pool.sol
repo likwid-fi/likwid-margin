@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "../types/BalanceDelta.sol";
 import {FeeType} from "../types/FeeType.sol";
-import {RateState} from "../types/RateState.sol";
+import {MarginState} from "../types/MarginState.sol";
 import {ReservesType, Reserves, toReserves, ReservesLibrary} from "../types/Reserves.sol";
 import {Slot0} from "../types/Slot0.sol";
 import {CustomRevert} from "./CustomRevert.sol";
@@ -19,6 +19,7 @@ import {TimeLibrary} from "./TimeLibrary.sol";
 import {SafeCast} from "./SafeCast.sol";
 import {SwapMath} from "./SwapMath.sol";
 import {InterestMath} from "./InterestMath.sol";
+import {PriceMath} from "./PriceMath.sol";
 
 /// @title A library for managing Likwid pools.
 /// @notice This library contains all the functions for interacting with a Likwid pool.
@@ -56,7 +57,6 @@ library Pool {
 
     error MarginLevelError();
 
-    uint256 constant MAX_PRICE_MOVE_PER_SECOND = 3000; // 0.3%/second
     uint8 constant MAX_LEVERAGE = 5; // 5x
     uint24 constant MIN_MARGIN_LEVEL = 1170000; // 117%
     uint24 constant MIN_BORROW_LEVEL = 1400000; // 140%
@@ -600,124 +600,164 @@ library Pool {
         if (self.borrow0CumulativeLast == 0) PoolNotInitialized.selector.revertWith();
     }
 
-    /// @notice Transforms the truncated reserves based on the current pair reserves.
-    /// @param self The pool state.
-    function transformTruncated(State storage self) internal {
-        Reserves _pairReserves = self.pairReserves;
-        Reserves _truncatedReserves = self.truncatedReserves;
-        Slot0 _slot0 = self.slot0;
-        if (_pairReserves.bothPositive()) {
-            if (!_truncatedReserves.bothPositive()) {
-                self.truncatedReserves = _pairReserves;
-            } else {
-                (uint256 truncatedReserve0, uint256 truncatedReserve1) = _truncatedReserves.reserves();
-                uint256 delta = _slot0.lastUpdated().getTimeElapsed();
-                uint256 priceMoved = MAX_PRICE_MOVE_PER_SECOND * (delta ** 2);
-                uint128 newTruncatedReserve0 = 0;
-                uint128 newTruncatedReserve1 = _pairReserves.reserve1();
-                uint256 _reserve0 = _pairReserves.reserve0();
+    struct InterestUpdateParams {
+        uint256 mirrorReserve;
+        uint256 rateCumulativeLast;
+        uint256 borrowCumulativeBefore;
+        uint256 interestReserve;
+        uint256 pairReserve;
+        uint256 lendReserve;
+        uint256 depositCumulativeLast;
+        uint24 protocolFee;
+    }
 
-                uint256 reserve0Min =
-                    Math.mulDiv(newTruncatedReserve1, truncatedReserve0.lowerMillion(priceMoved), truncatedReserve1);
-                uint256 reserve0Max =
-                    Math.mulDiv(newTruncatedReserve1, truncatedReserve0.upperMillion(priceMoved), truncatedReserve1);
-                if (_reserve0 < reserve0Min) {
-                    newTruncatedReserve0 = reserve0Min.toUint128();
-                } else if (_reserve0 > reserve0Max) {
-                    newTruncatedReserve0 = reserve0Max.toUint128();
-                } else {
-                    newTruncatedReserve0 = _reserve0.toUint128();
+    struct InterestUpdateResult {
+        uint256 newMirrorReserve;
+        uint256 newPairReserve;
+        uint256 newLendReserve;
+        uint256 newInterestReserve;
+        uint256 newDepositCumulativeLast;
+        uint256 pairInterest;
+        bool changed;
+    }
+
+    function _updateInterestForOne(InterestUpdateParams memory params)
+        internal
+        pure
+        returns (InterestUpdateResult memory result)
+    {
+        result.newMirrorReserve = params.mirrorReserve;
+        result.newPairReserve = params.pairReserve;
+        result.newLendReserve = params.lendReserve;
+        result.newInterestReserve = params.interestReserve;
+        result.newDepositCumulativeLast = params.depositCumulativeLast;
+
+        if (params.mirrorReserve > 0 && params.rateCumulativeLast > params.borrowCumulativeBefore) {
+            uint256 allInterest = Math.mulDiv(
+                params.mirrorReserve * FixedPoint96.Q96, params.rateCumulativeLast, params.borrowCumulativeBefore
+            ) - params.mirrorReserve * FixedPoint96.Q96 + params.interestReserve;
+
+            (uint256 protocolInterest,) =
+                ProtocolFeeLibrary.splitFee(params.protocolFee, FeeType.INTERESTS, allInterest);
+
+            if (protocolInterest == 0 || protocolInterest > FixedPoint96.Q96) {
+                uint256 allInterestNoQ96 = allInterest / FixedPoint96.Q96;
+                allInterestNoQ96 -= protocolInterest / FixedPoint96.Q96;
+
+                result.pairInterest =
+                    Math.mulDiv(allInterestNoQ96, params.pairReserve, params.pairReserve + params.lendReserve);
+
+                if (allInterestNoQ96 > result.pairInterest) {
+                    uint256 lendingInterest = allInterestNoQ96 - result.pairInterest;
+                    result.newDepositCumulativeLast = Math.mulDiv(
+                        params.depositCumulativeLast, params.lendReserve + lendingInterest, params.lendReserve
+                    );
+                    result.newLendReserve += lendingInterest;
                 }
-                self.truncatedReserves = toReserves(newTruncatedReserve0, newTruncatedReserve1);
+
+                result.newMirrorReserve += allInterestNoQ96;
+                result.newPairReserve += result.pairInterest;
+                result.changed = true;
+                result.newInterestReserve = 0;
+            } else {
+                result.newInterestReserve = allInterest;
             }
         }
-        self.slot0 = _slot0.setLastUpdated(uint32(block.timestamp));
     }
 
     /// @notice Updates the interest rates for the pool.
     /// @param self The pool state.
-    /// @param rateState The current rate state.
+    /// @param marginState The current rate state.
     /// @return pairInterest0 The interest earned by the pair for token0.
     /// @return pairInterest1 The interest earned by the pair for token1.
-    function updateInterests(State storage self, RateState rateState)
+    function updateInterests(State storage self, MarginState marginState)
         internal
         returns (uint256 pairInterest0, uint256 pairInterest1)
     {
         Slot0 _slot0 = self.slot0;
-        uint256 timeElapsed = _slot0.lastUpdated().getTimeElapsedMicrosecond();
-        if (timeElapsed == 0) return (0, 0);
+        uint256 timeElapsedMicrosecond = _slot0.lastUpdated().getTimeElapsedMicrosecond();
+        if (timeElapsedMicrosecond == 0) return (0, 0);
+
         Reserves _realReserves = self.realReserves;
         Reserves _mirrorReserves = self.mirrorReserves;
         Reserves _interestReserves = self.interestReserves;
         Reserves _pairReserves = self.pairReserves;
         Reserves _lendReserves = self.lendReserves;
+
         uint256 borrow0CumulativeBefore = self.borrow0CumulativeLast;
         uint256 borrow1CumulativeBefore = self.borrow1CumulativeLast;
+
         (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = InterestMath.getBorrowRateCumulativeLast(
-            timeElapsed, borrow0CumulativeBefore, borrow1CumulativeBefore, rateState, _realReserves, _mirrorReserves
+            timeElapsedMicrosecond,
+            borrow0CumulativeBefore,
+            borrow1CumulativeBefore,
+            marginState,
+            _realReserves,
+            _mirrorReserves
         );
+
         (uint256 pairReserve0, uint256 pairReserve1) = _pairReserves.reserves();
         (uint256 lendReserve0, uint256 lendReserve1) = _lendReserves.reserves();
         (uint256 mirrorReserve0, uint256 mirrorReserve1) = _mirrorReserves.reserves();
         (uint256 interestReserve0, uint256 interestReserve1) = _interestReserves.reserves();
-        bool reserve0Changed;
-        bool reserve1Changed;
-        if (mirrorReserve0 > 0 && rate0CumulativeLast > borrow0CumulativeBefore) {
+
+        InterestUpdateResult memory result0 = _updateInterestForOne(
+            InterestUpdateParams({
+                mirrorReserve: mirrorReserve0,
+                rateCumulativeLast: rate0CumulativeLast,
+                borrowCumulativeBefore: borrow0CumulativeBefore,
+                interestReserve: interestReserve0,
+                pairReserve: pairReserve0,
+                lendReserve: lendReserve0,
+                depositCumulativeLast: self.deposit0CumulativeLast,
+                protocolFee: _slot0.protocolFee()
+            })
+        );
+
+        if (result0.changed) {
+            mirrorReserve0 = result0.newMirrorReserve;
+            pairReserve0 = result0.newPairReserve;
+            lendReserve0 = result0.newLendReserve;
+            interestReserve0 = result0.newInterestReserve;
+            self.deposit0CumulativeLast = result0.newDepositCumulativeLast;
+            pairInterest0 = result0.pairInterest;
             self.borrow0CumulativeLast = rate0CumulativeLast;
-            uint256 allInterest0 = Math.mulDiv(
-                mirrorReserve0 * FixedPoint96.Q96, rate0CumulativeLast, borrow0CumulativeBefore
-            ) - mirrorReserve0 * FixedPoint96.Q96 + interestReserve0 * FixedPoint96.Q96;
-            (uint256 protocolInterest,) =
-                ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeType.INTERESTS, allInterest0);
-            allInterest0 = allInterest0 / FixedPoint96.Q96;
-            if (protocolInterest == 0 || protocolInterest > FixedPoint96.Q96) {
-                protocolInterest = protocolInterest / FixedPoint96.Q96;
-                allInterest0 -= protocolInterest;
-                pairInterest0 = Math.mulDiv(allInterest0, pairReserve0, pairReserve0 + lendReserve0);
-                if (allInterest0 > pairInterest0) {
-                    uint256 lendingInterest = allInterest0 - pairInterest0;
-                    self.deposit0CumulativeLast =
-                        Math.mulDiv(self.deposit0CumulativeLast, lendReserve0 + lendingInterest, lendReserve0);
-                    lendReserve0 += lendingInterest;
-                }
-                mirrorReserve0 += allInterest0;
-                pairReserve0 += pairInterest0;
-                reserve0Changed = true;
-                interestReserve0 = 0;
-            } else {
-                interestReserve0 = allInterest0;
-            }
         }
-        if (mirrorReserve1 > 0 && rate1CumulativeLast > borrow1CumulativeBefore) {
+
+        InterestUpdateResult memory result1 = _updateInterestForOne(
+            InterestUpdateParams({
+                mirrorReserve: mirrorReserve1,
+                rateCumulativeLast: rate1CumulativeLast,
+                borrowCumulativeBefore: borrow1CumulativeBefore,
+                interestReserve: interestReserve1,
+                pairReserve: pairReserve1,
+                lendReserve: lendReserve1,
+                depositCumulativeLast: self.deposit1CumulativeLast,
+                protocolFee: _slot0.protocolFee()
+            })
+        );
+
+        if (result1.changed) {
+            mirrorReserve1 = result1.newMirrorReserve;
+            pairReserve1 = result1.newPairReserve;
+            lendReserve1 = result1.newLendReserve;
+            interestReserve1 = result1.newInterestReserve;
+            self.deposit1CumulativeLast = result1.newDepositCumulativeLast;
+            pairInterest1 = result1.pairInterest;
             self.borrow1CumulativeLast = rate1CumulativeLast;
-            uint256 allInterest1 = Math.mulDiv(
-                mirrorReserve1 * FixedPoint96.Q96, rate1CumulativeLast, borrow1CumulativeBefore
-            ) - mirrorReserve1 * FixedPoint96.Q96 + interestReserve1 * FixedPoint96.Q96;
-            (uint256 protocolInterest,) =
-                ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeType.INTERESTS, allInterest1);
-            allInterest1 = allInterest1 / FixedPoint96.Q96;
-            if (protocolInterest == 0 || protocolInterest > FixedPoint96.Q96) {
-                protocolInterest = protocolInterest / FixedPoint96.Q96;
-                allInterest1 -= protocolInterest;
-                pairInterest1 = Math.mulDiv(allInterest1, pairReserve1, pairReserve1 + lendReserve1);
-                if (allInterest1 > pairInterest1) {
-                    uint256 lendingInterest = allInterest1 - pairInterest1;
-                    self.deposit1CumulativeLast =
-                        Math.mulDiv(self.deposit1CumulativeLast, lendReserve1 + lendingInterest, lendReserve1);
-                    lendReserve1 += lendingInterest;
-                }
-                mirrorReserve1 += allInterest1;
-                pairReserve1 += pairInterest1;
-                reserve1Changed = true;
-                interestReserve1 = 0;
-            } else {
-                interestReserve1 = allInterest1;
-            }
         }
-        if (reserve0Changed || reserve1Changed) {
+
+        if (result0.changed || result1.changed) {
             self.mirrorReserves = toReserves(mirrorReserve0.toUint128(), mirrorReserve1.toUint128());
             self.pairReserves = toReserves(pairReserve0.toUint128(), pairReserve1.toUint128());
             self.lendReserves = toReserves(lendReserve0.toUint128(), lendReserve1.toUint128());
+            Reserves _truncatedReserves = self.truncatedReserves;
+            self.truncatedReserves = PriceMath.transferReserves(
+                _truncatedReserves,
+                _pairReserves,
+                _slot0.lastUpdated().getTimeElapsed(),
+                marginState.maxPriceMovePerSecond()
+            );
         }
 
         self.interestReserves = toReserves(interestReserve0.toUint128(), interestReserve1.toUint128());
@@ -750,6 +790,5 @@ library Pool {
         self.mirrorReserves = _mirrorReserves;
         self.pairReserves = _pairReserves;
         self.lendReserves = _lendReserves;
-        self.transformTruncated();
     }
 }

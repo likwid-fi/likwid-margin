@@ -6,13 +6,13 @@ import {Currency} from "../types/Currency.sol";
 import {IProtocolFees} from "../interfaces/IProtocolFees.sol";
 import {PoolKey} from "../types/PoolKey.sol";
 import {ProtocolFeeLibrary} from "../libraries/ProtocolFeeLibrary.sol";
-import {InterestBase} from "./InterestBase.sol";
+import {MarginBase} from "./MarginBase.sol";
 import {PoolId} from "../types/PoolId.sol";
 import {Pool} from "../libraries/Pool.sol";
 import {CustomRevert} from "../libraries/CustomRevert.sol";
 
 /// @notice Contract handling the setting and accrual of protocol fees
-abstract contract ProtocolFees is IProtocolFees, InterestBase {
+abstract contract ProtocolFees is IProtocolFees, MarginBase {
     using ProtocolFeeLibrary for uint24;
     using Pool for Pool.State;
     using CustomRevert for bytes4;
@@ -26,7 +26,7 @@ abstract contract ProtocolFees is IProtocolFees, InterestBase {
     /// @inheritdoc IProtocolFees
     address public protocolFeeController;
 
-    constructor(address initialOwner) InterestBase(initialOwner) {}
+    constructor(address initialOwner) MarginBase(initialOwner) {}
 
     /// @inheritdoc IProtocolFees
     function setProtocolFeeController(address controller) external onlyOwner {
