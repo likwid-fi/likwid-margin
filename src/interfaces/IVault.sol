@@ -70,7 +70,7 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
 
     event Fees(PoolId indexed id, Currency indexed currency, address indexed sender, uint8 feeType, uint256 feeAmount);
 
-    event Lending(
+    event Lend(
         PoolId indexed id,
         address indexed sender,
         bool lendingForOne,
@@ -136,6 +136,7 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
         int256 amountSpecified;
         /// Whether to use the mirror reserves for the swap
         bool useMirror;
+        bytes32 salt;
     }
 
     /// @notice Swap against the given pool

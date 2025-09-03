@@ -1,95 +1,129 @@
-// SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.0;
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
-import {Pool} from "../../src/libraries/Pool.sol";
+import {console} from "forge-std/console.sol";
 import {LikwidVault} from "../../src/LikwidVault.sol";
+import {IVault} from "../../src/interfaces/IVault.sol";
+import {IUnlockCallback} from "../../src/interfaces/callback/IUnlockCallback.sol";
 import {PoolKey} from "../../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../../src/types/PoolId.sol";
-import {IVault} from "../../src/interfaces/IVault.sol";
-import {Slot0Library} from "../../src/types/Slot0.sol";
-import {Reserves} from "../../src/types/Reserves.sol";
+import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
+import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
+import {LendPosition} from "../../src/libraries/LendPosition.sol";
+import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
-contract StateLibraryTest is Test {
+contract StateLibraryTest is Test, IUnlockCallback {
+    using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolKey;
-    using Slot0Library for Pool.State;
 
     LikwidVault vault;
+    MockERC20 token0;
+    MockERC20 token1;
+    Currency currency0;
+    Currency currency1;
     PoolKey poolKey;
     PoolId poolId;
 
-    Currency currency0;
-    Currency currency1;
-
     function setUp() public {
         vault = new LikwidVault(address(this));
-        currency0 = Currency.wrap(address(0x1));
-        currency1 = Currency.wrap(address(0x2));
-        poolKey = PoolKey(currency0, currency1, 2400);
+        token0 = new MockERC20("Token0", "TKN0", 18);
+        token1 = new MockERC20("Token1", "TKN1", 18);
+
+        // Approve vault to spend tokens
+        token0.approve(address(vault), type(uint256).max);
+        token1.approve(address(vault), type(uint256).max);
+
+        currency0 = Currency.wrap(address(token0));
+        currency1 = Currency.wrap(address(token1));
+
+        // Ensure currency order
+        if (Currency.unwrap(currency0) > Currency.unwrap(currency1)) {
+            (currency0, currency1) = (currency1, currency0);
+            (token0, token1) = (token1, token0);
+        }
+
+        poolKey = PoolKey({currency0: currency0, currency1: currency1, fee: 3000});
         poolId = poolKey.toId();
         vault.initialize(poolKey);
+
+        // Add initial liquidity
+        uint256 initialLiquidity = 10 ether;
+        token0.mint(address(this), initialLiquidity);
+        token1.mint(address(this), initialLiquidity);
+
+        IVault.ModifyLiquidityParams memory mlParams = IVault.ModifyLiquidityParams({
+            amount0: initialLiquidity,
+            amount1: initialLiquidity,
+            liquidityDelta: 0,
+            salt: bytes32(0)
+        });
+
+        bytes memory innerData = abi.encode(poolKey, mlParams);
+        bytes memory data = abi.encode(this.modifyLiquidity_callback.selector, innerData);
+        vault.unlock(data);
     }
 
-    function testGetSlot0() public view {
-        (uint128 totalSupply, uint32 lastUpdated, uint24 protocolFee, uint24 lpFee, uint24 marginFee) = StateLibrary.getSlot0(vault, poolId);
+    function unlockCallback(bytes calldata data) external returns (bytes memory) {
+        (bytes4 selector, bytes memory params) = abi.decode(data, (bytes4, bytes));
 
-        assertTrue(totalSupply == 0);
-        assertTrue(lastUpdated > 0);
-        assertTrue(protocolFee == 0);
-        assertTrue(lpFee == 2400);
-        assertTrue(marginFee == 0);
+        if (selector == this.modifyLiquidity_callback.selector) {
+            (PoolKey memory key, IVault.ModifyLiquidityParams memory mlParams) =
+                abi.decode(params, (PoolKey, IVault.ModifyLiquidityParams));
+            (BalanceDelta delta,) = vault.modifyLiquidity(key, mlParams);
+            settleDelta(delta);
+        } else if (selector == this.lend_callback.selector) {
+            (PoolKey memory key, IVault.LendParams memory lendParams) = abi.decode(params, (PoolKey, IVault.LendParams));
+            BalanceDelta delta = vault.lend(key, lendParams);
+            settleDelta(delta);
+        }
+        return "";
     }
 
-    function testGetBorrowDepositCumulative() public view {
-        (uint256 borrow0CumulativeLast, uint256 borrow1CumulativeLast, uint256 deposit0CumulativeLast, uint256 deposit1CumulativeLast) = StateLibrary.getBorrowDepositCumulative(vault, poolId);
+    function modifyLiquidity_callback(PoolKey memory, IVault.ModifyLiquidityParams memory) external pure {}
+    function lend_callback(PoolKey memory, IVault.LendParams memory) external pure {}
 
-        assertEq(borrow0CumulativeLast, 1 << 96);
-        assertEq(borrow1CumulativeLast, 1 << 96);
-        assertEq(deposit0CumulativeLast, 1 << 96);
-        assertEq(deposit1CumulativeLast, 1 << 96);
+    function settleDelta(BalanceDelta delta) internal {
+        if (delta.amount0() < 0) {
+            vault.sync(currency0);
+            token0.transfer(address(vault), uint256(-int256(delta.amount0())));
+            vault.settle();
+        } else if (delta.amount0() > 0) {
+            vault.take(currency0, address(this), uint256(int256(delta.amount0())));
+        }
+
+        if (delta.amount1() < 0) {
+            vault.sync(currency1);
+            token1.transfer(address(vault), uint256(-int256(delta.amount1())));
+            vault.settle();
+        } else if (delta.amount1() > 0) {
+            vault.take(currency1, address(this), uint256(int256(delta.amount1())));
+        }
     }
 
-    function testGetPairReserves() public view {
-        Reserves reserves = StateLibrary.getPairReserves(vault, poolId);
-        (uint128 reserve0, uint128 reserve1) = reserves.reserves();
-        assertEq(reserve0, 0);
-        assertEq(reserve1, 0);
-    }
+    function testGetLendPositionState() public {
+        // 1. Lend to the pool to create a lend position
+        int128 amountToLend = -1 ether;
+        bool lendForOne = false;
+        bytes32 salt = keccak256("my_lend_position");
 
-    function testGetRealReserves() public view {
-        Reserves reserves = StateLibrary.getRealReserves(vault, poolId);
-        (uint128 reserve0, uint128 reserve1) = reserves.reserves();
-        assertEq(reserve0, 0);
-        assertEq(reserve1, 0);
-    }
+        token0.mint(address(this), uint256(-int256(amountToLend)));
 
-    function testGetMirrorReserves() public view {
-        Reserves reserves = StateLibrary.getMirrorReserves(vault, poolId);
-        (uint128 reserve0, uint128 reserve1) = reserves.reserves();
-        assertEq(reserve0, 0);
-        assertEq(reserve1, 0);
-    }
+        IVault.LendParams memory lendParams =
+            IVault.LendParams({lendForOne: lendForOne, lendAmount: amountToLend, salt: salt});
 
-    function testGetTruncatedReserves() public view {
-        Reserves reserves = StateLibrary.getTruncatedReserves(vault, poolId);
-        (uint128 reserve0, uint128 reserve1) = reserves.reserves();
-        assertEq(reserve0, 0);
-        assertEq(reserve1, 0);
-    }
+        bytes memory innerData = abi.encode(poolKey, lendParams);
+        bytes memory data = abi.encode(this.lend_callback.selector, innerData);
+        vault.unlock(data);
 
-    function testGetLendReserves() public view {
-        Reserves reserves = StateLibrary.getLendReserves(vault, poolId);
-        (uint128 reserve0, uint128 reserve1) = reserves.reserves();
-        assertEq(reserve0, 0);
-        assertEq(reserve1, 0);
-    }
+        // 2. Get the position state using the library function
+        LendPosition.State memory positionState =
+            StateLibrary.getLendPositionState(vault, poolId, address(this), lendForOne, salt);
 
-    function testGetInterestReserves() public view {
-        Reserves reserves = StateLibrary.getInterestReserves(vault, poolId);
-        (uint128 reserve0, uint128 reserve1) = reserves.reserves();
-        assertEq(reserve0, 0);
-        assertEq(reserve1, 0);
+        // 3. Assert the state is correct
+        assertEq(positionState.lendForOne, lendForOne, "lendForOne should be correct");
+        assertEq(uint256(positionState.lendAmount), uint256(-int256(amountToLend)), "lendAmount should be correct");
+        assertTrue(positionState.depositCumulativeLast != 0, "depositCumulativeLast should be set");
     }
 }

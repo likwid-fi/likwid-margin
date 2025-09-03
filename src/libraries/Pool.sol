@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
+import {console} from "forge-std/console.sol";
+
 import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "../types/BalanceDelta.sol";
 import {FeeType} from "../types/FeeType.sol";
 import {MarginState} from "../types/MarginState.sol";
@@ -196,6 +198,7 @@ library Pool {
         int256 amountSpecified;
         // Whether to use the mirror reserves for the swap
         bool useMirror;
+        bytes32 salt;
     }
 
     /// @notice Swaps tokens in the pool
@@ -242,14 +245,14 @@ library Pool {
             amount1Delta = -amountIn.toInt128();
         }
 
-        swapDelta = toBalanceDelta(amount0Delta, amount1Delta);
         ReservesLibrary.UpdateParam[] memory deltaParams;
+        swapDelta = toBalanceDelta(amount0Delta, amount1Delta);
         if (!params.useMirror) {
             deltaParams = new ReservesLibrary.UpdateParam[](2);
             deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, swapDelta);
             deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, swapDelta);
         } else {
-            deltaParams = new ReservesLibrary.UpdateParam[](3);
+            deltaParams = new ReservesLibrary.UpdateParam[](4);
             BalanceDelta realDelta;
             BalanceDelta mirrorDelta;
             if (params.zeroForOne) {
@@ -259,9 +262,21 @@ library Pool {
                 realDelta = toBalanceDelta(0, amount1Delta);
                 mirrorDelta = toBalanceDelta(amount0Delta, 0);
             }
+            BalanceDelta lendDelta = toBalanceDelta(0, 0) - mirrorDelta;
             deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, realDelta);
+            // MIRROR=>LEND
             deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.MIRROR, mirrorDelta);
-            deltaParams[2] = ReservesLibrary.UpdateParam(ReservesType.PAIR, swapDelta);
+            deltaParams[2] = ReservesLibrary.UpdateParam(ReservesType.LEND, lendDelta);
+            deltaParams[3] = ReservesLibrary.UpdateParam(ReservesType.PAIR, swapDelta);
+            uint256 depositCumulativeLast;
+            if (params.zeroForOne) {
+                depositCumulativeLast = self.deposit1CumulativeLast;
+            } else {
+                depositCumulativeLast = self.deposit0CumulativeLast;
+            }
+            self.lendPositions.get(params.sender, params.zeroForOne, params.salt).update(
+                depositCumulativeLast, lendDelta
+            );
         }
         self.updateReserves(deltaParams);
     }
@@ -774,12 +789,16 @@ library Pool {
             ReservesType _type = params[i]._type;
             BalanceDelta delta = params[i].delta;
             if (_type == ReservesType.REAL) {
+                console.log("REAL");
                 _realReserves = _realReserves.applyDelta(delta);
             } else if (_type == ReservesType.MIRROR) {
+                console.log("MIRROR");
                 _mirrorReserves = _mirrorReserves.applyDelta(delta);
             } else if (_type == ReservesType.PAIR) {
+                console.log("PAIR");
                 _pairReserves = _pairReserves.applyDelta(delta);
             } else if (_type == ReservesType.LEND) {
+                console.log("LEND");
                 _lendReserves = _lendReserves.applyDelta(delta);
             }
         }

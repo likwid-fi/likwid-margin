@@ -230,11 +230,21 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
                 sender: msg.sender,
                 zeroForOne: params.zeroForOne,
                 amountSpecified: params.amountSpecified,
-                useMirror: params.useMirror
+                useMirror: params.useMirror,
+                salt: params.salt
             })
         );
-
-        _appendPoolBalanceDelta(key, msg.sender, swapDelta);
+        if (params.useMirror) {
+            BalanceDelta realDelta;
+            if (params.zeroForOne) {
+                realDelta = toBalanceDelta(swapDelta.amount0(), 0);
+            } else {
+                realDelta = toBalanceDelta(0, swapDelta.amount1());
+            }
+            _appendPoolBalanceDelta(key, msg.sender, realDelta);
+        } else {
+            _appendPoolBalanceDelta(key, msg.sender, swapDelta);
+        }
 
         if (feeAmount > 0) {
             Currency feeCurrency = params.zeroForOne ? key.currency0 : key.currency1;
@@ -251,12 +261,12 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     /// @dev Allows a user to lend tokens to a pool and earn interest.
     /// @param key The key of the pool to lend to.
     /// @param params The parameters for the lending operation, including the amount to lend.
-    /// @return lendingDelta The change in the lender's balance.
+    /// @return lendDelta The change in the lender's balance.
     function lend(PoolKey memory key, IVault.LendParams memory params)
         external
         onlyWhenUnlocked
         noDelegateCall
-        returns (BalanceDelta lendingDelta)
+        returns (BalanceDelta lendDelta)
     {
         if (params.lendAmount == 0) AmountCannotBeZero.selector.revertWith();
 
@@ -264,7 +274,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         Pool.State storage pool = _getAndUpdatePool(key);
         pool.checkPoolInitialized();
         uint256 depositCumulativeLast;
-        (lendingDelta, depositCumulativeLast) = pool.lend(
+        (lendDelta, depositCumulativeLast) = pool.lend(
             Pool.LendParams({
                 sender: msg.sender,
                 lendForOne: params.lendForOne,
@@ -273,9 +283,9 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
             })
         );
 
-        _appendPoolBalanceDelta(key, msg.sender, lendingDelta);
+        _appendPoolBalanceDelta(key, msg.sender, lendDelta);
 
-        emit Lending(id, msg.sender, params.lendForOne, params.lendAmount, depositCumulativeLast, params.salt);
+        emit Lend(id, msg.sender, params.lendForOne, params.lendAmount, depositCumulativeLast, params.salt);
     }
 
     /// @notice Opens a margin position.

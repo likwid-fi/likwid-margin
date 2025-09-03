@@ -6,8 +6,6 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {PairPosition} from "../libraries/PairPosition.sol";
 
 interface IPairPositionManager is IERC721 {
-    error PriceSlippageTooHigh();
-
     event ModifyLiquidity(
         PoolId indexed poolId,
         uint256 indexed tokenId,

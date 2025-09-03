@@ -10,6 +10,7 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
 import {ImmutableState} from "./ImmutableState.sol";
 import {PoolKey} from "../types/PoolKey.sol";
+import {BalanceDelta} from "../types/BalanceDelta.sol";
 import {PoolId, PoolIdLibrary} from "../types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "../types/Currency.sol";
 import {IVault} from "../interfaces/IVault.sol";
@@ -24,6 +25,10 @@ abstract contract BasePositionManager is ImmutableState, IUnlockCallback, ERC721
     error NotOwner();
 
     error InvalidCallback();
+
+    error PriceSlippageTooHigh();
+
+    error MismatchedPoolKey();
 
     uint256 public nextId = 1;
 
@@ -52,6 +57,67 @@ abstract contract BasePositionManager is ImmutableState, IUnlockCallback, ERC721
         uint256 balance = address(this).balance;
         if (balance > 0) {
             CurrencyLibrary.ADDRESS_ZERO.transfer(spender, balance);
+        }
+    }
+
+    function _processDelta(
+        address sender,
+        PoolKey memory key,
+        BalanceDelta delta,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        uint256 amount0Max,
+        uint256 amount1Max
+    ) internal returns (uint256 amount0, uint256 amount1) {
+        if (delta.amount0() < 0) {
+            amount0 = uint256(-int256(delta.amount0()));
+            if ((amount0Min > 0 && amount0 < amount0Min) || (amount0Max > 0 && amount0 > amount0Max)) {
+                PriceSlippageTooHigh.selector.revertWith();
+            }
+            key.currency0.settle(vault, sender, amount0, false);
+        } else {
+            amount0 = uint256(int256(delta.amount0()));
+            if ((amount0Min > 0 && amount0 < amount0Min) || (amount0Max > 0 && amount0 > amount0Max)) {
+                PriceSlippageTooHigh.selector.revertWith();
+            }
+            key.currency0.take(vault, sender, amount0, false);
+        }
+
+        if (delta.amount1() < 0) {
+            amount1 = uint256(-int256(delta.amount1()));
+            if ((amount1Min > 0 && amount1 < amount1Min) || (amount1Max > 0 && amount1 > amount1Max)) {
+                PriceSlippageTooHigh.selector.revertWith();
+            }
+            key.currency1.settle(vault, sender, amount1, false);
+        } else {
+            amount1 = uint256(int256(delta.amount1()));
+            if ((amount1Min > 0 && amount1 < amount1Min) || (amount1Max > 0 && amount1 > amount1Max)) {
+                PriceSlippageTooHigh.selector.revertWith();
+            }
+            key.currency1.take(vault, sender, amount1, false);
+        }
+
+        _clearNative(sender);
+    }
+
+    function _mintPosition(PoolKey memory key, address to) internal returns (uint256 tokenId) {
+        tokenId = nextId++;
+        _mint(to, tokenId);
+
+        PoolId poolId = key.toId();
+        poolIds[tokenId] = poolId;
+        if (poolKeys[poolId].currency1 == Currency.wrap(address(0))) {
+            poolKeys[poolId] = key;
+        } else {
+            PoolKey memory existingKey = poolKeys[poolId];
+            if (
+                !(
+                    existingKey.currency0 == key.currency0 && existingKey.currency1 == key.currency1
+                        && existingKey.fee == key.fee
+                )
+            ) {
+                MismatchedPoolKey.selector.revertWith();
+            }
         }
     }
 

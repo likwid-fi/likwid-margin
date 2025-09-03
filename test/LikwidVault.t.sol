@@ -76,14 +76,14 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             (PoolKey memory key, IVault.SwapParams memory swapParams) = abi.decode(params, (PoolKey, IVault.SwapParams));
 
             (BalanceDelta delta,,) = vault.swap(key, swapParams);
-
+            bool takeOutput = !swapParams.useMirror;
             // Settle the balances
             if (delta.amount0() < 0) {
                 vault.sync(key.currency0);
                 token0.transfer(address(vault), uint256(-int256(delta.amount0())));
                 vault.settle();
             } else if (delta.amount0() > 0) {
-                vault.take(key.currency0, address(this), uint256(int256(delta.amount0())));
+                if (takeOutput) vault.take(key.currency0, address(this), uint256(int256(delta.amount0())));
             }
 
             if (delta.amount1() < 0) {
@@ -91,7 +91,9 @@ contract LikwidVaultTest is Test, IUnlockCallback {
                 token1.transfer(address(vault), uint256(-int256(delta.amount1())));
                 vault.settle();
             } else if (delta.amount1() > 0) {
-                vault.take(key.currency1, address(this), uint256(int256(delta.amount1())));
+                if (takeOutput) {
+                    vault.take(key.currency1, address(this), uint256(int256(delta.amount1())));
+                }
             }
         } else if (selector == this.lend_callback.selector) {
             (PoolKey memory key, IVault.LendParams memory lendParams) = abi.decode(params, (PoolKey, IVault.LendParams));
@@ -232,8 +234,12 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         // Let's perform a small swap.
         uint256 amountToSwap = 1;
         token0.mint(address(this), amountToSwap);
-        IVault.SwapParams memory swapParams =
-            IVault.SwapParams({zeroForOne: true, amountSpecified: -int256(amountToSwap), useMirror: false});
+        IVault.SwapParams memory swapParams = IVault.SwapParams({
+            zeroForOne: true,
+            amountSpecified: -int256(amountToSwap),
+            useMirror: false,
+            salt: bytes32(0)
+        });
 
         bytes memory inner_params_swap = abi.encode(key, swapParams);
         bytes memory data_swap = abi.encode(this.swap_callback.selector, inner_params_swap);
@@ -260,8 +266,12 @@ contract LikwidVaultTest is Test, IUnlockCallback {
 
         // 2. Action
         bool zeroForOne = true; // token0 for token1
-        IVault.SwapParams memory swapParams =
-            IVault.SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(amountToSwap), useMirror: false});
+        IVault.SwapParams memory swapParams = IVault.SwapParams({
+            zeroForOne: zeroForOne,
+            amountSpecified: -int256(amountToSwap),
+            useMirror: false,
+            salt: bytes32(0)
+        });
 
         uint256 initialVaultBalance1 = token1.balanceOf(address(vault));
 
@@ -306,7 +316,8 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         IVault.SwapParams memory swapParams = IVault.SwapParams({
             zeroForOne: false, // we want token0, so we swap token1 for token0
             amountSpecified: int256(amountToReceive),
-            useMirror: false
+            useMirror: false,
+            salt: bytes32(0)
         });
 
         bytes memory inner_params_swap = abi.encode(key, swapParams);
@@ -339,8 +350,12 @@ contract LikwidVaultTest is Test, IUnlockCallback {
 
         // 2. Action
         bool zeroForOne = true;
-        IVault.SwapParams memory swapParams =
-            IVault.SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(amountToSwap), useMirror: false});
+        IVault.SwapParams memory swapParams = IVault.SwapParams({
+            zeroForOne: zeroForOne,
+            amountSpecified: -int256(amountToSwap),
+            useMirror: false,
+            salt: bytes32(0)
+        });
 
         bytes memory inner_params_swap = abi.encode(key, swapParams);
         bytes memory data_swap = abi.encode(this.swap_callback.selector, inner_params_swap);
@@ -671,6 +686,54 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         );
     }
 
+    function testSwapExactInputToken0ForMirrorToken1() public {
+        // 1. Setup
+        (PoolKey memory key, uint256 initialLiquidity0, uint256 initialLiquidity1) = _setupStandardPool();
+        Reserves _pairReserves = StateLibrary.getPairReserves(vault, key.toId());
+        assertEq(_pairReserves.reserve0(), initialLiquidity0, "Initial reserve0 should match");
+        assertEq(_pairReserves.reserve1(), initialLiquidity1, "Initial reserve1 should match");
+
+        // User provides collateral
+        uint128 collateralValue = 2e18; // 2 token0
+        token0.mint(address(this), collateralValue);
+
+        // 2. Margin
+        IVault.MarginParams memory marginParams = IVault.MarginParams({
+            marginForOne: false, // collateral is token0, borrow token1
+            amount: -int128(collateralValue),
+            marginTotal: collateralValue, // Borrow 1e18 worth of token1
+            borrowAmount: 0, // let the contract calculate
+            salt: bytes32(0)
+        });
+
+        bytes memory inner_params_margin = abi.encode(key, marginParams);
+        bytes memory data_margin = abi.encode(this.margin_callback.selector, inner_params_margin);
+
+        vault.unlock(data_margin);
+
+        uint256 amountToSwap = 1e18;
+
+        // Mint tokens for swap
+        token0.mint(address(this), amountToSwap);
+
+        // 3. Swap mirror
+        bool zeroForOne = true; // token0 for token1
+        IVault.SwapParams memory swapParams = IVault.SwapParams({
+            zeroForOne: zeroForOne,
+            amountSpecified: -int256(amountToSwap),
+            useMirror: true,
+            salt: bytes32(0)
+        });
+
+        bytes memory inner_params_swap = abi.encode(key, swapParams);
+        bytes memory data_swap = abi.encode(this.swap_callback.selector, inner_params_swap);
+
+        vault.unlock(data_swap);
+
+        assertEq(token0.balanceOf(address(this)), 0, "User token0 balance should be 0");
+        assertEq(token1.balanceOf(address(this)), 0, "User token1 balance should be 0");
+    }
+
     // =============================================================
     // REVERT TESTS
     // =============================================================
@@ -697,7 +760,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
     function testRevertIfSwapCalledWhenLocked() public {
         (PoolKey memory key,,) = _setupStandardPool();
         IVault.SwapParams memory swapParams =
-            IVault.SwapParams({zeroForOne: true, amountSpecified: -1e18, useMirror: false});
+            IVault.SwapParams({zeroForOne: true, amountSpecified: -1e18, useMirror: false, salt: bytes32(0)});
 
         vm.expectRevert(abi.encodeWithSelector(IVault.VaultLocked.selector));
         vault.swap(key, swapParams);
@@ -747,7 +810,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
     function testRevertSwapIfAmountIsZero() public {
         (PoolKey memory key,,) = _setupStandardPool();
         IVault.SwapParams memory swapParams =
-            IVault.SwapParams({zeroForOne: true, amountSpecified: 0, useMirror: false});
+            IVault.SwapParams({zeroForOne: true, amountSpecified: 0, useMirror: false, salt: bytes32(0)});
 
         bytes memory inner_params = abi.encode(key, swapParams);
         bytes memory data = abi.encode(this.swap_callback.selector, inner_params);

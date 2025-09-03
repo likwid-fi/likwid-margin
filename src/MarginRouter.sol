@@ -113,8 +113,12 @@ contract MarginRouter is SafeCallback, Owned {
         bool inputNative = inputCurrency.isAddressZero();
         if (!inputNative && msgValue > 0) transferNative(sender, msgValue);
         if (amountSpecified != 0) {
-            IVault.SwapParams memory swapParams =
-                IVault.SwapParams({zeroForOne: params.zeroForOne, amountSpecified: amountSpecified, useMirror: false});
+            IVault.SwapParams memory swapParams = IVault.SwapParams({
+                zeroForOne: params.zeroForOne,
+                amountSpecified: amountSpecified,
+                useMirror: false,
+                salt: bytes32(0)
+            });
             uint256 amountIn;
             uint256 amountOut;
             (BalanceDelta delta,,) = vault.swap(key, swapParams);

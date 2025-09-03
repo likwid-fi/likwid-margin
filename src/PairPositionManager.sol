@@ -63,24 +63,7 @@ contract PairPositionManager is IPairPositionManager, BasePositionManager {
         nonReentrant
         returns (uint256 tokenId, uint128 liquidity)
     {
-        tokenId = nextId++;
-        _mint(msg.sender, tokenId);
-
-        PoolId poolId = key.toId();
-        poolIds[tokenId] = poolId;
-        if (PoolId.unwrap(poolId) == 0) {
-            revert("Invalid pool");
-        }
-        if (poolKeys[poolId].currency0 == Currency.wrap(address(0))) {
-            poolKeys[poolId] = key;
-        } else {
-            PoolKey memory existingKey = poolKeys[poolId];
-            require(
-                existingKey.currency0 == key.currency0 && existingKey.currency1 == key.currency1
-                    && existingKey.fee == key.fee,
-                "Mismatched pool key"
-            );
-        }
+        tokenId = _mintPosition(key, msg.sender);
 
         IVault.ModifyLiquidityParams memory params = IVault.ModifyLiquidityParams({
             amount0: amount0,
@@ -199,8 +182,12 @@ contract PairPositionManager is IPairPositionManager, BasePositionManager {
     {
         PoolKey memory key = poolKeys[params.poolId];
         int256 amountSpecified = -int256(params.amountIn);
-        IVault.SwapParams memory swapParams =
-            IVault.SwapParams({zeroForOne: params.zeroForOne, amountSpecified: amountSpecified, useMirror: false});
+        IVault.SwapParams memory swapParams = IVault.SwapParams({
+            zeroForOne: params.zeroForOne,
+            amountSpecified: amountSpecified,
+            useMirror: false,
+            salt: bytes32(0)
+        });
         uint256 amount0Min = params.zeroForOne ? 0 : params.amountOutMin;
         uint256 amount1Min = params.zeroForOne ? params.amountOutMin : 0;
         bytes memory callbackData = abi.encode(msg.sender, key, swapParams, amount0Min, amount1Min, 0, 0);
@@ -230,8 +217,12 @@ contract PairPositionManager is IPairPositionManager, BasePositionManager {
     {
         PoolKey memory key = poolKeys[params.poolId];
         int256 amountSpecified = int256(params.amountOut);
-        IVault.SwapParams memory swapParams =
-            IVault.SwapParams({zeroForOne: params.zeroForOne, amountSpecified: amountSpecified, useMirror: false});
+        IVault.SwapParams memory swapParams = IVault.SwapParams({
+            zeroForOne: params.zeroForOne,
+            amountSpecified: amountSpecified,
+            useMirror: false,
+            salt: bytes32(0)
+        });
         uint256 amount0Max = params.zeroForOne ? params.amountInMax : 0;
         uint256 amount1Max = params.zeroForOne ? 0 : params.amountInMax;
         bytes memory callbackData = abi.encode(msg.sender, key, swapParams, 0, 0, amount0Max, amount1Max);
@@ -261,45 +252,5 @@ contract PairPositionManager is IPairPositionManager, BasePositionManager {
             _processDelta(sender, key, delta, amount0Min, amount1Min, amount0Max, amount1Max);
 
         return abi.encode(swapFee, feeAmount, amount0, amount1);
-    }
-
-    function _processDelta(
-        address sender,
-        PoolKey memory key,
-        BalanceDelta delta,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        uint256 amount0Max,
-        uint256 amount1Max
-    ) internal returns (uint256 amount0, uint256 amount1) {
-        if (delta.amount0() < 0) {
-            amount0 = uint256(-int256(delta.amount0()));
-            if ((amount0Min > 0 && amount0 < amount0Min) || (amount0Max > 0 && amount0 > amount0Max)) {
-                PriceSlippageTooHigh.selector.revertWith();
-            }
-            key.currency0.settle(vault, sender, amount0, false);
-        } else {
-            amount0 = uint256(int256(delta.amount0()));
-            if ((amount0Min > 0 && amount0 < amount0Min) || (amount0Max > 0 && amount0 > amount0Max)) {
-                PriceSlippageTooHigh.selector.revertWith();
-            }
-            key.currency0.take(vault, sender, amount0, false);
-        }
-
-        if (delta.amount1() < 0) {
-            amount1 = uint256(-int256(delta.amount1()));
-            if ((amount1Min > 0 && amount1 < amount1Min) || (amount1Max > 0 && amount1 > amount1Max)) {
-                PriceSlippageTooHigh.selector.revertWith();
-            }
-            key.currency1.settle(vault, sender, amount1, false);
-        } else {
-            amount1 = uint256(int256(delta.amount1()));
-            if ((amount1Min > 0 && amount1 < amount1Min) || (amount1Max > 0 && amount1 > amount1Max)) {
-                PriceSlippageTooHigh.selector.revertWith();
-            }
-            key.currency1.take(vault, sender, amount1, false);
-        }
-
-        _clearNative(sender);
     }
 }
