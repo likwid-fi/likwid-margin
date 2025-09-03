@@ -34,7 +34,7 @@ contract PoolTest is Test {
         });
 
         // --- Action ---
-        BalanceDelta delta = pool.modifyLiquidity(params);
+        (BalanceDelta delta,) = pool.modifyLiquidity(params);
 
         // --- Assertions ---
 
@@ -46,7 +46,11 @@ contract PoolTest is Test {
 
         // 2. Check pool state
         uint128 expectedLiquidity = uint128(Math.sqrt(amount0 * amount1));
-        assertEq(uint256(pool.slot0.totalSupply()), uint256(expectedLiquidity), "Total supply should be sqrt(amount0 * amount1)");
+        assertEq(
+            uint256(pool.slot0.totalSupply()),
+            uint256(expectedLiquidity),
+            "Total supply should be sqrt(amount0 * amount1)"
+        );
 
         // 3. Check position state
         PairPosition.State storage position = pool.positions.get(owner, salt);
@@ -58,14 +62,18 @@ contract PoolTest is Test {
         uint256 amount0_add = 1e18;
         uint256 amount1_add = 4e18;
         uint128 initialLiquidity = uint128(Math.sqrt(amount0_add * amount1_add));
-        
+
         pool.slot0 = pool.slot0.setTotalSupply(initialLiquidity);
         pool.pairReserves = toReserves(uint128(amount0_add), uint128(amount1_add));
         pool.realReserves = toReserves(uint128(amount0_add), uint128(amount1_add));
 
         bytes32 salt = keccak256("salt");
         address owner = address(this);
-        PairPosition.update(pool.positions.get(owner, salt), int128(initialLiquidity), toBalanceDelta(-int128(int256(amount0_add)), -int128(int256(amount1_add))));
+        PairPosition.update(
+            pool.positions.get(owner, salt),
+            int128(initialLiquidity),
+            toBalanceDelta(-int128(int256(amount0_add)), -int128(int256(amount1_add)))
+        );
 
         // --- Action: Remove half of the liquidity ---
         int128 liquidityToRemove = -int128(initialLiquidity / 2);
@@ -77,7 +85,7 @@ contract PoolTest is Test {
             salt: salt
         });
 
-        BalanceDelta delta = pool.modifyLiquidity(params);
+        (BalanceDelta delta,) = pool.modifyLiquidity(params);
 
         // --- Assertions ---
 
@@ -96,6 +104,4 @@ contract PoolTest is Test {
         uint128 expectedFinalLiquidity = initialLiquidity - (initialLiquidity / 2);
         assertEq(uint256(position.liquidity), uint256(expectedFinalLiquidity), "Position liquidity should be reduced");
     }
-
-    
 }

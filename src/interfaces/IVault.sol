@@ -124,9 +124,10 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
     /// @param key The pool to modify liquidity in
     /// @param params The parameters for modifying the liquidity
     /// @return callerDelta The balance delta of the caller of modifyLiquidity. This is the total of both principal, fee deltas, and hook deltas if applicable
+    /// @return finalLiquidityDelta The actual change in liquidity of the pool after the modification
     function modifyLiquidity(PoolKey memory key, ModifyLiquidityParams memory params)
         external
-        returns (BalanceDelta callerDelta);
+        returns (BalanceDelta callerDelta, int128 finalLiquidityDelta);
 
     struct SwapParams {
         /// Whether to swap token0 for token1 or vice versa

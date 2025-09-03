@@ -5,12 +5,15 @@ import {PoolId} from "../types/PoolId.sol";
 import {IVault} from "../interfaces/IVault.sol";
 import {Slot0, Slot0Library} from "../types/Slot0.sol";
 import {Reserves, ReservesLibrary} from "../types/Reserves.sol";
+import {PairPosition} from "./PairPosition.sol";
+import {PositionLibrary} from "./PositionLibrary.sol";
 
 /// @title A helper library to provide state getters for a Likwid pool
 /// @notice This library provides functions to read the state of a Likwid pool from storage.
 library StateLibrary {
     using Slot0Library for Slot0;
     using ReservesLibrary for Reserves;
+    using PositionLibrary for address;
 
     /// @notice The storage slot of the `_pools` mapping in the LikwidVault contract.
     bytes32 public constant POOLS_SLOT = bytes32(uint256(7));
@@ -26,6 +29,7 @@ library StateLibrary {
     uint256 internal constant TRUNCATED_RESERVES_OFFSET = 8;
     uint256 internal constant LEND_RESERVES_OFFSET = 9;
     uint256 internal constant INTEREST_RESERVES_OFFSET = 10;
+    uint256 internal constant POSITIONS_OFFSET = 11;
 
     /**
      * @notice Get the unpacked Slot0 of the pool.
@@ -148,6 +152,22 @@ library StateLibrary {
     function getInterestReserves(IVault manager, PoolId poolId) internal view returns (Reserves) {
         bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + INTEREST_RESERVES_OFFSET);
         return Reserves.wrap(uint256(manager.extsload(slot)));
+    }
+
+    function getPairPositionState(IVault manager, PoolId poolId, address owner, bytes32 salt)
+        internal
+        view
+        returns (PairPosition.State memory _position)
+    {
+        bytes32 positionKey = owner.calculatePositionKey(salt);
+
+        bytes32 poolStateSlot = _getPoolStateSlot(poolId);
+        bytes32 positionsMappingSlot = bytes32(uint256(poolStateSlot) + POSITIONS_OFFSET);
+        bytes32 positionSlot = keccak256(abi.encodePacked(positionKey, positionsMappingSlot));
+
+        bytes32[] memory data = manager.extsload(positionSlot, 2);
+        _position.liquidity = uint128(uint256(data[0]));
+        _position.totalInvestment = uint256(data[1]);
     }
 
     /**

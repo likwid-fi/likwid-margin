@@ -124,7 +124,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         external
         onlyWhenUnlocked
         noDelegateCall
-        returns (BalanceDelta callerDelta)
+        returns (BalanceDelta callerDelta, int128 finalLiquidityDelta)
     {
         Pool.State storage pool = _getAndUpdatePool(key);
         pool.checkPoolInitialized();
@@ -132,7 +132,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
 
         uint256 liquidityBefore = pool.slot0.totalSupply();
 
-        callerDelta = pool.modifyLiquidity(
+        (callerDelta, finalLiquidityDelta) = pool.modifyLiquidity(
             Pool.ModifyLiquidityParams({
                 owner: msg.sender,
                 amount0: params.amount0,

@@ -128,10 +128,10 @@ library Pool {
     /// @return delta The change in balances
     function modifyLiquidity(State storage self, ModifyLiquidityParams memory params)
         internal
-        returns (BalanceDelta delta)
+        returns (BalanceDelta delta, int128 finalLiquidityDelta)
     {
         if (params.liquidityDelta == 0 && params.amount0 == 0 && params.amount1 == 0) {
-            return BalanceDelta.wrap(0);
+            return (BalanceDelta.wrap(0), 0);
         }
 
         Slot0 _slot0 = self.slot0;
@@ -139,8 +139,6 @@ library Pool {
 
         (uint128 _reserve0, uint128 _reserve1) = _pairReserves.reserves();
         uint128 totalSupply = _slot0.totalSupply();
-
-        int128 finalLiquidityDelta;
 
         if (params.liquidityDelta < 0) {
             // --- Remove Liquidity ---
@@ -755,6 +753,8 @@ library Pool {
                 _slot0.lastUpdated().getTimeElapsed(),
                 marginState.maxPriceMovePerSecond()
             );
+        } else {
+            self.truncatedReserves = _pairReserves;
         }
 
         self.interestReserves = toReserves(interestReserve0.toUint128(), interestReserve1.toUint128());
