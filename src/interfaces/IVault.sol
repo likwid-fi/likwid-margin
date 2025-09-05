@@ -160,7 +160,7 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
     struct MarginParams {
         /// False if margin token0,true if margin token1
         bool marginForOne;
-        /// The amount to change, negative for margin amount, positive for repay amount, zero if only modifying borrow
+        /// The amount to change, negative for margin amount, positive for repay amount, zero if only modifying margin
         int128 amount;
         // margin
         uint128 marginTotal;
@@ -168,6 +168,7 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
         uint128 borrowAmount;
         // modify
         int128 changeAmount;
+        // check min level
         uint24 minMarginLevel;
         bytes32 salt;
     }

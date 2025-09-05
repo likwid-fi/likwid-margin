@@ -40,13 +40,9 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     error Unauthorized();
 
     mapping(PoolId id => Pool.State) private _pools;
+    mapping(PoolId id => uint256) private lastStageTimestampStore; // Timestamp of the last stage
+    mapping(PoolId id => DoubleEndedQueue.Uint256Deque) private liquidityLockedQueue;
     address public marginController;
-
-    uint32 public stageDuration = 1 hours; // default: 1 hour seconds
-    uint32 public stageSize = 5; // default: 5 stages
-    uint32 public stageLeavePart = 5; // default: 5, meaning 20% of the total liquidity is free
-    mapping(PoolId id => uint256) public lastStageTimestampStore; // Timestamp of the last stage
-    mapping(PoolId id => DoubleEndedQueue.Uint256Deque) liquidityLockedQueue;
 
     /// transient storage
     bool transient unlocked;
@@ -63,18 +59,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         _;
     }
 
-    uint24 private constant MAX_PRICE_MOVE_PER_SECOND = 3000; // 0.3%/second
-    uint24 private constant RATE_BASE = 50000;
-    uint24 private constant USE_MIDDLE_LEVEL = 400000;
-    uint24 private constant USE_HIGH_LEVEL = 800000;
-    uint24 private constant M_LOW = 10;
-    uint24 private constant M_MIDDLE = 100;
-    uint24 private constant M_HIGH = 10000;
-
     constructor(address initialOwner) ProtocolFees(initialOwner) {
-        marginState = marginState.setMaxPriceMovePerSecond(MAX_PRICE_MOVE_PER_SECOND).setRateBase(RATE_BASE)
-            .setUseMiddleLevel(USE_MIDDLE_LEVEL).setUseHighLevel(USE_HIGH_LEVEL).setMLow(M_LOW).setMMiddle(M_MIDDLE)
-            .setMHigh(M_HIGH);
         protocolFeeController = initialOwner;
     }
 
@@ -164,7 +149,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     /// @param id The ID of the pool.
     /// @param liquidityRemoved The amount of liquidity to remove .
     function _handleRemoveLiquidity(PoolId id, uint256 liquidityRemoved) internal {
-        if (stageDuration * stageSize > 0) {
+        if (uint256(marginState.stageDuration()) * marginState.stageSize() > 0) {
             (uint128 releasedLiquidity, uint128 nextReleasedLiquidity) = _getReleasedLiquidity(id);
             uint256 availableLiquidity = releasedLiquidity + nextReleasedLiquidity;
             if (availableLiquidity < liquidityRemoved) {
@@ -194,7 +179,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
                     } else {
                         afterStage = currentStage.sub(liquidityRemoved.toUint128());
                     }
-                    if (!currentStage.isFree(stageLeavePart) || queue.length() == 1) {
+                    if (!currentStage.isFree(marginState.stageLeavePart()) || queue.length() == 1) {
                         // Update lastStageTimestamp
                         lastStageTimestampStore[id] = block.timestamp;
                     }
@@ -507,7 +492,8 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     /// @param id The ID of the pool.
     /// @param amount The amount of liquidity to lock.
     function _lockLiquidity(PoolId id, uint256 amount) internal {
-        if (stageDuration * stageSize == 0) {
+        uint256 stageSize = marginState.stageSize();
+        if (uint256(marginState.stageDuration()) * stageSize == 0) {
             return; // No locking if stageDuration or stageSize is zero
         }
         uint256 lastStageTimestamp = lastStageTimestampStore[id];
@@ -547,7 +533,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         returns (uint128 releasedLiquidity, uint128 nextReleasedLiquidity)
     {
         releasedLiquidity = type(uint128).max;
-        if (stageDuration * stageSize > 0) {
+        if (uint256(marginState.stageDuration()) * marginState.stageSize() > 0) {
             DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
             uint256 lastStageTimestamp = lastStageTimestampStore[id];
             if (!queue.empty()) {
@@ -555,8 +541,8 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
                 uint256 total;
                 (total, releasedLiquidity) = currentStage.decode();
                 if (
-                    queue.length() > 1 && currentStage.isFree(stageLeavePart)
-                        && block.timestamp >= lastStageTimestamp + stageDuration
+                    queue.length() > 1 && currentStage.isFree(marginState.stageLeavePart())
+                        && block.timestamp >= lastStageTimestamp + marginState.stageDuration()
                 ) {
                     uint256 nextStage = queue.at(1);
                     (, nextReleasedLiquidity) = nextStage.decode();
@@ -572,26 +558,5 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     function setMarginController(address controller) external onlyOwner {
         marginController = controller;
         emit MarginControllerUpdated(controller);
-    }
-
-    /// @notice Sets the duration of each liquidity stage.
-    /// @dev Only the owner can call this function.
-    /// @param _stageDuration The new duration for each stage.
-    function setStageDuration(uint32 _stageDuration) external onlyOwner {
-        stageDuration = _stageDuration;
-    }
-
-    /// @notice Sets the number of liquidity stages.
-    /// @dev Only the owner can call this function.
-    /// @param _stageSize The new number of stages.
-    function setStageSize(uint32 _stageSize) external onlyOwner {
-        stageSize = _stageSize;
-    }
-
-    /// @notice Sets the part of liquidity that is free to leave in each stage.
-    /// @dev Only the owner can call this function.
-    /// @param _stageLeavePart The new leave part for each stage.
-    function setStageLeavePart(uint32 _stageLeavePart) external onlyOwner {
-        stageLeavePart = _stageLeavePart;
     }
 }

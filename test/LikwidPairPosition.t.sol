@@ -7,19 +7,19 @@ import {console} from "forge-std/console.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 import {LikwidVault} from "../src/LikwidVault.sol";
-import {PairPositionManager} from "../src/PairPositionManager.sol";
+import {LikwidPairPosition} from "../src/LikwidPairPosition.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
 import {StateLibrary} from "../src/libraries/StateLibrary.sol";
 import {Reserves} from "../src/types/Reserves.sol";
 
-contract PairPositionManagerTest is Test {
+contract LikwidPairPositionTest is Test {
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolKey;
 
     LikwidVault vault;
-    PairPositionManager pairPositionManager;
+    LikwidPairPosition pairPositionManager;
     PoolKey key;
     MockERC20 token0;
     MockERC20 token1;
@@ -31,7 +31,7 @@ contract PairPositionManagerTest is Test {
 
         // Deploy Vault and Position Manager
         vault = new LikwidVault(address(this));
-        pairPositionManager = new PairPositionManager(address(this), vault);
+        pairPositionManager = new LikwidPairPosition(address(this), vault);
 
         // Deploy mock tokens
         address tokenA = address(new MockERC20("TokenA", "TKNA", 18));
@@ -163,7 +163,7 @@ contract PairPositionManagerTest is Test {
         PoolId poolId = key.toId();
         bool zeroForOne = true; // Swapping token0 for token1
 
-        PairPositionManager.SwapInputParams memory params = PairPositionManager.SwapInputParams({
+        LikwidPairPosition.SwapInputParams memory params = LikwidPairPosition.SwapInputParams({
             poolId: poolId,
             zeroForOne: zeroForOne,
             to: address(this),
@@ -202,7 +202,7 @@ contract PairPositionManagerTest is Test {
         PoolId poolId = key.toId();
         bool zeroForOne = true; // Swapping token0 for token1
 
-        PairPositionManager.SwapOutputParams memory params = PairPositionManager.SwapOutputParams({
+        LikwidPairPosition.SwapOutputParams memory params = LikwidPairPosition.SwapOutputParams({
             poolId: poolId,
             zeroForOne: zeroForOne,
             to: address(this),

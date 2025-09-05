@@ -19,7 +19,7 @@ import {CustomRevert} from "./libraries/CustomRevert.sol";
 import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
 
-contract LendPositionManager is ILendPositionManager, BasePositionManager {
+contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
     using CurrencyPoolLibrary for Currency;
     using CustomRevert for bytes4;
     using SafeCast for *;

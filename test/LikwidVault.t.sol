@@ -13,6 +13,7 @@ import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
 import {Pool} from "../src/libraries/Pool.sol";
 import {BalanceDelta, toBalanceDelta} from "../src/types/BalanceDelta.sol";
+import {MarginState} from "../src/types/MarginState.sol";
 import {Reserves} from "../src/types/Reserves.sol";
 import {StateLibrary} from "../src/libraries/StateLibrary.sol";
 import {SwapMath} from "../src/libraries/SwapMath.sol";
@@ -973,8 +974,10 @@ contract LikwidVaultTest is Test, IUnlockCallback {
 
     function testRevertRemoveLiquidityIfLocked() public {
         // 1. Setup
-        vault.setStageDuration(1 hours);
-        vault.setStageSize(5);
+        MarginState _state = vault.marginState();
+        _state.setStageDuration(1 hours);
+        _state.setStageSize(5);
+        vault.setMarginState(_state);
         (PoolKey memory key,,) = _setupStandardPool();
 
         // From PoolTest, we know initial liquidity is sqrt(amount0 * amount1)

@@ -15,6 +15,9 @@ library MarginStateLibrary {
     uint8 internal constant M_MIDDLE_OFFSET = 96;
     uint8 internal constant M_HIGH_OFFSET = 120;
     uint8 internal constant MAX_PRICE_MOVE_PER_SECOND_OFFSET = 144;
+    uint8 internal constant STAGE_DURATION = 168;
+    uint8 internal constant STAGE_SIZE = 192;
+    uint8 internal constant STAGE_LEAVE_PART = 216;
 
     // #### GETTERS ####
     function rateBase(MarginState _packed) internal pure returns (uint24 _rateBase) {
@@ -56,6 +59,24 @@ library MarginStateLibrary {
     function maxPriceMovePerSecond(MarginState _packed) internal pure returns (uint24 _maxPriceMovePerSecond) {
         assembly ("memory-safe") {
             _maxPriceMovePerSecond := and(MASK_24_BITS, shr(MAX_PRICE_MOVE_PER_SECOND_OFFSET, _packed))
+        }
+    }
+
+    function stageDuration(MarginState _packed) internal pure returns (uint24 _stageDuration) {
+        assembly ("memory-safe") {
+            _stageDuration := and(MASK_24_BITS, shr(STAGE_DURATION, _packed))
+        }
+    }
+
+    function stageSize(MarginState _packed) internal pure returns (uint24 _stageSize) {
+        assembly ("memory-safe") {
+            _stageSize := and(MASK_24_BITS, shr(STAGE_SIZE, _packed))
+        }
+    }
+
+    function stageLeavePart(MarginState _packed) internal pure returns (uint24 _stageLeavePart) {
+        assembly ("memory-safe") {
+            _stageLeavePart := and(MASK_24_BITS, shr(STAGE_LEAVE_PART, _packed))
         }
     }
 
@@ -121,6 +142,37 @@ library MarginStateLibrary {
                 or(
                     and(not(shl(MAX_PRICE_MOVE_PER_SECOND_OFFSET, MASK_24_BITS)), _packed),
                     shl(MAX_PRICE_MOVE_PER_SECOND_OFFSET, and(MASK_24_BITS, _maxPriceMovePerSecond))
+                )
+        }
+    }
+
+    function setStageDuration(MarginState _packed, uint24 _stageDuration) internal pure returns (MarginState _result) {
+        assembly ("memory-safe") {
+            _result :=
+                or(
+                    and(not(shl(STAGE_DURATION, MASK_24_BITS)), _packed),
+                    shl(STAGE_DURATION, and(MASK_24_BITS, _stageDuration))
+                )
+        }
+    }
+
+    function setStageSize(MarginState _packed, uint24 _stageSize) internal pure returns (MarginState _result) {
+        assembly ("memory-safe") {
+            _result :=
+                or(and(not(shl(STAGE_SIZE, MASK_24_BITS)), _packed), shl(STAGE_SIZE, and(MASK_24_BITS, _stageSize)))
+        }
+    }
+
+    function setStageLeavePart(MarginState _packed, uint24 _stageLeavePart)
+        internal
+        pure
+        returns (MarginState _result)
+    {
+        assembly ("memory-safe") {
+            _result :=
+                or(
+                    and(not(shl(STAGE_SIZE, STAGE_LEAVE_PART)), _packed),
+                    shl(STAGE_LEAVE_PART, and(MASK_24_BITS, _stageLeavePart))
                 )
         }
     }

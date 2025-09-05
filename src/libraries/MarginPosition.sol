@@ -143,8 +143,13 @@ library MarginPosition {
             marginTotal += marginWithoutFee;
             debtAmount += borrowAmount;
         } else if (amount > 0) {
-            releaseAmount = Math.mulDiv(positionValue, uint128(amount), debtAmount);
-            debtAmount -= uint128(amount);
+            if (changeAmount > 0) {
+                releaseAmount = Math.mulDiv(positionValue, uint128(changeAmount), debtAmount);
+                debtAmount -= uint128(changeAmount);
+            } else {
+                releaseAmount = Math.mulDiv(positionValue, uint128(amount), debtAmount);
+                debtAmount -= uint128(amount);
+            }
             if (marginTotal > 0) {
                 uint256 marginAmountReleased = Math.mulDiv(releaseAmount, marginAmount, positionValue);
                 marginAmount = marginAmount - marginAmountReleased;

@@ -17,7 +17,7 @@ import {Pool} from "./libraries/Pool.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
 import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 
-contract PairPositionManager is IPairPositionManager, BasePositionManager {
+contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
     using CurrencyPoolLibrary for Currency;
     using CustomRevert for bytes4;
 
