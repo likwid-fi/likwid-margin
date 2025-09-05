@@ -252,22 +252,20 @@ library Pool {
             deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, swapDelta);
             deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, swapDelta);
         } else {
-            deltaParams = new ReservesLibrary.UpdateParam[](4);
+            deltaParams = new ReservesLibrary.UpdateParam[](3);
             BalanceDelta realDelta;
-            BalanceDelta mirrorDelta;
+            BalanceDelta lendDelta;
             if (params.zeroForOne) {
                 realDelta = toBalanceDelta(amount0Delta, 0);
-                mirrorDelta = toBalanceDelta(0, amount1Delta);
+                lendDelta = toBalanceDelta(0, -amount1Delta);
             } else {
                 realDelta = toBalanceDelta(0, amount1Delta);
-                mirrorDelta = toBalanceDelta(amount0Delta, 0);
+                lendDelta = toBalanceDelta(-amount0Delta, 0);
             }
-            BalanceDelta lendDelta = toBalanceDelta(0, 0) - mirrorDelta;
             deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, realDelta);
-            // MIRROR=>LEND
-            deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.MIRROR, mirrorDelta);
-            deltaParams[2] = ReservesLibrary.UpdateParam(ReservesType.LEND, lendDelta);
-            deltaParams[3] = ReservesLibrary.UpdateParam(ReservesType.PAIR, swapDelta);
+            // pair MIRROR<=>lend MIRROR
+            deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.LEND, lendDelta);
+            deltaParams[2] = ReservesLibrary.UpdateParam(ReservesType.PAIR, swapDelta);
             uint256 depositCumulativeLast;
             if (params.zeroForOne) {
                 depositCumulativeLast = self.deposit1CumulativeLast;
@@ -323,12 +321,15 @@ library Pool {
         address sender;
         /// False if margin token0,true if margin token1
         bool marginForOne;
-        /// The amount to change, negative for margin amount, positive for repay amount
+        /// The amount to change, negative for margin amount, positive for repay amount,zero for modify
         int128 amount;
         // margin
         uint128 marginTotal;
         // borrow
         uint128 borrowAmount;
+        // modify
+        int128 changeAmount;
+        uint24 minMarginLevel;
         bytes32 salt;
     }
 
@@ -336,14 +337,18 @@ library Pool {
     /// @param self The pool state.
     /// @param params The parameters for the margin operation.
     /// @return marginDelta The change in the user's balance.
+    /// @return assetAmount The amount of asset involved in the margin operation.
     /// @return amountToProtocol The amount of fees to be sent to the protocol.
     /// @return feeAmount The total fee amount for the margin operation.
     function margin(State storage self, MarginParams memory params)
         internal
-        returns (BalanceDelta marginDelta, uint256 amountToProtocol, uint256 feeAmount)
+        returns (BalanceDelta marginDelta, uint256 assetAmount, uint256 amountToProtocol, uint256 feeAmount)
     {
-        if (params.amount == 0) {
-            return (BalanceDelta.wrap(0), 0, 0);
+        if (params.amount == 0 && params.changeAmount == 0) {
+            return (BalanceDelta.wrap(0), 0, 0, 0);
+        }
+        if (params.minMarginLevel < PerLibrary.ONE_MILLION) {
+            params.minMarginLevel = uint24(PerLibrary.ONE_MILLION);
         }
 
         uint256 marginWithoutFee;
@@ -396,14 +401,6 @@ library Pool {
                     _pairReserves, _truncatedReserves, _slot0.lpFee(), !params.marginForOne, params.marginTotal
                 );
                 params.borrowAmount = borrowAmount.toUint128();
-
-                (uint128 reserve0, uint128 reserve1) = _pairReserves.reserves();
-                (uint256 reserveBorrow, uint256 reserveMargin) =
-                    params.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
-
-                uint256 positionValue = Math.mulDiv(reserveBorrow, marginAmount + params.marginTotal, reserveMargin);
-                uint256 marginLevel = Math.mulDiv(positionValue, PerLibrary.ONE_MILLION, borrowAmount);
-                if (marginLevel < PerLibrary.ONE_MILLION) MarginLevelError.selector.revertWith();
             } else {
                 // --- Borrow ---
                 uint256 borrowMAXAmount = _pairReserves.getAmountOut(!params.marginForOne, marginAmount);
@@ -414,28 +411,39 @@ library Pool {
             }
 
             int128 lendAmount = params.amount - marginWithoutFee.toInt128();
-            if (params.marginForOne) {
-                amount1Delta = params.amount;
-                pairDelta = toBalanceDelta(-borrowAmount.toInt128(), marginWithoutFee.toInt128());
-                lendDelta = toBalanceDelta(0, lendAmount);
-                mirrorDelta = toBalanceDelta(-borrowAmount.toInt128(), 0);
-            } else {
-                amount0Delta = params.amount;
-                pairDelta = toBalanceDelta(marginWithoutFee.toInt128(), -borrowAmount.toInt128());
-                lendDelta = toBalanceDelta(lendAmount, 0);
-                mirrorDelta = toBalanceDelta(0, -borrowAmount.toInt128());
-            }
 
             if (params.marginTotal == 0) {
+                // borrow
                 if (params.marginForOne) {
-                    // Borrowed token0
+                    // margin token1, borrow token0
+                    amount1Delta = params.amount;
                     amount0Delta = borrowAmount.toInt128();
+                    // pairDelta = 0
+                    lendDelta = toBalanceDelta(0, lendAmount);
+                    mirrorDelta = toBalanceDelta(-borrowAmount.toInt128(), 0);
                 } else {
-                    // Borrowed token1
+                    // margin token0, borrow token1
+                    amount0Delta = params.amount;
                     amount1Delta = borrowAmount.toInt128();
+                    // pairDelta = 0
+                    lendDelta = toBalanceDelta(lendAmount, 0);
+                    mirrorDelta = toBalanceDelta(0, -borrowAmount.toInt128());
                 }
+            } else {
+                if (params.marginForOne) {
+                    amount1Delta = params.amount;
+                    pairDelta = toBalanceDelta(-borrowAmount.toInt128(), marginWithoutFee.toInt128());
+                    lendDelta = toBalanceDelta(0, lendAmount);
+                    mirrorDelta = toBalanceDelta(-borrowAmount.toInt128(), 0);
+                } else {
+                    amount0Delta = params.amount;
+                    pairDelta = toBalanceDelta(marginWithoutFee.toInt128(), -borrowAmount.toInt128());
+                    lendDelta = toBalanceDelta(lendAmount, 0);
+                    mirrorDelta = toBalanceDelta(0, -borrowAmount.toInt128());
+                }
+                assetAmount = borrowAmount;
             }
-        } else {
+        } else if (params.amount > 0) {
             // --- Repay Debt ---
             uint128 repayAmount = uint128(params.amount);
             if (params.marginForOne) {
@@ -445,16 +453,37 @@ library Pool {
                 amount1Delta = -params.amount;
                 mirrorDelta = toBalanceDelta(0, repayAmount.toInt128());
             }
+        } else {
+            // --- Modify Margin ---
+            int128 changeAmount = params.changeAmount;
+            if (changeAmount == 0) {
+                return (BalanceDelta.wrap(0), 0, 0, 0);
+            }
+            if (params.marginForOne) {
+                amount1Delta = -changeAmount;
+                lendDelta = toBalanceDelta(0, amount1Delta);
+            } else {
+                amount0Delta = -changeAmount;
+                lendDelta = toBalanceDelta(amount0Delta, 0);
+            }
         }
 
-        uint256 releaseAmount = self.marginPositions.get(params.sender, params.marginForOne, params.salt).update(
+        MarginPosition.State storage position =
+            self.marginPositions.get(params.sender, params.marginForOne, params.salt);
+
+        uint256 releaseAmount = position.update(
             params.marginForOne,
             borrowCumulativeLast,
             depositCumulativeLast,
             params.amount,
             marginWithoutFee,
-            params.borrowAmount
+            params.borrowAmount,
+            params.changeAmount
         );
+
+        if (position.marginLevel(_pairReserves, borrowCumulativeLast, depositCumulativeLast) < params.minMarginLevel) {
+            MarginLevelError.selector.revertWith();
+        }
 
         if (releaseAmount > 0) {
             // transfer from pair reserves to user
@@ -465,8 +494,10 @@ library Pool {
                 amount0Delta = releaseAmount.toInt128();
                 lendDelta = toBalanceDelta(amount0Delta, 0);
             }
+            assetAmount = releaseAmount;
         }
-
+        console.log("amount0Delta", amount0Delta);
+        console.log("amount1Delta", amount1Delta);
         marginDelta = toBalanceDelta(amount0Delta, amount1Delta);
         ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](4);
         deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, marginDelta);
@@ -573,9 +604,16 @@ library Pool {
     /// @param self The pool state.
     /// @param params The parameters for closing the position.
     /// @return closeDelta The change in the user's balance.
-    function close(State storage self, CloseParams memory params) internal returns (BalanceDelta closeDelta) {
+    /// @return profitAmount The profit from closing the position.
+    function close(State storage self, CloseParams memory params)
+        internal
+        returns (BalanceDelta closeDelta, uint256 profitAmount)
+    {
+        uint256 releaseAmount;
+        uint256 repayAmount;
+        uint256 lossAmount;
         MarginPosition.State storage position = self.marginPositions.get(params.sender, params.positionKey, params.salt);
-        (uint256 releaseAmount, uint256 repayAmount, uint256 profitAmount, uint256 lossAmount) = position.close(
+        (releaseAmount, repayAmount, profitAmount, lossAmount) = position.close(
             self.pairReserves,
             position.marginForOne ? self.borrow0CumulativeLast : self.borrow1CumulativeLast,
             position.marginForOne ? self.deposit1CumulativeLast : self.deposit0CumulativeLast,

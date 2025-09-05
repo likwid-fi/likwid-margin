@@ -7,7 +7,6 @@ import {console} from "forge-std/console.sol";
 import {Currency, CurrencyLibrary} from "./types/Currency.sol";
 import {PoolKey} from "./types/PoolKey.sol";
 import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "./types/BalanceDelta.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "./types/BeforeSwapDelta.sol";
 import {PoolId} from "./types/PoolId.sol";
 import {FeeType} from "./types/FeeType.sol";
 import {IVault} from "./interfaces/IVault.sol";
@@ -35,7 +34,6 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     using StageMath for uint256;
     using CurrencyGuard for Currency;
     using BalanceDeltaLibrary for BalanceDelta;
-    using BeforeSwapDeltaLibrary for BeforeSwapDelta;
     using Pool for Pool.State;
 
     error LiquidityLocked();
@@ -288,32 +286,29 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         emit Lend(id, msg.sender, params.lendForOne, params.lendAmount, depositCumulativeLast, params.salt);
     }
 
-    /// @notice Opens a margin position.
-    /// @dev Allows a user to open a margin position, borrowing tokens to leverage their position.
-    /// @param key The key of the pool to open the margin position in.
-    /// @param params The parameters for the margin position, including the amount and leverage.
-    /// @return marginDelta The change in the user's balance.
-    /// @return feeAmount The fee charged for opening the margin position.
+    /// @inheritdoc IVault
     function margin(PoolKey memory key, IVault.MarginParams memory params)
         external
         onlyWhenUnlocked
         noDelegateCall
         onlyManager
-        returns (BalanceDelta marginDelta, uint256 feeAmount)
+        returns (BalanceDelta marginDelta, uint256 assetAmount, uint256 feeAmount)
     {
-        if (params.amount == 0) AmountCannotBeZero.selector.revertWith();
+        if (params.amount == 0 && params.changeAmount == 0) AmountCannotBeZero.selector.revertWith();
 
         PoolId id = key.toId();
         Pool.State storage pool = _getAndUpdatePool(key);
         pool.checkPoolInitialized();
         uint256 amountToProtocol;
-        (marginDelta, amountToProtocol, feeAmount) = pool.margin(
+        (marginDelta, assetAmount, amountToProtocol, feeAmount) = pool.margin(
             Pool.MarginParams({
                 sender: msg.sender,
                 marginForOne: params.marginForOne,
                 amount: params.amount,
                 marginTotal: params.marginTotal,
                 borrowAmount: params.borrowAmount,
+                changeAmount: params.changeAmount,
+                minMarginLevel: params.minMarginLevel,
                 salt: params.salt
             })
         );
@@ -333,23 +328,19 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         );
     }
 
-    /// @notice Closes a margin position.
-    /// @dev Allows a user to close an existing margin position.
-    /// @param key The key of the pool where the position is held.
-    /// @param params The parameters for closing the position.
-    /// @return closeDelta The change in the user's balance.
+    /// @inheritdoc IVault
     function close(PoolKey memory key, IVault.CloseParams memory params)
         external
         onlyWhenUnlocked
         noDelegateCall
-        returns (BalanceDelta closeDelta)
+        returns (BalanceDelta closeDelta, uint256 profitAmount)
     {
         if (params.closeMillionth == 0) AmountCannotBeZero.selector.revertWith();
 
         PoolId id = key.toId();
         Pool.State storage pool = _getAndUpdatePool(key);
         pool.checkPoolInitialized();
-        closeDelta = pool.close(
+        (closeDelta, profitAmount) = pool.close(
             Pool.CloseParams({
                 sender: msg.sender,
                 positionKey: params.positionKey,

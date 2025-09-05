@@ -160,18 +160,28 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
     struct MarginParams {
         /// False if margin token0,true if margin token1
         bool marginForOne;
-        /// The amount to change, negative for margin amount, positive for repay amount
+        /// The amount to change, negative for margin amount, positive for repay amount, zero if only modifying borrow
         int128 amount;
         // margin
         uint128 marginTotal;
         // borrow
         uint128 borrowAmount;
+        // modify
+        int128 changeAmount;
+        uint24 minMarginLevel;
         bytes32 salt;
     }
 
+    /// @notice Opens a margin position.
+    /// @dev Allows a user to open a margin position, borrowing tokens to leverage their position.
+    /// @param key The key of the pool to open the margin position in.
+    /// @param params The parameters for the margin position, including the amount and leverage.
+    /// @return marginDelta The change in the user's balance.
+    /// @return assetAmount The amount of asset involved in the margin operation.
+    /// @return feeAmount The fee charged for opening the margin position.
     function margin(PoolKey memory key, MarginParams memory params)
         external
-        returns (BalanceDelta marginDelta, uint256 feeAmount);
+        returns (BalanceDelta marginDelta, uint256 assetAmount, uint256 feeAmount);
 
     struct CloseParams {
         bytes32 positionKey;
@@ -179,6 +189,16 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
         uint256 rewardAmount;
         uint24 closeMillionth;
     }
+
+    /// @notice Closes a margin position.
+    /// @dev Allows a user to close an existing margin position.
+    /// @param key The key of the pool where the position is held.
+    /// @param params The parameters for closing the position.
+    /// @return closeDelta The change in the user's balance.
+    /// @return profitAmount The profit from closing the position.
+    function close(PoolKey memory key, IVault.CloseParams memory params)
+        external
+        returns (BalanceDelta closeDelta, uint256 profitAmount);
 
     /// @notice Writes the current ERC20 balance of the specified currency to transient storage
     /// This is used to checkpoint balances for the manager and derive deltas for the caller.

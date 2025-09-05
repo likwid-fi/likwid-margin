@@ -120,7 +120,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             (PoolKey memory key, IVault.MarginParams memory marginParams) =
                 abi.decode(params, (PoolKey, IVault.MarginParams));
 
-            (BalanceDelta delta,) = vault.margin(key, marginParams);
+            (BalanceDelta delta,,) = vault.margin(key, marginParams);
 
             // Settle the balances
             if (delta.amount0() < 0) {
@@ -142,7 +142,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             (PoolKey memory key, IVault.CloseParams memory closeParams) =
                 abi.decode(params, (PoolKey, IVault.CloseParams));
 
-            BalanceDelta delta = vault.close(key, closeParams);
+            (BalanceDelta delta,) = vault.close(key, closeParams);
 
             // Settle the balances
             // When closing a position, the delta represents the profit returned to the user.
@@ -180,6 +180,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         bytes memory inner_params_liq = abi.encode(key, mlParams);
         bytes memory data_liq = abi.encode(this.modifyLiquidity_callback.selector, inner_params_liq);
         vault.unlock(data_liq);
+        _checkPoolReserves(key);
     }
 
     function _setupStandardPool()
@@ -194,6 +195,20 @@ contract LikwidVaultTest is Test, IUnlockCallback {
 
         // Add liquidity
         _addLiquidity(key, initialLiquidity0, initialLiquidity1);
+    }
+
+    function _checkPoolReserves(PoolKey memory key) internal view {
+        PoolId poolId = key.toId();
+        Reserves realReserves = StateLibrary.getRealReserves(vault, poolId);
+        Reserves mirrorReserves = StateLibrary.getMirrorReserves(vault, poolId);
+        Reserves pairReserves = StateLibrary.getPairReserves(vault, poolId);
+        Reserves lendReserves = StateLibrary.getLendReserves(vault, poolId);
+        (uint128 realReserve0, uint128 realReserve1) = realReserves.reserves();
+        (uint128 mirrorReserve0, uint128 mirrorReserve1) = mirrorReserves.reserves();
+        (uint128 pairReserve0, uint128 pairReserve1) = pairReserves.reserves();
+        (uint128 lendReserve0, uint128 lendReserve1) = lendReserves.reserves();
+        assertEq(realReserve0 + mirrorReserve0, pairReserve0 + lendReserve0, "reserve0 should equal pair + lend");
+        assertEq(realReserve1 + mirrorReserve1, pairReserve1 + lendReserve1, "reserve1 should equal pair + lend");
     }
 
     function testUnlockReverts() public {
@@ -215,6 +230,8 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             amount: -int128(collateralValue),
             marginTotal: collateralValue,
             borrowAmount: 0, // let the contract calculate
+            changeAmount: 0,
+            minMarginLevel: 0,
             salt: bytes32(0)
         });
 
@@ -250,6 +267,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         uint256 finalReserve0 = finalRealReserves.reserve0();
 
         assertTrue(finalReserve0 > initialReserve0, "Real reserve of borrowed currency should increase due to interest");
+        _checkPoolReserves(key);
     }
 
     function testSwapExactInputToken0ForToken1() public {
@@ -292,6 +310,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         // Protocol fee is 0 by default
         assertEq(vault.protocolFeesAccrued(currency0), 0, "Protocol fee for token0 should be 0");
         assertEq(vault.protocolFeesAccrued(currency1), 0, "Protocol fee for token1 should be 0");
+        _checkPoolReserves(key);
     }
 
     function testSwapExactOutputToken1ForToken0() public {
@@ -330,6 +349,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         assertEq(token0.balanceOf(address(this)), amountToReceive, "User token0 balance should be amount received");
         assertEq(token1.balanceOf(address(vault)), initialLiquidity1 + expectedAmountIn, "Vault token1 balance");
         assertEq(token0.balanceOf(address(vault)), initialLiquidity0 - amountToReceive, "Vault token0 balance");
+        _checkPoolReserves(key);
     }
 
     function testSwapWithProtocolFee() public {
@@ -401,6 +421,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         assertEq(token1.balanceOf(address(this)), 0, "User token1 balance should be 0");
         assertEq(token0.balanceOf(address(vault)), amount0ToAdd, "Vault token0 balance should be amount added");
         assertEq(token1.balanceOf(address(vault)), amount1ToAdd, "Vault token1 balance should be amount added");
+        _checkPoolReserves(key);
     }
 
     function testInitializeRevertsIfCurrenciesOutOfOrder() public {
@@ -460,6 +481,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         assertEq(
             token0.balanceOf(address(vault)), initialLiquidity0 + uint256(int256(-amountToLend)), "Vault token0 balance"
         );
+        _checkPoolReserves(key);
     }
 
     function testLendingWithdraw() public {
@@ -509,6 +531,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             initialLiquidity0 + uint256(int256(-amountToDeposit)) - uint256(int256(amountToWithdraw)),
             "Vault token0 balance after withdraw"
         );
+        _checkPoolReserves(key);
     }
 
     function testMarginOneLeverage() public {
@@ -527,6 +550,8 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             amount: -int128(collateralValue),
             marginTotal: collateralValue, // Borrow 1e18 worth of token0
             borrowAmount: 0, // let the contract calculate
+            changeAmount: 0,
+            minMarginLevel: 0,
             salt: bytes32(0)
         });
 
@@ -543,6 +568,54 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             initialLiquidity1 + collateralValue,
             "Vault should have received collateral"
         );
+        _checkPoolReserves(key);
+    }
+
+    function testMarginModify() public {
+        // 1. Setup
+        (PoolKey memory key,,) = _setupStandardPool();
+
+        // User provides collateral
+        uint128 collateralValue = 1e18; // 1 token1
+        token1.mint(address(this), collateralValue);
+
+        // 2. Action
+        // We want 2x leverage. We provide 1 token of collateral, and borrow 1 token's worth of the other asset.
+        // So, marginTotal is equal to the collateral value.
+        IVault.MarginParams memory marginParams = IVault.MarginParams({
+            marginForOne: true, // collateral is token1, borrow token0
+            amount: -int128(collateralValue),
+            marginTotal: collateralValue, // Borrow 1e18 worth of token0
+            borrowAmount: 0, // let the contract calculate
+            changeAmount: 0,
+            minMarginLevel: 0,
+            salt: bytes32(0)
+        });
+
+        bytes memory inner_params_margin = abi.encode(key, marginParams);
+        bytes memory data_margin = abi.encode(this.margin_callback.selector, inner_params_margin);
+
+        vault.unlock(data_margin);
+
+        assertEq(token1.balanceOf(address(this)), 0, "User should have transferred all collateral");
+
+        marginParams = IVault.MarginParams({
+            marginForOne: true, // collateral is token1, borrow token0
+            amount: 0,
+            marginTotal: 0, // Borrow 1e18 worth of token0
+            borrowAmount: 0, // let the contract calculate
+            changeAmount: -int128(collateralValue / 10), // Withdraw 0.1 token1
+            minMarginLevel: 0,
+            salt: bytes32(0)
+        });
+        inner_params_margin = abi.encode(key, marginParams);
+        data_margin = abi.encode(this.margin_callback.selector, inner_params_margin);
+        vault.unlock(data_margin);
+
+        assertEq(token0.balanceOf(address(this)), 0, "User should have zero token0");
+        assertEq(token1.balanceOf(address(this)), collateralValue / 10, "User should have withdrawn some collateral");
+
+        _checkPoolReserves(key);
     }
 
     function testBorrowSimple() public {
@@ -561,6 +634,8 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             amount: -int128(collateralValue),
             marginTotal: 0, // This makes it a borrow, not a margin trade
             borrowAmount: amountToBorrow,
+            changeAmount: 0,
+            minMarginLevel: 0,
             salt: bytes32(0)
         });
 
@@ -582,6 +657,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             initialLiquidity0 - amountToBorrow,
             "Vault should have sent borrowed token0"
         );
+        _checkPoolReserves(key);
     }
 
     function testMarginRepay() public {
@@ -598,6 +674,8 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             amount: -int128(collateralValue),
             marginTotal: collateralValue,
             borrowAmount: 0, // let the contract calculate
+            changeAmount: 0,
+            minMarginLevel: 0,
             salt: bytes32(0)
         });
 
@@ -618,6 +696,8 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             amount: int128(amountToRepay), // Positive amount for repay
             marginTotal: collateralValue, // Must match the original margin position
             borrowAmount: 0, // Not used in repay
+            changeAmount: 0, // Not used in repay
+            minMarginLevel: 0,
             salt: bytes32(0) // Must match the original salt
         });
 
@@ -637,6 +717,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             "Vault token0 balance should increase"
         );
         assertTrue(token1.balanceOf(address(vault)) < vaultBalance1AfterMargin, "Vault token1 balance should decrease");
+        _checkPoolReserves(key);
     }
 
     function testMarginAndClose() public {
@@ -654,6 +735,8 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             amount: -int128(collateralValue),
             marginTotal: collateralValue, // Borrow 1e18 worth of token0
             borrowAmount: 0, // let the contract calculate
+            changeAmount: 0,
+            minMarginLevel: 0,
             salt: testSalt
         });
 
@@ -684,6 +767,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         assertTrue(
             finalBalance < collateralValue, "User should receive slightly less than initial collateral due to fees"
         );
+        _checkPoolReserves(key);
     }
 
     function testSwapExactInputToken0ForMirrorToken1() public {
@@ -703,6 +787,8 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             amount: -int128(collateralValue),
             marginTotal: collateralValue, // Borrow 1e18 worth of token1
             borrowAmount: 0, // let the contract calculate
+            changeAmount: 0,
+            minMarginLevel: 0,
             salt: bytes32(0)
         });
 
@@ -732,6 +818,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
 
         assertEq(token0.balanceOf(address(this)), 0, "User token0 balance should be 0");
         assertEq(token1.balanceOf(address(this)), 0, "User token1 balance should be 0");
+        _checkPoolReserves(key);
     }
 
     // =============================================================
@@ -791,6 +878,8 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             amount: -1e18,
             marginTotal: 1e18,
             borrowAmount: 0,
+            changeAmount: 0,
+            minMarginLevel: 0,
             salt: bytes32(0)
         });
 
@@ -832,8 +921,15 @@ contract LikwidVaultTest is Test, IUnlockCallback {
 
     function testRevertMarginIfAmountIsZero() public {
         (PoolKey memory key,,) = _setupStandardPool();
-        IVault.MarginParams memory marginParams =
-            IVault.MarginParams({marginForOne: true, amount: 0, marginTotal: 1e18, borrowAmount: 0, salt: bytes32(0)});
+        IVault.MarginParams memory marginParams = IVault.MarginParams({
+            marginForOne: true,
+            amount: 0,
+            marginTotal: 1e18,
+            borrowAmount: 0,
+            changeAmount: 0,
+            minMarginLevel: 0,
+            salt: bytes32(0)
+        });
 
         bytes memory inner_params = abi.encode(key, marginParams);
         bytes memory data = abi.encode(this.margin_callback.selector, inner_params);
@@ -863,6 +959,8 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             amount: -1e18,
             marginTotal: 1e18,
             borrowAmount: 0,
+            changeAmount: 0,
+            minMarginLevel: 0,
             salt: bytes32(0)
         });
 

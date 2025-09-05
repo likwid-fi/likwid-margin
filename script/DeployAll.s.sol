@@ -2,31 +2,14 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Script.sol";
-import {IVault} from "../src/interfaces/IVault.sol";
-import {HookMiner} from "../test/utils/HookMiner.sol";
-import {PairPoolManager} from "../src/PairPoolManager.sol";
-import {MirrorTokenManager} from "../src/MirrorTokenManager.sol";
-import {LendingPoolManager} from "../src/LendingPoolManager.sol";
-import {MarginLiquidity} from "../src/MarginLiquidity.sol";
-import {MarginChecker} from "../src/MarginChecker.sol";
-import {MarginFees} from "../src/MarginFees.sol";
-import {MarginPositionManager} from "../src/MarginPositionManager.sol";
-import {MarginRouter} from "../src/MarginRouter.sol";
-import {PoolStatusManager} from "../src/PoolStatusManager.sol";
+import {LikwidVault} from "../src/LikwidVault.sol";
 
 contract DeployAllScript is Script {
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
 
-    MirrorTokenManager mirrorTokenManager;
-    LendingPoolManager lendingPoolManager;
-    MarginLiquidity marginLiquidity;
-    MarginChecker marginChecker;
-    MarginFees marginFees;
-    PairPoolManager pairPoolManager;
-    MarginPositionManager marginPositionManager;
-    PoolStatusManager poolStatusManager;
-
     error ManagerNotExist();
+
+    LikwidVault vault;
 
     function setUp() public {}
 
@@ -46,56 +29,10 @@ contract DeployAllScript is Script {
         }
     }
 
-    function run(uint256 chainId) public {
+    function run() public {
         vm.startBroadcast();
-        console.log(chainId);
-        address manager = _getManager(chainId);
-        if (manager == address(0)) {
-            revert ManagerNotExist();
-        }
-        console2.log("poolManager:", manager);
-        address owner = msg.sender;
-        console2.log("owner:", owner);
-
-        mirrorTokenManager = new MirrorTokenManager(owner);
-        console2.log("mirrorTokenManager:", address(mirrorTokenManager));
-
-        marginLiquidity = new MarginLiquidity(owner);
-        console2.log("marginLiquidity:", address(marginLiquidity));
-
-        marginChecker = new MarginChecker(owner);
-        console2.log("marginChecker:", address(marginChecker));
-
-        marginFees = new MarginFees(owner);
-        console2.log("marginFees:", address(marginFees));
-
-        lendingPoolManager = new LendingPoolManager(owner, IVault(manager), mirrorTokenManager);
-        console2.log("lendingPoolManager:", address(lendingPoolManager));
-
-        pairPoolManager =
-            new PairPoolManager(owner, IVault(manager), mirrorTokenManager, lendingPoolManager, marginLiquidity);
-        console2.log("pairPoolManager:", address(pairPoolManager));
-
-        marginPositionManager = new MarginPositionManager(owner, pairPoolManager, marginChecker);
-        console2.log("marginPositionManager:", address(marginPositionManager));
-
-        poolStatusManager = new PoolStatusManager(
-            owner, IVault(manager), mirrorTokenManager, lendingPoolManager, marginLiquidity, pairPoolManager, marginFees
-        );
-        console2.log("poolStatusManager:", address(poolStatusManager));
-
-        MarginRouter swapRouter = new MarginRouter(owner, IVault(manager), pairPoolManager);
-        console2.log("swapRouter:", address(swapRouter));
-
-        // config pairPoolManager
-        pairPoolManager.addPositionManager(address(marginPositionManager));
-        pairPoolManager.setStatusManager(poolStatusManager);
-        // config lendingPoolManager
-        lendingPoolManager.setPairPoolManger(pairPoolManager);
-        // config marginLiquidity
-        marginLiquidity.addPoolManager(address(pairPoolManager));
-        // config mirrorTokenManager
-        mirrorTokenManager.addPoolManager(address(pairPoolManager));
+        vault = new LikwidVault(msg.sender);
+        console.log("Vault deployed at:", address(vault));
         vm.stopBroadcast();
     }
 }

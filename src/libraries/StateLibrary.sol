@@ -7,6 +7,7 @@ import {Slot0, Slot0Library} from "../types/Slot0.sol";
 import {Reserves, ReservesLibrary} from "../types/Reserves.sol";
 import {PairPosition} from "./PairPosition.sol";
 import {LendPosition} from "./LendPosition.sol";
+import {MarginPosition} from "./MarginPosition.sol";
 import {PositionLibrary} from "./PositionLibrary.sol";
 
 /// @title A helper library to provide state getters for a Likwid pool
@@ -189,6 +190,30 @@ library StateLibrary {
         _position.lendForOne = uint8(slot0) == 1;
         _position.lendAmount = uint128(slot0 >> 8);
         _position.depositCumulativeLast = uint256(data[1]);
+    }
+
+    function getMarginPositionState(IVault manager, PoolId poolId, address owner, bool marginForOne, bytes32 salt)
+        internal
+        view
+        returns (MarginPosition.State memory _position)
+    {
+        bytes32 positionKey = owner.calculatePositionKey(marginForOne, salt);
+
+        bytes32 poolStateSlot = _getPoolStateSlot(poolId);
+        bytes32 positionsMappingSlot = bytes32(uint256(poolStateSlot) + MARGIN_POSITIONS_OFFSET);
+        bytes32 positionSlot = keccak256(abi.encodePacked(positionKey, positionsMappingSlot));
+
+        bytes32[] memory data = manager.extsload(positionSlot, 4);
+        uint256 slot0 = uint256(data[0]);
+        _position.marginForOne = uint8(slot0) == 1;
+        _position.marginAmount = uint128(slot0 >> 8);
+
+        uint256 slot1 = uint256(data[1]);
+        _position.marginTotal = uint128(slot1);
+        _position.debtAmount = uint128(slot1 >> 128);
+
+        _position.borrowCumulativeLast = uint256(data[2]);
+        _position.depositCumulativeLast = uint256(data[3]);
     }
 
     /**

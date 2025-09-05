@@ -9,12 +9,9 @@ import {IVault} from "../interfaces/IVault.sol";
 import {PoolKey} from "../types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "../types/PoolId.sol";
 
-import {CurrencyExtLibrary} from "./CurrencyExtLibrary.sol";
-
 library CurrencyPoolLibrary {
     using PoolIdLibrary for PoolId;
     using SafeERC20 for IERC20;
-    using CurrencyExtLibrary for Currency;
 
     error InsufficientValue();
 
@@ -51,13 +48,5 @@ library CurrencyPoolLibrary {
     /// @param claims If true, mint the ERC-6909 token, otherwise ERC20-transfer from the PoolManager to recipient
     function take(Currency currency, IVault manager, address recipient, uint256 amount, bool claims) internal {
         claims ? manager.mint(recipient, currency.toId(), amount) : manager.take(currency, recipient, amount);
-    }
-
-    function toTokenId(Currency currency, PoolId poolId) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encode(currency, poolId)));
-    }
-
-    function toTokenId(Currency currency, PoolKey memory key) internal pure returns (uint256) {
-        return toTokenId(currency, key.toId());
     }
 }

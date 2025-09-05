@@ -3,7 +3,6 @@
 pragma solidity ^0.8.26;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {UQ112x112} from "./UQ112x112.sol";
 import {PerLibrary} from "./PerLibrary.sol";
 import {TimeLibrary} from "./TimeLibrary.sol";
 
