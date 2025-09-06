@@ -11,7 +11,6 @@ import {PoolId} from "./types/PoolId.sol";
 import {FeeType} from "./types/FeeType.sol";
 import {IVault} from "./interfaces/IVault.sol";
 import {IUnlockCallback} from "./interfaces/callback/IUnlockCallback.sol";
-import {DoubleEndedQueue} from "./libraries/external/DoubleEndedQueue.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
 import {CurrencyGuard} from "./libraries/CurrencyGuard.sol";
 import {Pool} from "./libraries/Pool.sol";
@@ -22,7 +21,6 @@ import {ProtocolFees} from "./base/ProtocolFees.sol";
 import {Extsload} from "./base/Extsload.sol";
 import {Exttload} from "./base/Exttload.sol";
 import {Math} from "./libraries/Math.sol";
-import {StageMath} from "./libraries/StageMath.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
 
 /// @title Likwid vault
@@ -30,18 +28,14 @@ import {CustomRevert} from "./libraries/CustomRevert.sol";
 contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Extsload, Exttload {
     using CustomRevert for bytes4;
     using SafeCast for *;
-    using DoubleEndedQueue for DoubleEndedQueue.Uint256Deque;
-    using StageMath for uint256;
     using CurrencyGuard for Currency;
     using BalanceDeltaLibrary for BalanceDelta;
     using Pool for Pool.State;
 
-    error LiquidityLocked();
     error Unauthorized();
 
     mapping(PoolId id => Pool.State) private _pools;
-    mapping(PoolId id => uint256) private lastStageTimestampStore; // Timestamp of the last stage
-    mapping(PoolId id => DoubleEndedQueue.Uint256Deque) private liquidityLockedQueue;
+
     address public marginController;
 
     /// transient storage
@@ -63,13 +57,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         protocolFeeController = initialOwner;
     }
 
-    /// @notice Unlocks the contract for a single transaction.
-    /// @dev This function is called by an external contract to perform a series of actions within the vault.
-    /// The vault is locked by default and this function temporarily unlocks it.
-    /// It requires a callback to the sender, which will perform the desired actions.
-    /// After the callback is finished, the vault is locked again.
-    /// @param data The data to be passed to the callback function.
-    /// @return result The data returned by the callback function.
+    /// @inheritdoc IVault
     function unlock(bytes calldata data) external override returns (bytes memory result) {
         if (unlocked) revert AlreadyUnlocked();
 
@@ -82,9 +70,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         unlocked = false;
     }
 
-    /// @notice Initializes a new pool.
-    /// @dev Creates a new liquidity pool for a pair of currencies. The currencies must be provided in a specific order.
-    /// @param key The key of the pool to initialize, containing the two currencies and the fee.
+    /// @inheritdoc IVault
     function initialize(PoolKey memory key) external noDelegateCall {
         if (key.currency0 >= key.currency1) {
             CurrenciesOutOfOrderOrEqual.selector.revertWith(
@@ -98,11 +84,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         emit Initialize(id, key.currency0, key.currency1, key.fee);
     }
 
-    /// @notice Modifies liquidity in a pool.
-    /// @dev Adds or removes liquidity from a pool. The caller must be authorized.
-    /// @param key The key of the pool to modify.
-    /// @param params The parameters for modifying liquidity, including the amount of liquidity to add or remove.
-    /// @return callerDelta The change in the caller's balance.
+    /// @inheritdoc IVault
     function modifyLiquidity(PoolKey memory key, IVault.ModifyLiquidityParams memory params)
         external
         onlyWhenUnlocked
@@ -136,66 +118,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         _appendPoolBalanceDelta(key, msg.sender, callerDelta);
     }
 
-    /// @notice Handles the addition of liquidity to a pool.
-    /// @dev Locks the liquidity according to the staging mechanism.
-    /// @param id The ID of the pool.
-    /// @param liquidityAdded The amount of liquidity to add.
-    function _handleAddLiquidity(PoolId id, uint256 liquidityAdded) internal {
-        _lockLiquidity(id, liquidityAdded);
-    }
-
-    /// @notice Handles the removal of liquidity from a pool.
-    /// @dev Checks if the requested amount of liquidity is available for withdrawal and updates the liquidity queue.
-    /// @param id The ID of the pool.
-    /// @param liquidityRemoved The amount of liquidity to remove .
-    function _handleRemoveLiquidity(PoolId id, uint256 liquidityRemoved) internal {
-        if (uint256(marginState.stageDuration()) * marginState.stageSize() > 0) {
-            (uint128 releasedLiquidity, uint128 nextReleasedLiquidity) = _getReleasedLiquidity(id);
-            uint256 availableLiquidity = releasedLiquidity + nextReleasedLiquidity;
-            if (availableLiquidity < liquidityRemoved) {
-                LiquidityLocked.selector.revertWith();
-            }
-            DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
-            if (!queue.empty()) {
-                if (nextReleasedLiquidity > 0) {
-                    // If next stage is free, we can release the next stage liquidity
-                    uint256 currentStage = queue.popFront(); // Remove the current stage
-                    uint256 nextStage = queue.front();
-                    (, uint128 currentLiquidity) = currentStage.decode();
-                    if (currentLiquidity > liquidityRemoved) {
-                        nextStage = nextStage.add((currentLiquidity - liquidityRemoved).toUint128());
-                    } else {
-                        nextStage = nextStage.sub((liquidityRemoved - currentLiquidity).toUint128());
-                    }
-                    queue.set(0, nextStage);
-                    // Update lastStageTimestamp to the next stage time
-                    lastStageTimestampStore[id] = block.timestamp;
-                } else {
-                    // If next stage is not free, we just reduce the current stage liquidity
-                    uint256 currentStage = queue.front();
-                    uint256 afterStage;
-                    if (queue.length() == 1) {
-                        afterStage = currentStage.subTotal(liquidityRemoved.toUint128());
-                    } else {
-                        afterStage = currentStage.sub(liquidityRemoved.toUint128());
-                    }
-                    if (!currentStage.isFree(marginState.stageLeavePart()) || queue.length() == 1) {
-                        // Update lastStageTimestamp
-                        lastStageTimestampStore[id] = block.timestamp;
-                    }
-                    queue.set(0, afterStage);
-                }
-            }
-        }
-    }
-
-    /// @notice Swaps tokens in a pool.
-    /// @dev Executes a token swap in the specified pool.
-    /// @param key The key of the pool to swap in.
-    /// @param params The parameters for the swap, including the amount and direction of the swap.
-    /// @return swapDelta The change in the caller's balance.
-    /// @return swapFee The fee applied to the swap.
-    /// @return feeAmount The amount of the fee.
+    /// @inheritdoc IVault
     function swap(PoolKey memory key, IVault.SwapParams memory params)
         external
         onlyWhenUnlocked
@@ -240,11 +163,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         emit Swap(id, msg.sender, swapDelta.amount0(), swapDelta.amount1(), pool.slot0.totalSupply(), swapFee);
     }
 
-    /// @notice Lends tokens to a pool.
-    /// @dev Allows a user to lend tokens to a pool and earn interest.
-    /// @param key The key of the pool to lend to.
-    /// @param params The parameters for the lending operation, including the amount to lend.
-    /// @return lendDelta The change in the lender's balance.
+    /// @inheritdoc IVault
     function lend(PoolKey memory key, IVault.LendParams memory params)
         external
         onlyWhenUnlocked
@@ -340,9 +259,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         emit Close(id, msg.sender, params.positionKey, params.rewardAmount, params.closeMillionth, params.salt);
     }
 
-    /// @notice Synchronizes the balance of a currency.
-    /// @dev Updates the contract's record of its balance for a specific currency.
-    /// @param currency The currency to synchronize.
+    /// @inheritdoc IVault
     function sync(Currency currency) external {
         // address(0) is used for the native currency
         if (currency.isAddressZero()) {
@@ -354,11 +271,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         }
     }
 
-    /// @notice Takes a specified amount of a currency from the contract.
-    /// @dev Allows a user to withdraw a currency from their balance in the contract.
-    /// @param currency The currency to take.
-    /// @param to The address to send the currency to.
-    /// @param amount The amount of the currency to take.
+    /// @inheritdoc IVault
     function take(Currency currency, address to, uint256 amount) external onlyWhenUnlocked {
         unchecked {
             // negation must be safe as amount is not negative
@@ -367,25 +280,17 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         }
     }
 
-    /// @notice Settles the caller's balance.
-    /// @dev Allows a user to settle their balance, receiving any due payments.
-    /// @return The amount paid to the user.
+    /// @inheritdoc IVault
     function settle() external payable onlyWhenUnlocked returns (uint256) {
         return _settle(msg.sender);
     }
 
-    /// @notice Settles the balance for a specific recipient.
-    /// @dev Allows settling the balance on behalf of another address.
-    /// @param recipient The address whose balance is to be settled.
-    /// @return The amount paid to the recipient.
+    /// @inheritdoc IVault
     function settleFor(address recipient) external payable onlyWhenUnlocked returns (uint256) {
         return _settle(recipient);
     }
 
-    /// @notice Clears a positive balance delta.
-    /// @dev Allows a user to clear a positive balance delta they have in a specific currency.
-    /// @param currency The currency to clear the delta for.
-    /// @param amount The amount of the delta to clear.
+    /// @inheritdoc IVault
     function clear(Currency currency, uint256 amount) external onlyWhenUnlocked {
         int256 current = currency.currentDelta(msg.sender);
         int256 amountDelta = amount.toInt256();
@@ -396,11 +301,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         }
     }
 
-    /// @notice Mints new tokens.
-    /// @dev Mints a specified amount of a token to a given address.
-    /// @param to The address to mint the tokens to.
-    /// @param id The ID of the token to mint.
-    /// @param amount The amount of tokens to mint.
+    /// @inheritdoc IVault
     function mint(address to, uint256 id, uint256 amount) external onlyWhenUnlocked {
         unchecked {
             Currency currency = CurrencyLibrary.fromId(id);
@@ -410,11 +311,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         }
     }
 
-    /// @notice Burns existing tokens.
-    /// @dev Burns a specified amount of a token from a given address.
-    /// @param from The address to burn the tokens from.
-    /// @param id The ID of the token to burn.
-    /// @param amount The amount of tokens to burn.
+    /// @inheritdoc IVault
     function burn(address from, uint256 id, uint256 amount) external onlyWhenUnlocked {
         Currency currency = CurrencyLibrary.fromId(id);
         _appendDelta(currency, msg.sender, amount.toInt256());
@@ -485,70 +382,6 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     /// @return A boolean indicating whether the contract is unlocked.
     function _isUnlocked() internal view override returns (bool) {
         return unlocked;
-    }
-
-    /// @notice Locks a certain amount of liquidity in stages.
-    /// @dev Internal function to manage the staged locking of liquidity.
-    /// @param id The ID of the pool.
-    /// @param amount The amount of liquidity to lock.
-    function _lockLiquidity(PoolId id, uint256 amount) internal {
-        uint256 stageSize = marginState.stageSize();
-        if (uint256(marginState.stageDuration()) * stageSize == 0) {
-            return; // No locking if stageDuration or stageSize is zero
-        }
-        uint256 lastStageTimestamp = lastStageTimestampStore[id];
-        if (lastStageTimestamp == 0) {
-            // Initialize lastStageTimestamp if it's not set
-            lastStageTimestampStore[id] = block.timestamp;
-        }
-        DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
-        uint128 lockAmount = Math.ceilDiv(amount, stageSize).toUint128(); // Ensure at least 1 unit is locked per stage
-        uint256 zeroStage = 0;
-        if (queue.empty()) {
-            for (uint32 i = 0; i < stageSize; i++) {
-                queue.pushBack(zeroStage.add(lockAmount));
-            }
-        } else {
-            uint256 queueSize = Math.min(queue.length(), stageSize);
-            // If the queue is not empty, we need to update the existing stages
-            // and add new stages if necessary
-            for (uint256 i = 0; i < queueSize; i++) {
-                uint256 stage = queue.at(i);
-                queue.set(i, stage.add(lockAmount));
-            }
-            for (uint256 i = queueSize; i < stageSize; i++) {
-                queue.pushBack(zeroStage.add(lockAmount));
-            }
-        }
-    }
-
-    /// @notice Gets the amount of released and next-to-be-released liquidity.
-    /// @dev Internal view function to calculate the amount of liquidity that is currently released and the amount that will be released in the next stage.
-    /// @param id The ID of the pool.
-    /// @return releasedLiquidity The amount of liquidity that is currently released.
-    /// @return nextReleasedLiquidity The amount of liquidity that will be released in the next stage.
-    function _getReleasedLiquidity(PoolId id)
-        internal
-        view
-        returns (uint128 releasedLiquidity, uint128 nextReleasedLiquidity)
-    {
-        releasedLiquidity = type(uint128).max;
-        if (uint256(marginState.stageDuration()) * marginState.stageSize() > 0) {
-            DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
-            uint256 lastStageTimestamp = lastStageTimestampStore[id];
-            if (!queue.empty()) {
-                uint256 currentStage = queue.front();
-                uint256 total;
-                (total, releasedLiquidity) = currentStage.decode();
-                if (
-                    queue.length() > 1 && currentStage.isFree(marginState.stageLeavePart())
-                        && block.timestamp >= lastStageTimestamp + marginState.stageDuration()
-                ) {
-                    uint256 nextStage = queue.at(1);
-                    (, nextReleasedLiquidity) = nextStage.decode();
-                }
-            }
-        }
     }
 
     // ******************** OWNER CALL ********************

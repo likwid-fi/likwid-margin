@@ -18,7 +18,7 @@ library StateLibrary {
     using PositionLibrary for address;
 
     /// @notice The storage slot of the `_pools` mapping in the LikwidVault contract.
-    bytes32 public constant POOLS_SLOT = bytes32(uint256(7));
+    bytes32 public constant POOLS_SLOT = bytes32(uint256(9));
 
     // Offsets for fields within the Pool.State struct
     uint256 internal constant BORROW_0_CUMULATIVE_LAST_OFFSET = 1;

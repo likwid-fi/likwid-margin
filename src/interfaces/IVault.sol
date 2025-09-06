@@ -100,7 +100,7 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
 
     /// @notice All interactions on the contract that account deltas require unlocking. A caller that calls `unlock` must implement
     /// `IUnlockCallback(msg.sender).unlockCallback(data)`, where they interact with the remaining functions on this contract.
-    /// @dev The only functions callable without an unlocking are `initialize` and `updateDynamicLPFee`
+    /// @dev The only functions callable without an unlocking are `initialize`
     /// @param data Any data to pass to the callback, via `IUnlockCallback(msg.sender).unlockCallback(data)`
     /// @return The data returned by the call to `IUnlockCallback(msg.sender).unlockCallback(data)`
     function unlock(bytes calldata data) external returns (bytes memory);
@@ -155,6 +155,11 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
         bytes32 salt;
     }
 
+    /// @notice Lends tokens to a pool.
+    /// @dev Allows a user to lend tokens to a pool and earn interest.
+    /// @param key The key of the pool to lend to.
+    /// @param params The parameters for the lending operation, including the amount to lend.
+    /// @return lendDelta The change in the lender's balance.
     function lend(PoolKey memory key, LendParams memory params) external returns (BalanceDelta lendDelta);
 
     struct MarginParams {

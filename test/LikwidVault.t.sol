@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
+import {MarginBase} from "../src/base/MarginBase.sol";
 import {LikwidVault} from "../src/LikwidVault.sol";
 import {IVault} from "../src/interfaces/IVault.sol";
 import {IUnlockCallback} from "../src/interfaces/callback/IUnlockCallback.sol";
@@ -993,7 +994,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         bytes memory data = abi.encode(this.modifyLiquidity_callback.selector, inner_params);
 
         // 3. Assertions
-        vm.expectRevert(abi.encodeWithSelector(LikwidVault.LiquidityLocked.selector));
+        vm.expectRevert(abi.encodeWithSelector(MarginBase.LiquidityLocked.selector));
         vault.unlock(data);
     }
 }

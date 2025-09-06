@@ -82,11 +82,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         uint256 statusReserves
     );
 
-    event CheckerChanged(address indexed oldChecker, address indexed newChecker);
-    event LiquidationRatioChanged(uint24 oldRatio, uint24 newRatio);
-    event CallerProfitChanged(uint24 oldProfit, uint24 newProfit);
-    event ProtocolProfitChanged(uint24 oldProfit, uint24 newProfit);
-
     enum BurnType {
         REPAY,
         CLOSE,
@@ -204,6 +199,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         }
     }
 
+    /// @inheritdoc IMarginPositionManager
     function addMargin(PoolKey memory key, IMarginPositionManager.CreateParams calldata params)
         external
         payable
@@ -318,6 +314,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         }
     }
 
+    /// @inheritdoc IMarginPositionManager
     function liquidateBurn(uint256 tokenId) external nonReentrant returns (uint256 profit) {
         PositionInfo memory info = positionInfos[tokenId];
         PoolId poolId = poolIds[tokenId];
@@ -345,6 +342,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         profit = abi.decode(result, (uint256));
     }
 
+    /// @inheritdoc IMarginPositionManager
     function liquidateCall(uint256 tokenId)
         external
         payable
@@ -459,6 +457,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         return abi.encode(profitAmount);
     }
 
+    // ******************** OWNER CALL ********************
     function setMinMarginLevel(uint24 _minMarginLevel) external onlyOwner {
         if (_minMarginLevel < marginLevels.liquidateLevel()) {
             InvalidLevel.selector.revertWith();

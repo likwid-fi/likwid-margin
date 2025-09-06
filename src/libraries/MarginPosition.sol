@@ -105,7 +105,7 @@ library MarginPosition {
         uint256 marginWithoutFee,
         uint256 borrowAmount,
         int128 changeAmount
-    ) internal returns (uint256 releaseAmount) {
+    ) internal returns (uint256 releaseAmount, uint256 repayAmount) {
         if (amount < 0) {
             // margin or borrow
             if (borrowAmount == 0) InvalidBorrowAmount.selector.revertWith();
@@ -144,12 +144,12 @@ library MarginPosition {
             debtAmount += borrowAmount;
         } else if (amount > 0) {
             if (changeAmount > 0) {
-                releaseAmount = Math.mulDiv(positionValue, uint128(changeAmount), debtAmount);
-                debtAmount -= uint128(changeAmount);
+                repayAmount = Math.min(uint128(changeAmount), debtAmount);
             } else {
-                releaseAmount = Math.mulDiv(positionValue, uint128(amount), debtAmount);
-                debtAmount -= uint128(amount);
+                repayAmount = Math.min(uint128(amount), debtAmount);
             }
+            releaseAmount = Math.mulDiv(positionValue, repayAmount.toUint128(), debtAmount);
+            debtAmount -= uint128(amount);
             if (marginTotal > 0) {
                 uint256 marginAmountReleased = Math.mulDiv(releaseAmount, marginAmount, positionValue);
                 marginAmount = marginAmount - marginAmountReleased;

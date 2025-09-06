@@ -443,17 +443,7 @@ library Pool {
                 }
                 assetAmount = borrowAmount;
             }
-        } else if (params.amount > 0) {
-            // --- Repay Debt ---
-            uint128 repayAmount = uint128(params.amount);
-            if (params.marginForOne) {
-                amount0Delta = -params.amount;
-                mirrorDelta = toBalanceDelta(repayAmount.toInt128(), 0);
-            } else {
-                amount1Delta = -params.amount;
-                mirrorDelta = toBalanceDelta(0, repayAmount.toInt128());
-            }
-        } else {
+        } else if (params.amount == 0) {
             // --- Modify Margin ---
             int128 changeAmount = params.changeAmount;
             if (changeAmount == 0) {
@@ -471,7 +461,7 @@ library Pool {
         MarginPosition.State storage position =
             self.marginPositions.get(params.sender, params.marginForOne, params.salt);
 
-        uint256 releaseAmount = position.update(
+        (uint256 releaseAmount, uint256 repayAmount) = position.update(
             params.marginForOne,
             borrowCumulativeLast,
             depositCumulativeLast,
@@ -495,6 +485,16 @@ library Pool {
                 lendDelta = toBalanceDelta(amount0Delta, 0);
             }
             assetAmount = releaseAmount;
+        }
+        if (repayAmount > 0) {
+            // --- Repay Debt ---
+            if (params.marginForOne) {
+                amount0Delta = -repayAmount.toInt128();
+                mirrorDelta = toBalanceDelta(repayAmount.toInt128(), 0);
+            } else {
+                amount1Delta = -repayAmount.toInt128();
+                mirrorDelta = toBalanceDelta(0, repayAmount.toInt128());
+            }
         }
         console.log("amount0Delta", amount0Delta);
         console.log("amount1Delta", amount1Delta);

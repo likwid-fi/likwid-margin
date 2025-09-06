@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {PoolId} from "../types/PoolId.sol";
+import {PoolKey} from "../types/PoolKey.sol";
 
 interface IMarginPositionManager {
     error InvalidMinLevel();
@@ -15,6 +16,10 @@ interface IMarginPositionManager {
     error InsufficientBorrowReceived();
 
     error InsufficientCloseReceived();
+
+    event LiquidationRatioChanged(uint24 oldRatio, uint24 newRatio);
+    event CallerProfitChanged(uint24 oldProfit, uint24 newProfit);
+    event ProtocolProfitChanged(uint24 oldProfit, uint24 newProfit);
 
     struct CreateParams {
         /// @notice true: currency1 is marginToken, false: currency0 is marginToken
@@ -47,6 +52,16 @@ interface IMarginPositionManager {
         uint256 deadline;
     }
 
+    /// @notice Create/Add a position
+    /// @param key The key of pool
+    /// @param params The parameters of the margin position
+    /// @return tokenId The id of position
+    /// @return borrowAmount The borrow amount
+    function addMargin(PoolKey memory key, IMarginPositionManager.CreateParams calldata params)
+        external
+        payable
+        returns (uint256 tokenId, uint256 borrowAmount);
+
     /// @notice Margin a position
     /// @param params The parameters of the margin position
     /// @return borrowAmount The borrow amount
@@ -67,6 +82,10 @@ interface IMarginPositionManager {
     /// @param profitAmountMin The minimum profit amount to be received after closing the position
     /// @param deadline Deadline for the transaction
     function close(uint256 tokenId, uint24 closeMillionth, uint256 profitAmountMin, uint256 deadline) external;
+
+    function liquidateBurn(uint256 tokenId) external returns (uint256 profit);
+
+    function liquidateCall(uint256 tokenId) external payable returns (uint256 profit, uint256 repayAmount);
 
     /// @notice Modify the margin position
     /// @param tokenId The id of position
