@@ -17,6 +17,8 @@ interface IMarginPositionManager {
 
     error InsufficientCloseReceived();
 
+    error PositionNotLiquidated();
+
     event LiquidationRatioChanged(uint24 oldRatio, uint24 newRatio);
     event CallerProfitChanged(uint24 oldProfit, uint24 newProfit);
     event ProtocolProfitChanged(uint24 oldProfit, uint24 newProfit);

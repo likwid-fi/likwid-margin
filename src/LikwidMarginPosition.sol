@@ -2,28 +2,28 @@
 // Likwid Contracts
 pragma solidity ^0.8.26;
 
-// Solmate
-import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
-import {Currency, CurrencyLibrary} from "./types/Currency.sol";
-import {PoolKey} from "./types/PoolKey.sol";
-import {PoolId} from "./types/PoolId.sol";
-import {Math} from "./libraries/Math.sol";
-import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 import {BasePositionManager} from "./base/BasePositionManager.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
-import {IVault} from "./interfaces/IVault.sol";
 import {IProtocolFees} from "./interfaces/IProtocolFees.sol";
-import {PerLibrary} from "./libraries/PerLibrary.sol";
-import {FeeLibrary} from "./libraries/FeeLibrary.sol";
-import {SafeCast} from "./libraries/SafeCast.sol";
+import {IVault} from "./interfaces/IVault.sol";
+import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
+import {FeeLibrary} from "./libraries/FeeLibrary.sol";
 import {MarginPosition} from "./libraries/MarginPosition.sol";
-import {StateLibrary} from "./libraries/StateLibrary.sol";
+import {Math} from "./libraries/Math.sol";
+import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {PositionLibrary} from "./libraries/PositionLibrary.sol";
+import {SafeCast} from "./libraries/SafeCast.sol";
+import {StateLibrary} from "./libraries/StateLibrary.sol";
 import {BalanceDelta} from "./types/BalanceDelta.sol";
-import {Reserves} from "./types/Reserves.sol";
+import {Currency, CurrencyLibrary} from "./types/Currency.sol";
 import {MarginLevels, MarginLevelsLibrary} from "./types/MarginLevels.sol";
+import {PoolId} from "./types/PoolId.sol";
+import {PoolKey} from "./types/PoolKey.sol";
+import {Reserves} from "./types/Reserves.sol";
+// Solmate
+import {Owned} from "solmate/src/auth/Owned.sol";
 
 contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     using SafeCast for *;
@@ -37,7 +37,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
     error PairNotExists();
     error PositionLiquidated();
-    error PositionNotLiquidated();
+
     error MarginTransferFailed(uint256 amount);
     error InvalidLevel();
 
@@ -117,14 +117,17 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     function unlockCallback(bytes calldata data) external override returns (bytes memory) {
         (Actions action, bytes memory params) = abi.decode(data, (Actions, bytes));
 
+        if (action == Actions.LIQUIDATE_BURN) {
+            return handleLiquidateBurn(params);
+        }
+        if (action == Actions.CLOSE) {
+            return handleClose(params);
+        }
         if (
             action == Actions.MARGIN || action == Actions.REPAY || action == Actions.MODIFY
                 || action == Actions.LIQUIDATE_CALL
         ) {
             return handleMargin(params);
-        }
-        if (action == Actions.LIQUIDATE_BURN) {
-            return handleLiquidateBurn(params);
         } else {
             InvalidCallback.selector.revertWith();
         }
@@ -208,7 +211,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         tokenId = _mintPosition(key, params.recipient);
         PositionInfo storage info = positionInfos[tokenId];
         info.marginForOne = params.marginForOne;
-        info.isBorrow = params.leverage > 0;
+        info.isBorrow = params.leverage == 0;
         borrowAmount = margin(
             IMarginPositionManager.MarginParams({
                 tokenId: tokenId,
@@ -251,7 +254,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
         bytes memory result = vault.unlock(data);
         (borrowAmount) = abi.decode(result, (uint256));
-        if (info.isBorrow && borrowAmount > params.borrowAmountMax) {
+        if (params.borrowAmountMax > 0 && borrowAmount > params.borrowAmountMax) {
             InsufficientBorrowReceived.selector.revertWith();
         }
     }
@@ -268,11 +271,13 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         PoolId poolId = poolIds[tokenId];
         PoolKey memory key = poolKeys[poolId];
         uint24 minLevel = info.isBorrow ? marginLevels.minBorrowLevel() : marginLevels.minMarginLevel();
+        bytes32 salt = bytes32(tokenId);
+        MarginPosition.State memory position = StateLibrary.getMarginPositionState(vault, poolId, address(this), info.isBorrow, salt);
 
         IVault.MarginParams memory marginParams = IVault.MarginParams({
             marginForOne: info.marginForOne,
             amount: repayAmount.toInt128(),
-            marginTotal: 0,
+            marginTotal: position.marginTotal,
             borrowAmount: 0,
             changeAmount: 0,
             minMarginLevel: minLevel,
@@ -311,6 +316,10 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         (uint256 profitAmount) = abi.decode(result, (uint256));
         if (profitAmount < profitAmountMin) {
             InsufficientCloseReceived.selector.revertWith();
+        }
+
+        if (closeMillionth == 1_000_000) {
+            _burn(tokenId);
         }
     }
 
@@ -436,11 +445,11 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         ) = abi.decode(_data, (address, PoolKey, IVault.CloseParams, bool, uint256, uint256));
 
         (, uint256 profitAmount) = vault.close(key, params);
-        if (profitAmount > callerProfitAmount) {
-            protocolProfitAmount = profitAmount - callerProfitAmount;
-        } else {
-            protocolProfitAmount = 0;
+        if (profitAmount < callerProfitAmount) {
             callerProfitAmount = profitAmount;
+            protocolProfitAmount = 0;
+        } else {
+            protocolProfitAmount = profitAmount - callerProfitAmount;
         }
         Currency marginCurrency = marginForOne ? key.currency1 : key.currency0;
         if (protocolProfitAmount > 0) {

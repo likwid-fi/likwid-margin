@@ -648,71 +648,6 @@ library Pool {
         if (self.borrow0CumulativeLast == 0) PoolNotInitialized.selector.revertWith();
     }
 
-    struct InterestUpdateParams {
-        uint256 mirrorReserve;
-        uint256 rateCumulativeLast;
-        uint256 borrowCumulativeBefore;
-        uint256 interestReserve;
-        uint256 pairReserve;
-        uint256 lendReserve;
-        uint256 depositCumulativeLast;
-        uint24 protocolFee;
-    }
-
-    struct InterestUpdateResult {
-        uint256 newMirrorReserve;
-        uint256 newPairReserve;
-        uint256 newLendReserve;
-        uint256 newInterestReserve;
-        uint256 newDepositCumulativeLast;
-        uint256 pairInterest;
-        bool changed;
-    }
-
-    function _updateInterestForOne(InterestUpdateParams memory params)
-        internal
-        pure
-        returns (InterestUpdateResult memory result)
-    {
-        result.newMirrorReserve = params.mirrorReserve;
-        result.newPairReserve = params.pairReserve;
-        result.newLendReserve = params.lendReserve;
-        result.newInterestReserve = params.interestReserve;
-        result.newDepositCumulativeLast = params.depositCumulativeLast;
-
-        if (params.mirrorReserve > 0 && params.rateCumulativeLast > params.borrowCumulativeBefore) {
-            uint256 allInterest = Math.mulDiv(
-                params.mirrorReserve * FixedPoint96.Q96, params.rateCumulativeLast, params.borrowCumulativeBefore
-            ) - params.mirrorReserve * FixedPoint96.Q96 + params.interestReserve;
-
-            (uint256 protocolInterest,) =
-                ProtocolFeeLibrary.splitFee(params.protocolFee, FeeType.INTERESTS, allInterest);
-
-            if (protocolInterest == 0 || protocolInterest > FixedPoint96.Q96) {
-                uint256 allInterestNoQ96 = allInterest / FixedPoint96.Q96;
-                allInterestNoQ96 -= protocolInterest / FixedPoint96.Q96;
-
-                result.pairInterest =
-                    Math.mulDiv(allInterestNoQ96, params.pairReserve, params.pairReserve + params.lendReserve);
-
-                if (allInterestNoQ96 > result.pairInterest) {
-                    uint256 lendingInterest = allInterestNoQ96 - result.pairInterest;
-                    result.newDepositCumulativeLast = Math.mulDiv(
-                        params.depositCumulativeLast, params.lendReserve + lendingInterest, params.lendReserve
-                    );
-                    result.newLendReserve += lendingInterest;
-                }
-
-                result.newMirrorReserve += allInterestNoQ96;
-                result.newPairReserve += result.pairInterest;
-                result.changed = true;
-                result.newInterestReserve = 0;
-            } else {
-                result.newInterestReserve = allInterest;
-            }
-        }
-    }
-
     /// @notice Updates the interest rates for the pool.
     /// @param self The pool state.
     /// @param marginState The current rate state.
@@ -735,7 +670,7 @@ library Pool {
         uint256 borrow0CumulativeBefore = self.borrow0CumulativeLast;
         uint256 borrow1CumulativeBefore = self.borrow1CumulativeLast;
 
-        (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = InterestMath.getBorrowRateCumulativeLast(
+        (uint256 borrow0CumulativeLast, uint256 borrow1CumulativeLast) = InterestMath.getBorrowRateCumulativeLast(
             timeElapsedMicrosecond,
             borrow0CumulativeBefore,
             borrow1CumulativeBefore,
@@ -749,10 +684,10 @@ library Pool {
         (uint256 mirrorReserve0, uint256 mirrorReserve1) = _mirrorReserves.reserves();
         (uint256 interestReserve0, uint256 interestReserve1) = _interestReserves.reserves();
 
-        InterestUpdateResult memory result0 = _updateInterestForOne(
-            InterestUpdateParams({
+        InterestMath.InterestUpdateResult memory result0 = InterestMath.updateInterestForOne(
+            InterestMath.InterestUpdateParams({
                 mirrorReserve: mirrorReserve0,
-                rateCumulativeLast: rate0CumulativeLast,
+                borrowCumulativeLast: borrow0CumulativeLast,
                 borrowCumulativeBefore: borrow0CumulativeBefore,
                 interestReserve: interestReserve0,
                 pairReserve: pairReserve0,
@@ -769,13 +704,13 @@ library Pool {
             interestReserve0 = result0.newInterestReserve;
             self.deposit0CumulativeLast = result0.newDepositCumulativeLast;
             pairInterest0 = result0.pairInterest;
-            self.borrow0CumulativeLast = rate0CumulativeLast;
+            self.borrow0CumulativeLast = borrow0CumulativeLast;
         }
 
-        InterestUpdateResult memory result1 = _updateInterestForOne(
-            InterestUpdateParams({
+        InterestMath.InterestUpdateResult memory result1 = InterestMath.updateInterestForOne(
+            InterestMath.InterestUpdateParams({
                 mirrorReserve: mirrorReserve1,
-                rateCumulativeLast: rate1CumulativeLast,
+                borrowCumulativeLast: borrow1CumulativeLast,
                 borrowCumulativeBefore: borrow1CumulativeBefore,
                 interestReserve: interestReserve1,
                 pairReserve: pairReserve1,
@@ -792,7 +727,7 @@ library Pool {
             interestReserve1 = result1.newInterestReserve;
             self.deposit1CumulativeLast = result1.newDepositCumulativeLast;
             pairInterest1 = result1.pairInterest;
-            self.borrow1CumulativeLast = rate1CumulativeLast;
+            self.borrow1CumulativeLast = borrow1CumulativeLast;
         }
 
         if (result0.changed || result1.changed) {
