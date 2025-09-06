@@ -398,13 +398,18 @@ library Pool {
                 (amountToProtocol,) = ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeType.MARGIN, feeAmount);
                 uint24 swapFee;
                 (borrowAmount, swapFee, feeAmount) = SwapMath.getAmountIn(
-                    _pairReserves, _truncatedReserves, _slot0.lpFee(), !params.marginForOne, params.marginTotal
+                    _pairReserves, _truncatedReserves, _slot0.lpFee(), params.marginForOne, params.marginTotal
                 );
+                console.log("params.marginTotal:", params.marginTotal);
+                console.log("params.borrowAmount:", borrowAmount);
+                console.log("params.swapFee:", swapFee);
                 params.borrowAmount = borrowAmount.toUint128();
             } else {
                 // --- Borrow ---
                 uint256 borrowMAXAmount = _pairReserves.getAmountOut(!params.marginForOne, marginAmount);
+                console.log("borrowMAXAmount:", borrowMAXAmount);
                 borrowMAXAmount = Math.min(borrowMAXAmount, borrowRealReserves * 20 / 100);
+                console.log("borrowMAXAmount:", borrowMAXAmount);
                 if (params.borrowAmount > borrowMAXAmount) BorrowTooMuch.selector.revertWith();
                 if (params.borrowAmount == 0) params.borrowAmount = borrowMAXAmount.toUint128();
                 borrowAmount = params.borrowAmount;
@@ -470,8 +475,9 @@ library Pool {
             params.borrowAmount,
             params.changeAmount
         );
-
-        if (position.marginLevel(_pairReserves, borrowCumulativeLast, depositCumulativeLast) < params.minMarginLevel) {
+        uint256 level = position.marginLevel(_pairReserves, borrowCumulativeLast, depositCumulativeLast);
+        console.log("pool.level:", level);
+        if (level < params.minMarginLevel) {
             MarginLevelError.selector.revertWith();
         }
 
@@ -553,7 +559,6 @@ library Pool {
     /// @param position The margin position to liquidate.
     /// @param releaseAmount The amount of collateral to release.
     /// @param repayAmount The amount of debt to repay.
-    /// @param profitAmount The profit from the position.
     /// @param lossAmount The loss from the position.
     /// @param rewardAmount The reward for the liquidator.
     /// @return closeDelta The change in the liquidator's balance.
@@ -565,13 +570,13 @@ library Pool {
         MarginPosition.State storage position,
         uint256 releaseAmount,
         uint256 repayAmount,
-        uint256 profitAmount,
         uint256 lossAmount,
         uint256 rewardAmount
     )
         internal
         returns (BalanceDelta closeDelta, BalanceDelta pairDelta, BalanceDelta lendDelta, BalanceDelta mirrorDelta)
     {
+        console.log("rewardAmount:", rewardAmount);
         if (position.marginForOne) {
             closeDelta = toBalanceDelta(0, rewardAmount.toInt128());
         } else {
@@ -579,24 +584,34 @@ library Pool {
         }
         (uint256 pairReserve0, uint256 pairReserve1) = self.pairReserves.reserves();
         (uint256 lendReserve0, uint256 lendReserve1) = self.lendReserves.reserves();
+        int128 pairGotReleaseAmount = -(releaseAmount - rewardAmount).toInt128();
         if (position.marginForOne) {
-            uint256 pairLostAmount = Math.mulDiv(lossAmount, pairReserve0, pairReserve0 + lendReserve0);
-            pairDelta =
-                toBalanceDelta((repayAmount - pairLostAmount).toInt128(), -(releaseAmount - profitAmount).toInt128());
-            lendDelta = toBalanceDelta(0, releaseAmount.toInt128());
             mirrorDelta = toBalanceDelta(repayAmount.toInt128(), 0);
-            uint256 lendLostAmount = lossAmount - pairLostAmount;
-            self.deposit0CumulativeLast =
-                Math.mulDiv(self.deposit0CumulativeLast, lendReserve0 - lendLostAmount, lendReserve0);
+            if (lendReserve0 > 0) {
+                uint256 pairLostAmount = Math.mulDiv(lossAmount, pairReserve0, pairReserve0 + lendReserve0);
+                pairDelta = toBalanceDelta((repayAmount - pairLostAmount).toInt128(), pairGotReleaseAmount);
+                uint256 lendLostAmount = lossAmount - pairLostAmount;
+                lendDelta = toBalanceDelta(lendLostAmount.toInt128(), releaseAmount.toInt128());
+                self.deposit0CumulativeLast =
+                    Math.mulDiv(self.deposit0CumulativeLast, lendReserve0 - lendLostAmount, lendReserve0);
+            } else {
+                pairDelta = toBalanceDelta((repayAmount - lossAmount).toInt128(), pairGotReleaseAmount);
+                lendDelta = toBalanceDelta(0, releaseAmount.toInt128());
+            }
         } else {
-            uint256 pairLostAmount = Math.mulDiv(lossAmount, pairReserve1, pairReserve1 + lendReserve1);
-            pairDelta =
-                toBalanceDelta(-(releaseAmount - profitAmount).toInt128(), (repayAmount - pairLostAmount).toInt128());
-            lendDelta = toBalanceDelta(releaseAmount.toInt128(), 0);
             mirrorDelta = toBalanceDelta(0, repayAmount.toInt128());
-            uint256 lendLostAmount = lossAmount - pairLostAmount;
-            self.deposit1CumulativeLast =
-                Math.mulDiv(self.deposit1CumulativeLast, lendReserve1 - lendLostAmount, lendReserve1);
+            if (lendReserve1 > 0) {
+                uint256 pairLostAmount = Math.mulDiv(lossAmount, pairReserve1, pairReserve1 + lendReserve1);
+                pairDelta = toBalanceDelta(pairGotReleaseAmount, (repayAmount - pairLostAmount).toInt128());
+                console.log("lossAmount:%s,pairLostAmount:%s", lossAmount, pairLostAmount);
+                uint256 lendLostAmount = lossAmount - pairLostAmount;
+                lendDelta = toBalanceDelta(releaseAmount.toInt128(), lendLostAmount.toInt128());
+                self.deposit1CumulativeLast =
+                    Math.mulDiv(self.deposit1CumulativeLast, lendReserve1 - lendLostAmount, lendReserve1);
+            } else {
+                pairDelta = toBalanceDelta(pairGotReleaseAmount, (repayAmount - lossAmount).toInt128());
+                lendDelta = toBalanceDelta(releaseAmount.toInt128(), 0);
+            }
         }
     }
 
@@ -629,9 +644,9 @@ library Pool {
             (closeDelta, pairDelta, lendDelta, mirrorDelta) =
                 _handleNormalClose(position, releaseAmount, repayAmount, profitAmount);
         } else {
-            (closeDelta, pairDelta, lendDelta, mirrorDelta) = _handleLiquidation(
-                self, position, releaseAmount, repayAmount, profitAmount, lossAmount, params.rewardAmount
-            );
+            profitAmount = params.rewardAmount;
+            (closeDelta, pairDelta, lendDelta, mirrorDelta) =
+                _handleLiquidation(self, position, releaseAmount, repayAmount, lossAmount, params.rewardAmount);
         }
 
         ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](4);
@@ -735,6 +750,7 @@ library Pool {
             self.pairReserves = toReserves(pairReserve0.toUint128(), pairReserve1.toUint128());
             self.lendReserves = toReserves(lendReserve0.toUint128(), lendReserve1.toUint128());
             Reserves _truncatedReserves = self.truncatedReserves;
+            console.log("update.transferReserves");
             self.truncatedReserves = PriceMath.transferReserves(
                 _truncatedReserves,
                 _pairReserves,
@@ -742,6 +758,7 @@ library Pool {
                 marginState.maxPriceMovePerSecond()
             );
         } else {
+            console.log("update.truncatedReserves");
             self.truncatedReserves = _pairReserves;
         }
 
@@ -766,7 +783,7 @@ library Pool {
                 _realReserves = _realReserves.applyDelta(delta);
             } else if (_type == ReservesType.MIRROR) {
                 console.log("MIRROR");
-                _mirrorReserves = _mirrorReserves.applyDelta(delta);
+                _mirrorReserves = _mirrorReserves.applyDelta(delta, true);
             } else if (_type == ReservesType.PAIR) {
                 console.log("PAIR");
                 _pairReserves = _pairReserves.applyDelta(delta);

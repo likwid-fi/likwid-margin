@@ -17,4 +17,6 @@ interface IMarginBase {
     /// @dev Only the owner can call this function.
     /// @dev Reverts if the caller is not the owner.
     function setMarginState(MarginState newMarginState) external;
+
+    function marginState() external view returns (MarginState);
 }

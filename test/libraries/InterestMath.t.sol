@@ -11,7 +11,7 @@ import {PerLibrary} from "../../src/libraries/PerLibrary.sol";
 contract InterestMathTest is Test {
     using MarginStateLibrary for MarginState;
 
-    function testGetUpdatedCumulativeValues() public {
+    function testGetUpdatedCumulativeValues() public pure {
         // 1. Setup initial state
         uint256 timeElapsed = 3600; // 1 hour
         uint256 borrow0CumulativeBefore = 1e18;

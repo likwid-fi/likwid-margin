@@ -88,11 +88,7 @@ library ReservesLibrary {
         return toReserves(self.reserve0(), newReserve1);
     }
 
-    /// @notice Applies a balance delta to the reserves.
-    /// @param self The Reserves object.
-    /// @param delta The balance delta to apply.
-    /// @return The updated Reserves object.
-    function applyDelta(Reserves self, BalanceDelta delta) internal pure returns (Reserves) {
+    function applyDelta(Reserves self, BalanceDelta delta, bool enableOverflow) internal pure returns (Reserves) {
         (uint128 r0, uint128 r1) = self.reserves();
         int128 d0 = delta.amount0();
         int128 d1 = delta.amount1();
@@ -103,7 +99,11 @@ library ReservesLibrary {
                 if (r0 < amount0) {
                     console.log("r0", r0);
                     console.log("amount0", amount0);
-                    revert NotEnoughReserves();
+                    if (enableOverflow) {
+                        r0 = amount0;
+                    } else {
+                        revert NotEnoughReserves();
+                    }
                 }
                 r0 -= amount0;
             } else if (d0 < 0) {
@@ -115,7 +115,11 @@ library ReservesLibrary {
                 if (r1 < amount1) {
                     console.log("r1", r1);
                     console.log("amount1", amount1);
-                    revert NotEnoughReserves();
+                    if (enableOverflow) {
+                        r1 = amount1;
+                    } else {
+                        revert NotEnoughReserves();
+                    }
                 }
                 r1 -= amount1;
             } else if (d1 < 0) {
@@ -124,6 +128,14 @@ library ReservesLibrary {
         }
 
         return toReserves(r0, r1);
+    }
+
+    /// @notice Applies a balance delta to the reserves.
+    /// @param self The Reserves object.
+    /// @param delta The balance delta to apply.
+    /// @return The updated Reserves object.
+    function applyDelta(Reserves self, BalanceDelta delta) internal pure returns (Reserves) {
+        return applyDelta(self, delta, false);
     }
 
     /// @notice Calculates the price of token0 in terms of token1, scaled by Q96.

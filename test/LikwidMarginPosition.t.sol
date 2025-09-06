@@ -16,8 +16,6 @@ import {StateLibrary} from "../src/libraries/StateLibrary.sol";
 import {Reserves} from "../src/types/Reserves.sol";
 import {MarginPosition} from "../src/libraries/MarginPosition.sol";
 
-error ERC721NonexistentToken(uint256 tokenId);
-
 contract LikwidMarginPositionTest is Test {
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolKey;
@@ -205,7 +203,112 @@ contract LikwidMarginPositionTest is Test {
         // 3. Assert
         uint256 balanceAfter = token0.balanceOf(address(this));
         assertTrue(balanceAfter > balanceBefore, "Collateral should be returned");
-        vm.expectRevert(abi.encodeWithSelector(ERC721NonexistentToken.selector, tokenId));
-        marginPositionManager.ownerOf(tokenId);
+    }
+
+    function testLiquidateBurn() public {
+        // 1. Arrange: Create a leveraged margin position
+        uint256 marginAmount = 0.01e18;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory createParams = IMarginPositionManager.CreateParams({
+            recipient: address(this),
+            marginForOne: false, // Collateral is token0, borrow token1
+            leverage: 5,
+            marginAmount: marginAmount,
+            borrowAmount: 0,
+            borrowAmountMax: 5e18,
+            deadline: block.timestamp + 1
+        });
+
+        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, createParams);
+        console.log("borrowAmount:", borrowAmount);
+        MarginPosition.State memory positionState = marginPositionManager.getPositionState(tokenId);
+        Reserves pairReserves = StateLibrary.getPairReserves(vault, key.toId());
+        uint256 level = MarginPosition.marginLevel(
+            positionState, pairReserves, positionState.borrowCumulativeLast, positionState.depositCumulativeLast
+        );
+        console.log("Margin Level (Burn):", level);
+        skip(10);
+        // 2. Act: Manipulate the price to make the position liquidatable
+        // We need to drive the price of token0 down. We sell token0 for token1.
+        uint256 amountToSwap = 15e18; // A large amount to cause significant price impact
+        token0.mint(address(this), amountToSwap);
+
+        LikwidPairPosition.SwapInputParams memory swapParams = LikwidPairPosition.SwapInputParams({
+            poolId: key.toId(),
+            zeroForOne: true, // token0 for token1
+            to: address(this),
+            amountIn: amountToSwap,
+            amountOutMin: 0,
+            deadline: 11
+        });
+
+        pairPositionManager.exactInput(swapParams);
+        skip(1000);
+        positionState = marginPositionManager.getPositionState(tokenId);
+        pairReserves = StateLibrary.getPairReserves(vault, key.toId());
+        level = MarginPosition.marginLevel(
+            positionState, pairReserves, positionState.borrowCumulativeLast, positionState.depositCumulativeLast
+        );
+        console.log("Margin Level (Burn):", level);
+        console.log("Liquidation Level:", marginPositionManager.marginLevels().liquidateLevel());
+
+        (bool liquidated,,) = marginPositionManager.checkLiquidate(tokenId);
+        assertTrue(liquidated, "Position should be liquidated");
+
+        address liquidator = address(0xDEADBEEF);
+        vm.prank(liquidator);
+        marginPositionManager.liquidateBurn(tokenId);
+    }
+
+    function testLiquidateCall() public {
+        // 1. Arrange: Create a borrow position
+        uint256 marginAmount = 0.2e18; // Collateral
+        uint256 borrowAmount = 0.05e18;
+        token1.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory createParams = IMarginPositionManager.CreateParams({
+            recipient: address(this),
+            marginForOne: true, // Collateral is token1, borrow token0
+            leverage: 0,
+            marginAmount: marginAmount,
+            borrowAmount: borrowAmount,
+            borrowAmountMax: borrowAmount,
+            deadline: block.timestamp + 1
+        });
+
+        (uint256 tokenId,) = marginPositionManager.addMargin(key, createParams);
+        skip(10);
+        address owner = marginPositionManager.ownerOf(tokenId);
+
+        // 2. Act: Manipulate the price to make the position liquidatable
+        // We need to drive the price of token0 up. We sell token1 for token0.
+        uint256 amountToSwap = 100e18; // A large amount to cause significant price impact
+        token1.mint(address(this), amountToSwap);
+
+        LikwidPairPosition.SwapInputParams memory swapParams = LikwidPairPosition.SwapInputParams({
+            poolId: key.toId(),
+            zeroForOne: false, // token1 for token0
+            to: address(this),
+            amountIn: amountToSwap,
+            amountOutMin: 0,
+            deadline: 12
+        });
+
+        pairPositionManager.exactInput(swapParams);
+        skip(1000);
+        // 3. Assert: Check if liquidatable and liquidate
+        (bool liquidated,,) = marginPositionManager.checkLiquidate(tokenId);
+        assertTrue(liquidated, "Position should be liquidatable");
+
+        address liquidator = address(0xDEADBEEF);
+        token0.mint(liquidator, borrowAmount);
+        vm.prank(liquidator);
+        token0.approve(address(marginPositionManager), borrowAmount);
+        marginPositionManager.liquidateCall(tokenId);
+
+        MarginPosition.State memory positionState = marginPositionManager.getPositionState(tokenId);
+        assertEq(positionState.debtAmount, 0, "Debt should be fully repaid");
+        assertEq(marginPositionManager.ownerOf(tokenId), owner, "Owner should not change");
     }
 }

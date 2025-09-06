@@ -4,21 +4,27 @@ pragma solidity ^0.8.26;
 
 // Local
 import {BasePositionManager} from "./base/BasePositionManager.sol";
+import {console} from "forge-std/console.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {IProtocolFees} from "./interfaces/IProtocolFees.sol";
+import {IMarginBase} from "./interfaces/IMarginBase.sol";
 import {IVault} from "./interfaces/IVault.sol";
 import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
+import {InterestMath} from "./libraries/InterestMath.sol";
 import {MarginPosition} from "./libraries/MarginPosition.sol";
 import {Math} from "./libraries/Math.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {PositionLibrary} from "./libraries/PositionLibrary.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
 import {StateLibrary} from "./libraries/StateLibrary.sol";
+import {TimeLibrary} from "./libraries/TimeLibrary.sol";
+import {PriceMath} from "./libraries/PriceMath.sol";
 import {BalanceDelta} from "./types/BalanceDelta.sol";
 import {Currency, CurrencyLibrary} from "./types/Currency.sol";
 import {MarginLevels, MarginLevelsLibrary} from "./types/MarginLevels.sol";
+import {MarginState} from "./types/MarginState.sol";
 import {PoolId} from "./types/PoolId.sol";
 import {PoolKey} from "./types/PoolKey.sol";
 import {Reserves} from "./types/Reserves.sol";
@@ -34,6 +40,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     using CustomRevert for bytes4;
     using PositionLibrary for address;
     using MarginLevelsLibrary for MarginLevels;
+    using TimeLibrary for uint32;
 
     error PairNotExists();
     error PositionLiquidated();
@@ -133,6 +140,60 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         }
     }
 
+    function _getUpdatedCumulativeValues(PoolId poolId)
+        private
+        view
+        returns (
+            uint256 borrow0CumulativeLast,
+            uint256 borrow1CumulativeLast,
+            uint256 deposit0CumulativeLast,
+            uint256 deposit1CumulativeLast
+        )
+    {
+        bytes32 poolStateSlot = keccak256(abi.encodePacked(PoolId.unwrap(poolId), StateLibrary.POOLS_SLOT));
+
+        // 1. Get slot0
+        (, uint32 lastUpdated, uint24 protocolFee,,) = StateLibrary.getSlot0(vault, poolId);
+
+        // 2. Get all other data in one call
+        bytes32 startSlot = bytes32(uint256(poolStateSlot) + 1); // BORROW_0_CUMULATIVE_LAST_OFFSET
+        bytes32[] memory data = vault.extsload(startSlot, 10); // read 10 slots
+
+        uint256 borrow0CumulativeBefore = uint256(data[0]);
+        uint256 borrow1CumulativeBefore = uint256(data[1]);
+        uint256 deposit0CumulativeBefore = uint256(data[2]);
+        uint256 deposit1CumulativeBefore = uint256(data[3]);
+        Reserves realReserves = Reserves.wrap(uint256(data[4]));
+        Reserves mirrorReserves = Reserves.wrap(uint256(data[5]));
+        Reserves pairReserves = Reserves.wrap(uint256(data[6]));
+        // slot 8 is truncatedReserves, skip it.
+        Reserves lendReserves = Reserves.wrap(uint256(data[8]));
+        Reserves interestReserves = Reserves.wrap(uint256(data[9]));
+
+        // 3. Get marginState
+        MarginState marginState = IMarginBase(address(vault)).marginState();
+
+        // 4. Get timeElapsed
+        uint256 timeElapsed = lastUpdated.getTimeElapsed();
+
+        // 5. Call InterestMath.getUpdatedCumulativeValues
+        (borrow0CumulativeLast, borrow1CumulativeLast, deposit0CumulativeLast, deposit1CumulativeLast) = InterestMath
+            .getUpdatedCumulativeValues(
+            timeElapsed,
+            borrow0CumulativeBefore,
+            borrow1CumulativeBefore,
+            deposit0CumulativeBefore,
+            deposit1CumulativeBefore,
+            marginState,
+            realReserves,
+            mirrorReserves,
+            pairReserves,
+            lendReserves,
+            interestReserves,
+            protocolFee
+        );
+    }
+
     struct PositionInfo {
         bool marginForOne;
         bool isBorrow;
@@ -147,7 +208,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
             uint256 borrow1CumulativeLast,
             uint256 deposit0CumulativeLast,
             uint256 deposit1CumulativeLast
-        ) = StateLibrary.getBorrowDepositCumulative(vault, poolId);
+        ) = _getUpdatedCumulativeValues(poolId);
         uint256 depositCumulativeLast = info.marginForOne ? deposit1CumulativeLast : deposit0CumulativeLast;
         uint256 borrowCumulativeLast = info.marginForOne ? borrow0CumulativeLast : borrow1CumulativeLast;
         position = StateLibrary.getMarginPositionState(vault, poolId, address(this), info.isBorrow, salt);
@@ -172,6 +233,16 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         (liquidated, assetsAmount, debtAmount) = _checkLiquidate(tokenId, poolId, info);
     }
 
+    function _getTruncatedReserves(PoolId poolId) internal view returns (Reserves truncatedReserves) {
+        (, uint32 lastUpdated,,,) = StateLibrary.getSlot0(vault, poolId);
+        Reserves _truncatedReserves = StateLibrary.getTruncatedReserves(vault, poolId);
+        Reserves _pairReserves = StateLibrary.getPairReserves(vault, poolId);
+        MarginState marginState = IMarginBase(address(vault)).marginState();
+        truncatedReserves = PriceMath.transferReserves(
+            _truncatedReserves, _pairReserves, lastUpdated.getTimeElapsed(), marginState.maxPriceMovePerSecond()
+        );
+    }
+
     function _checkLiquidate(uint256 tokenId, PoolId poolId, PositionInfo memory info)
         internal
         view
@@ -183,14 +254,17 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
             uint256 borrow1CumulativeLast,
             uint256 deposit0CumulativeLast,
             uint256 deposit1CumulativeLast
-        ) = StateLibrary.getBorrowDepositCumulative(vault, poolId);
+        ) = _getUpdatedCumulativeValues(poolId);
         uint256 depositCumulativeLast = info.marginForOne ? deposit1CumulativeLast : deposit0CumulativeLast;
         uint256 borrowCumulativeLast = info.marginForOne ? borrow0CumulativeLast : borrow1CumulativeLast;
         MarginPosition.State memory position =
             StateLibrary.getMarginPositionState(vault, poolId, address(this), info.isBorrow, salt);
-        Reserves truncatedReserves = StateLibrary.getTruncatedReserves(vault, poolId);
+        console.log("position.debt:", position.debtAmount);
+        Reserves truncatedReserves = _getTruncatedReserves(poolId);
+        console.log("truncatedReserves:", truncatedReserves.bothPositive());
         uint256 level =
             MarginPosition.marginLevel(position, truncatedReserves, borrowCumulativeLast, depositCumulativeLast);
+        console.log("level:", level);
         liquidated = level < marginLevels.liquidateLevel();
         if (liquidated) {
             position.marginAmount =
@@ -272,7 +346,8 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         PoolKey memory key = poolKeys[poolId];
         uint24 minLevel = info.isBorrow ? marginLevels.minBorrowLevel() : marginLevels.minMarginLevel();
         bytes32 salt = bytes32(tokenId);
-        MarginPosition.State memory position = StateLibrary.getMarginPositionState(vault, poolId, address(this), info.isBorrow, salt);
+        MarginPosition.State memory position =
+            StateLibrary.getMarginPositionState(vault, poolId, address(this), info.isBorrow, salt);
 
         IVault.MarginParams memory marginParams = IVault.MarginParams({
             marginForOne: info.marginForOne,
@@ -445,6 +520,8 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         ) = abi.decode(_data, (address, PoolKey, IVault.CloseParams, bool, uint256, uint256));
 
         (, uint256 profitAmount) = vault.close(key, params);
+        console.log("profitAmount:", profitAmount);
+        console.log("callerProfitAmount+protocolProfitAmount:", callerProfitAmount + protocolProfitAmount);
         if (profitAmount < callerProfitAmount) {
             callerProfitAmount = profitAmount;
             protocolProfitAmount = 0;
