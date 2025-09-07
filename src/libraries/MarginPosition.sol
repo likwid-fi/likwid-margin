@@ -2,6 +2,8 @@
 // Likwid Contracts
 pragma solidity ^0.8.0;
 
+import {console} from "forge-std/console.sol";
+
 import {Math} from "./Math.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "../types/BalanceDelta.sol";
 import {Reserves} from "../types/Reserves.sol";
@@ -131,7 +133,15 @@ library MarginPosition {
             positionValue = marginAmount + marginTotal;
         }
         if (self.borrowCumulativeLast != 0) {
+            console.log("self.debtAmount:", self.debtAmount);
+            console.log(
+                "now:%s,borrowCumulativeLast:%s,self.borrowCumulativeLast:%s",
+                block.timestamp,
+                borrowCumulativeLast,
+                self.borrowCumulativeLast
+            );
             debtAmount = Math.mulDiv(self.debtAmount, borrowCumulativeLast, self.borrowCumulativeLast);
+            console.log("after.debtAmount:", debtAmount);
         }
         bool hasLeverage = marginTotal > 0 || marginWithoutFee > 0;
         if (amount < 0) {
@@ -149,7 +159,7 @@ library MarginPosition {
                 repayAmount = Math.min(uint128(amount), debtAmount);
             }
             releaseAmount = Math.mulDiv(positionValue, repayAmount.toUint128(), debtAmount);
-            debtAmount -= uint128(amount);
+            debtAmount -= uint128(repayAmount);
             if (marginTotal > 0) {
                 uint256 marginAmountReleased = Math.mulDiv(releaseAmount, marginAmount, positionValue);
                 marginAmount = marginAmount - marginAmountReleased;
@@ -173,6 +183,9 @@ library MarginPosition {
         self.depositCumulativeLast = depositCumulativeLast;
         self.debtAmount = debtAmount.toUint128();
         self.borrowCumulativeLast = borrowCumulativeLast;
+        console.log("self.marginAmount", self.marginAmount);
+        console.log("self.marginTotal", self.marginTotal);
+        console.log("self.debtAmount", self.debtAmount);
     }
 
     function close(

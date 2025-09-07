@@ -85,7 +85,7 @@ contract LikwidMarginPositionTest is Test {
             leverage: 2,
             marginAmount: marginAmount,
             borrowAmount: 0,
-            borrowAmountMax: 2e18,
+            borrowAmountMax: 6e18,
             deadline: block.timestamp + 1
         });
 
@@ -157,10 +157,10 @@ contract LikwidMarginPositionTest is Test {
         IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
             recipient: address(this),
             marginForOne: false,
-            leverage: 2, // Using leverage
+            leverage: 2,
             marginAmount: marginAmount,
             borrowAmount: 0,
-            borrowAmountMax: 2e18,
+            borrowAmountMax: 6e18,
             deadline: block.timestamp + 1
         });
         (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
@@ -191,7 +191,7 @@ contract LikwidMarginPositionTest is Test {
             leverage: 2, // Using leverage
             marginAmount: marginAmount,
             borrowAmount: 0,
-            borrowAmountMax: 2e18,
+            borrowAmountMax: 6e18,
             deadline: block.timestamp + 1
         });
         (uint256 tokenId,) = marginPositionManager.addMargin(key, params);

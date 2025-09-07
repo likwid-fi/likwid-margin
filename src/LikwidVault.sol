@@ -2,8 +2,6 @@
 // Likwid Contracts
 pragma solidity 0.8.28;
 
-import {console} from "forge-std/console.sol";
-
 import {Currency, CurrencyLibrary} from "./types/Currency.sol";
 import {PoolKey} from "./types/PoolKey.sol";
 import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "./types/BalanceDelta.sol";

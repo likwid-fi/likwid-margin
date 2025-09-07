@@ -51,11 +51,11 @@ library InterestMath {
         (uint256 realReserve0, uint256 realReserve1) = realReserves.reserves();
         (uint256 mirrorReserve0, uint256 mirrorReserve1) = mirrorReserve.reserves();
         uint256 rate0 = getBorrowRateByReserves(marginState, realReserve0 + mirrorReserve0, mirrorReserve0);
-        uint256 rate0LastYear = PerLibrary.TRILLION_YEAR_SECONDS + rate0 * timeElapsed;
-        rate0CumulativeLast = Math.mulDiv(rate0CumulativeBefore, rate0LastYear, PerLibrary.TRILLION_YEAR_SECONDS);
+        uint256 rate0LastYear = PerLibrary.YEAR_TRILLION_SECONDS + rate0 * timeElapsed * PerLibrary.ONE_MILLION;
+        rate0CumulativeLast = Math.mulDiv(rate0CumulativeBefore, rate0LastYear, PerLibrary.YEAR_TRILLION_SECONDS);
         uint256 rate1 = getBorrowRateByReserves(marginState, realReserve1 + mirrorReserve1, mirrorReserve1);
-        uint256 rate1LastYear = PerLibrary.TRILLION_YEAR_SECONDS + rate1 * timeElapsed;
-        rate1CumulativeLast = Math.mulDiv(rate1CumulativeBefore, rate1LastYear, PerLibrary.TRILLION_YEAR_SECONDS);
+        uint256 rate1LastYear = PerLibrary.YEAR_TRILLION_SECONDS + rate1 * timeElapsed * PerLibrary.ONE_MILLION;
+        rate1CumulativeLast = Math.mulDiv(rate1CumulativeBefore, rate1LastYear, PerLibrary.YEAR_TRILLION_SECONDS);
     }
 
     struct InterestUpdateParams {
@@ -136,14 +136,18 @@ library InterestMath {
         Reserves lendReserves,
         Reserves interestReserves,
         uint24 protocolFee
-    ) internal pure returns (uint256 borrow0CumulativeLast, uint256 borrow1CumulativeLast, uint256 deposit0CumulativeLast, uint256 deposit1CumulativeLast) {
+    )
+        internal
+        pure
+        returns (
+            uint256 borrow0CumulativeLast,
+            uint256 borrow1CumulativeLast,
+            uint256 deposit0CumulativeLast,
+            uint256 deposit1CumulativeLast
+        )
+    {
         (borrow0CumulativeLast, borrow1CumulativeLast) = getBorrowRateCumulativeLast(
-            timeElapsed,
-            borrow0CumulativeBefore,
-            borrow1CumulativeBefore,
-            marginState,
-            realReserves,
-            mirrorReserves
+            timeElapsed, borrow0CumulativeBefore, borrow1CumulativeBefore, marginState, realReserves, mirrorReserves
         );
 
         (uint256 mirrorReserve0, uint256 mirrorReserve1) = mirrorReserves.reserves();

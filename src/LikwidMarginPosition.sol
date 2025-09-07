@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 
 // Local
 import {BasePositionManager} from "./base/BasePositionManager.sol";
-import {console} from "forge-std/console.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {IProtocolFees} from "./interfaces/IProtocolFees.sol";
 import {IMarginBase} from "./interfaces/IMarginBase.sol";
@@ -249,23 +248,62 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         returns (bool liquidated, uint256 assetsAmount, uint256 debtAmount)
     {
         bytes32 salt = bytes32(tokenId);
+
+        bytes32 poolStateSlot = keccak256(abi.encodePacked(PoolId.unwrap(poolId), StateLibrary.POOLS_SLOT));
+        // 1. Get slot0
+        (, uint32 lastUpdated, uint24 protocolFee,,) = StateLibrary.getSlot0(vault, poolId);
+        // 2. Get all other data in one call
+        bytes32 startSlot = bytes32(uint256(poolStateSlot) + 1); // BORROW_0_CUMULATIVE_LAST_OFFSET
+        bytes32[] memory data = vault.extsload(startSlot, 10); // read 10 slots
+        uint256 borrow0CumulativeBefore = uint256(data[0]);
+        uint256 borrow1CumulativeBefore = uint256(data[1]);
+        uint256 deposit0CumulativeBefore = uint256(data[2]);
+        uint256 deposit1CumulativeBefore = uint256(data[3]);
+        Reserves realReserves = Reserves.wrap(uint256(data[4]));
+        Reserves mirrorReserves = Reserves.wrap(uint256(data[5]));
+        Reserves pairReserves = Reserves.wrap(uint256(data[6]));
+        Reserves _truncatedReserves = Reserves.wrap(uint256(data[7]));
+        Reserves lendReserves = Reserves.wrap(uint256(data[8]));
+        Reserves interestReserves = Reserves.wrap(uint256(data[9]));
+        // 3. Get marginState
+        MarginState marginState = IMarginBase(address(vault)).marginState();
+        // 4. Get timeElapsed
+        uint256 timeElapsed = lastUpdated.getTimeElapsed();
+        // 5. Call InterestMath.getUpdatedCumulativeValues
         (
             uint256 borrow0CumulativeLast,
             uint256 borrow1CumulativeLast,
             uint256 deposit0CumulativeLast,
             uint256 deposit1CumulativeLast
-        ) = _getUpdatedCumulativeValues(poolId);
+        ) = InterestMath.getUpdatedCumulativeValues(
+            timeElapsed,
+            borrow0CumulativeBefore,
+            borrow1CumulativeBefore,
+            deposit0CumulativeBefore,
+            deposit1CumulativeBefore,
+            marginState,
+            realReserves,
+            mirrorReserves,
+            pairReserves,
+            lendReserves,
+            interestReserves,
+            protocolFee
+        );
+
         uint256 depositCumulativeLast = info.marginForOne ? deposit1CumulativeLast : deposit0CumulativeLast;
         uint256 borrowCumulativeLast = info.marginForOne ? borrow0CumulativeLast : borrow1CumulativeLast;
         MarginPosition.State memory position =
             StateLibrary.getMarginPositionState(vault, poolId, address(this), info.isBorrow, salt);
-        console.log("position.debt:", position.debtAmount);
-        Reserves truncatedReserves = _getTruncatedReserves(poolId);
-        console.log("truncatedReserves:", truncatedReserves.bothPositive());
+        
+        Reserves truncatedReserves = PriceMath.transferReserves(
+            _truncatedReserves, pairReserves, timeElapsed, marginState.maxPriceMovePerSecond()
+        );
+
         uint256 level =
             MarginPosition.marginLevel(position, truncatedReserves, borrowCumulativeLast, depositCumulativeLast);
-        console.log("level:", level);
-        liquidated = level < marginLevels.liquidateLevel();
+        
+        MarginLevels _marginLevels = marginLevels;
+        liquidated = level < _marginLevels.liquidateLevel();
         if (liquidated) {
             position.marginAmount =
                 Math.mulDiv(position.marginAmount, depositCumulativeLast, position.depositCumulativeLast).toUint128();
@@ -449,10 +487,10 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         PoolKey memory key = poolKeys[poolId];
         IVault.MarginParams memory marginParams = IVault.MarginParams({
             marginForOne: info.marginForOne,
-            amount: debtAmount.toInt128(),
+            amount: repayAmount.toInt128(),
             marginTotal: 0,
             borrowAmount: 0,
-            changeAmount: repayAmount.toInt128(),
+            changeAmount: debtAmount.toInt128(),
             minMarginLevel: 1, // no zero level
             salt: bytes32(tokenId)
         });
@@ -520,8 +558,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         ) = abi.decode(_data, (address, PoolKey, IVault.CloseParams, bool, uint256, uint256));
 
         (, uint256 profitAmount) = vault.close(key, params);
-        console.log("profitAmount:", profitAmount);
-        console.log("callerProfitAmount+protocolProfitAmount:", callerProfitAmount + protocolProfitAmount);
         if (profitAmount < callerProfitAmount) {
             callerProfitAmount = profitAmount;
             protocolProfitAmount = 0;

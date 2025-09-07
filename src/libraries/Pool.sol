@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
-import {console} from "forge-std/console.sol";
-
 import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "../types/BalanceDelta.sol";
 import {FeeType} from "../types/FeeType.sol";
 import {MarginState} from "../types/MarginState.sol";
@@ -400,16 +398,11 @@ library Pool {
                 (borrowAmount, swapFee, feeAmount) = SwapMath.getAmountIn(
                     _pairReserves, _truncatedReserves, _slot0.lpFee(), params.marginForOne, params.marginTotal
                 );
-                console.log("params.marginTotal:", params.marginTotal);
-                console.log("params.borrowAmount:", borrowAmount);
-                console.log("params.swapFee:", swapFee);
                 params.borrowAmount = borrowAmount.toUint128();
             } else {
                 // --- Borrow ---
                 uint256 borrowMAXAmount = _pairReserves.getAmountOut(!params.marginForOne, marginAmount);
-                console.log("borrowMAXAmount:", borrowMAXAmount);
                 borrowMAXAmount = Math.min(borrowMAXAmount, borrowRealReserves * 20 / 100);
-                console.log("borrowMAXAmount:", borrowMAXAmount);
                 if (params.borrowAmount > borrowMAXAmount) BorrowTooMuch.selector.revertWith();
                 if (params.borrowAmount == 0) params.borrowAmount = borrowMAXAmount.toUint128();
                 borrowAmount = params.borrowAmount;
@@ -476,7 +469,6 @@ library Pool {
             params.changeAmount
         );
         uint256 level = position.marginLevel(_pairReserves, borrowCumulativeLast, depositCumulativeLast);
-        console.log("pool.level:", level);
         if (level < params.minMarginLevel) {
             MarginLevelError.selector.revertWith();
         }
@@ -502,8 +494,6 @@ library Pool {
                 mirrorDelta = toBalanceDelta(0, repayAmount.toInt128());
             }
         }
-        console.log("amount0Delta", amount0Delta);
-        console.log("amount1Delta", amount1Delta);
         marginDelta = toBalanceDelta(amount0Delta, amount1Delta);
         ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](4);
         deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, marginDelta);
@@ -576,7 +566,6 @@ library Pool {
         internal
         returns (BalanceDelta closeDelta, BalanceDelta pairDelta, BalanceDelta lendDelta, BalanceDelta mirrorDelta)
     {
-        console.log("rewardAmount:", rewardAmount);
         if (position.marginForOne) {
             closeDelta = toBalanceDelta(0, rewardAmount.toInt128());
         } else {
@@ -603,7 +592,6 @@ library Pool {
             if (lendReserve1 > 0) {
                 uint256 pairLostAmount = Math.mulDiv(lossAmount, pairReserve1, pairReserve1 + lendReserve1);
                 pairDelta = toBalanceDelta(pairGotReleaseAmount, (repayAmount - pairLostAmount).toInt128());
-                console.log("lossAmount:%s,pairLostAmount:%s", lossAmount, pairLostAmount);
                 uint256 lendLostAmount = lossAmount - pairLostAmount;
                 lendDelta = toBalanceDelta(releaseAmount.toInt128(), lendLostAmount.toInt128());
                 self.deposit1CumulativeLast =
@@ -673,8 +661,8 @@ library Pool {
         returns (uint256 pairInterest0, uint256 pairInterest1)
     {
         Slot0 _slot0 = self.slot0;
-        uint256 timeElapsedMicrosecond = _slot0.lastUpdated().getTimeElapsedMicrosecond();
-        if (timeElapsedMicrosecond == 0) return (0, 0);
+        uint256 timeElapsed = _slot0.lastUpdated().getTimeElapsed();
+        if (timeElapsed == 0) return (0, 0);
 
         Reserves _realReserves = self.realReserves;
         Reserves _mirrorReserves = self.mirrorReserves;
@@ -686,14 +674,8 @@ library Pool {
         uint256 borrow1CumulativeBefore = self.borrow1CumulativeLast;
 
         (uint256 borrow0CumulativeLast, uint256 borrow1CumulativeLast) = InterestMath.getBorrowRateCumulativeLast(
-            timeElapsedMicrosecond,
-            borrow0CumulativeBefore,
-            borrow1CumulativeBefore,
-            marginState,
-            _realReserves,
-            _mirrorReserves
+            timeElapsed, borrow0CumulativeBefore, borrow1CumulativeBefore, marginState, _realReserves, _mirrorReserves
         );
-
         (uint256 pairReserve0, uint256 pairReserve1) = _pairReserves.reserves();
         (uint256 lendReserve0, uint256 lendReserve1) = _lendReserves.reserves();
         (uint256 mirrorReserve0, uint256 mirrorReserve1) = _mirrorReserves.reserves();
@@ -750,7 +732,6 @@ library Pool {
             self.pairReserves = toReserves(pairReserve0.toUint128(), pairReserve1.toUint128());
             self.lendReserves = toReserves(lendReserve0.toUint128(), lendReserve1.toUint128());
             Reserves _truncatedReserves = self.truncatedReserves;
-            console.log("update.transferReserves");
             self.truncatedReserves = PriceMath.transferReserves(
                 _truncatedReserves,
                 _pairReserves,
@@ -758,7 +739,6 @@ library Pool {
                 marginState.maxPriceMovePerSecond()
             );
         } else {
-            console.log("update.truncatedReserves");
             self.truncatedReserves = _pairReserves;
         }
 
@@ -779,16 +759,12 @@ library Pool {
             ReservesType _type = params[i]._type;
             BalanceDelta delta = params[i].delta;
             if (_type == ReservesType.REAL) {
-                console.log("REAL");
                 _realReserves = _realReserves.applyDelta(delta);
             } else if (_type == ReservesType.MIRROR) {
-                console.log("MIRROR");
                 _mirrorReserves = _mirrorReserves.applyDelta(delta, true);
             } else if (_type == ReservesType.PAIR) {
-                console.log("PAIR");
                 _pairReserves = _pairReserves.applyDelta(delta);
             } else if (_type == ReservesType.LEND) {
-                console.log("LEND");
                 _lendReserves = _lendReserves.applyDelta(delta);
             }
         }
