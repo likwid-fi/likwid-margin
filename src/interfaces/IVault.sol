@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import {Currency} from "../types/Currency.sol";
 import {PoolKey} from "../types/PoolKey.sol";
+import {MarginBalanceDelta} from "../types/MarginBalanceDelta.sol";
 import {IERC6909Claims} from "./external/IERC6909Claims.sol";
 import {BalanceDelta} from "../types/BalanceDelta.sol";
 import {PoolId} from "../types/PoolId.sol";
@@ -79,25 +80,6 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
         bytes32 salt
     );
 
-    event Margin(
-        PoolId indexed id,
-        address indexed sender,
-        bool marginForOne,
-        int128 amount,
-        uint128 marginTotal,
-        uint128 borrowAmount,
-        bytes32 salt
-    );
-
-    event Close(
-        PoolId indexed id,
-        address indexed sender,
-        bytes32 positionKey,
-        uint256 rewardAmount,
-        uint24 closeMillionth,
-        bytes32 salt
-    );
-
     /// @notice All interactions on the contract that account deltas require unlocking. A caller that calls `unlock` must implement
     /// `IUnlockCallback(msg.sender).unlockCallback(data)`, where they interact with the remaining functions on this contract.
     /// @dev The only functions callable without an unlocking are `initialize`
@@ -162,49 +144,9 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
     /// @return lendDelta The change in the lender's balance.
     function lend(PoolKey memory key, LendParams memory params) external returns (BalanceDelta lendDelta);
 
-    struct MarginParams {
-        /// False if margin token0,true if margin token1
-        bool marginForOne;
-        /// The amount to change, negative for margin amount, positive for repay amount, zero if only modifying margin
-        int128 amount;
-        // margin
-        uint128 marginTotal;
-        // borrow
-        uint128 borrowAmount;
-        // modify
-        int128 changeAmount;
-        // check min level
-        uint24 minMarginLevel;
-        bytes32 salt;
-    }
-
-    /// @notice Opens a margin position.
-    /// @dev Allows a user to open a margin position, borrowing tokens to leverage their position.
-    /// @param key The key of the pool to open the margin position in.
-    /// @param params The parameters for the margin position, including the amount and leverage.
-    /// @return marginDelta The change in the user's balance.
-    /// @return assetAmount The amount of asset involved in the margin operation.
-    /// @return feeAmount The fee charged for opening the margin position.
-    function margin(PoolKey memory key, MarginParams memory params)
+    function marginBalance(PoolKey memory key, MarginBalanceDelta memory params)
         external
-        returns (BalanceDelta marginDelta, uint256 assetAmount, uint256 feeAmount);
-
-    struct CloseParams {
-        bytes32 positionKey;
-        bytes32 salt;
-        uint256 rewardAmount;
-        uint24 closeMillionth;
-    }
-
-    /// @notice Closes a margin position.
-    /// @dev Allows a user to close an existing margin position.
-    /// @param key The key of the pool where the position is held.
-    /// @param params The parameters for closing the position.
-    /// @return closeDelta The change in the user's balance.
-    /// @return profitAmount The profit from closing the position.
-    function close(PoolKey memory key, IVault.CloseParams memory params)
-        external
-        returns (BalanceDelta closeDelta, uint256 profitAmount);
+        returns (BalanceDelta marginDelta, uint256 feeAmount);
 
     /// @notice Writes the current ERC20 balance of the specified currency to transient storage
     /// This is used to checkpoint balances for the manager and derive deltas for the caller.

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {Math} from "../libraries/Math.sol";
-import {FeeType} from "../types/FeeType.sol";
-import {CustomRevert} from "../libraries/CustomRevert.sol";
+import {FeeTypes} from "../types/FeeTypes.sol";
+import {Math} from "./Math.sol";
+import {CustomRevert} from "./CustomRevert.sol";
 
 /// @notice A library for handling protocol fees represented as a packed uint24 value.
 library ProtocolFeeLibrary {
@@ -43,32 +43,32 @@ library ProtocolFeeLibrary {
         }
     }
 
-    function getProtocolFee(uint24 self, FeeType feeType) internal pure returns (uint8) {
-        if (feeType == FeeType.SWAP) {
+    function getProtocolFee(uint24 self, FeeTypes feeType) internal pure returns (uint8) {
+        if (feeType == FeeTypes.SWAP) {
             return getProtocolSwapFee(self);
-        } else if (feeType == FeeType.MARGIN) {
+        } else if (feeType == FeeTypes.MARGIN) {
             return getProtocolMarginFee(self);
-        } else if (feeType == FeeType.INTERESTS) {
+        } else if (feeType == FeeTypes.INTERESTS) {
             return getProtocolInterestFee(self);
         }
         return 0; // Default case, should not happen
     }
 
-    function setProtocolFee(uint24 self, FeeType feeType, uint8 newFee) internal pure returns (uint24) {
+    function setProtocolFee(uint24 self, FeeTypes feeType, uint8 newFee) internal pure returns (uint24) {
         if (newFee > MAX_PROTOCOL_FEE) {
             InvalidProtocolFee.selector.revertWith(newFee);
         }
-        if (feeType == FeeType.SWAP) {
+        if (feeType == FeeTypes.SWAP) {
             return (self & 0xffff00) | newFee; // Set swap fee
-        } else if (feeType == FeeType.MARGIN) {
+        } else if (feeType == FeeTypes.MARGIN) {
             return (self & 0xff00ff) | (uint24(newFee) << 8); // Set margin fee
-        } else if (feeType == FeeType.INTERESTS) {
+        } else if (feeType == FeeTypes.INTERESTS) {
             return (self & 0x00ffff) | (uint24(newFee) << 16); // Set interest fee
         }
         return self; // Default case, should not happen
     }
 
-    function splitFee(uint24 self, FeeType feeType, uint256 feeAmount)
+    function splitFee(uint24 self, FeeTypes feeType, uint256 feeAmount)
         internal
         pure
         returns (uint256 protocolFee, uint256 remainingFee)

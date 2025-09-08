@@ -79,18 +79,12 @@ contract StateLibraryTest is Test, IUnlockCallback {
             (PoolKey memory key, IVault.LendParams memory lendParams) = abi.decode(params, (PoolKey, IVault.LendParams));
             BalanceDelta delta = vault.lend(key, lendParams);
             settleDelta(delta);
-        } else if (selector == this.margin_callback.selector) {
-            (PoolKey memory key, IVault.MarginParams memory marginParams) =
-                abi.decode(params, (PoolKey, IVault.MarginParams));
-            (BalanceDelta delta,,) = vault.margin(key, marginParams);
-            settleDelta(delta);
         }
         return "";
     }
 
     function modifyLiquidity_callback(PoolKey memory, IVault.ModifyLiquidityParams memory) external pure {}
     function lend_callback(PoolKey memory, IVault.LendParams memory) external pure {}
-    function margin_callback(PoolKey memory, IVault.MarginParams memory) external pure {}
 
     function settleDelta(BalanceDelta delta) internal {
         if (delta.amount0() < 0) {
@@ -132,43 +126,6 @@ contract StateLibraryTest is Test, IUnlockCallback {
         // 3. Assert the state is correct
         assertEq(positionState.lendForOne, lendForOne, "lendForOne should be correct");
         assertEq(uint256(positionState.lendAmount), uint256(-int256(amountToLend)), "lendAmount should be correct");
-        assertTrue(positionState.depositCumulativeLast != 0, "depositCumulativeLast should be set");
-    }
-
-    function testGetMarginPositionState() public {
-        // 1. Margin to the pool to create a margin position
-        bool marginForOne = false;
-        int128 amount = -1 ether; // margin amount
-        uint128 marginTotal = 0; // Pure borrow
-        uint128 borrowAmount = uint128(0.1 ether);
-        bytes32 salt = keccak256("my_margin_position");
-
-        token0.mint(address(this), uint256(-int256(amount)));
-
-        IVault.MarginParams memory marginParams = IVault.MarginParams({
-            marginForOne: marginForOne,
-            amount: amount,
-            marginTotal: marginTotal,
-            borrowAmount: borrowAmount,
-            changeAmount: 0,
-            minMarginLevel: 0,
-            salt: salt
-        });
-
-        bytes memory innerData = abi.encode(poolKey, marginParams);
-        bytes memory data = abi.encode(this.margin_callback.selector, innerData);
-        vault.unlock(data);
-
-        // 2. Get the position state using the library function
-        MarginPosition.State memory positionState =
-            StateLibrary.getMarginPositionState(vault, poolId, address(this), marginForOne, salt);
-
-        // 3. Assert the state is correct
-        assertEq(positionState.marginForOne, marginForOne, "marginForOne should be correct");
-        assertEq(uint256(positionState.marginAmount), uint256(-int256(amount)), "marginAmount should be correct");
-        assertEq(uint256(positionState.marginTotal), uint256(marginTotal), "marginTotal should be correct");
-        assertEq(uint256(positionState.debtAmount), uint256(borrowAmount), "debtAmount should be correct");
-        assertTrue(positionState.borrowCumulativeLast != 0, "borrowCumulativeLast should be set");
         assertTrue(positionState.depositCumulativeLast != 0, "depositCumulativeLast should be set");
     }
 }

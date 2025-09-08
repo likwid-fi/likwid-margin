@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {FeeType} from "../types/FeeType.sol";
+import {FeeTypes} from "../types/FeeTypes.sol";
 import {Reserves, toReserves} from "../types/Reserves.sol";
 import {MarginState} from "../types/MarginState.sol";
 import {Math} from "./Math.sol";
@@ -96,7 +96,7 @@ library InterestMath {
             ) - params.mirrorReserve * FixedPoint96.Q96 + params.interestReserve;
 
             (uint256 protocolInterest,) =
-                ProtocolFeeLibrary.splitFee(params.protocolFee, FeeType.INTERESTS, allInterest);
+                ProtocolFeeLibrary.splitFee(params.protocolFee, FeeTypes.INTERESTS, allInterest);
 
             if (protocolInterest == 0 || protocolInterest > FixedPoint96.Q96) {
                 uint256 allInterestNoQ96 = allInterest / FixedPoint96.Q96;
@@ -121,66 +121,5 @@ library InterestMath {
                 result.newInterestReserve = allInterest;
             }
         }
-    }
-
-    function getUpdatedCumulativeValues(
-        uint256 timeElapsed,
-        uint256 borrow0CumulativeBefore,
-        uint256 borrow1CumulativeBefore,
-        uint256 deposit0CumulativeBefore,
-        uint256 deposit1CumulativeBefore,
-        MarginState marginState,
-        Reserves realReserves,
-        Reserves mirrorReserves,
-        Reserves pairReserves,
-        Reserves lendReserves,
-        Reserves interestReserves,
-        uint24 protocolFee
-    )
-        internal
-        pure
-        returns (
-            uint256 borrow0CumulativeLast,
-            uint256 borrow1CumulativeLast,
-            uint256 deposit0CumulativeLast,
-            uint256 deposit1CumulativeLast
-        )
-    {
-        (borrow0CumulativeLast, borrow1CumulativeLast) = getBorrowRateCumulativeLast(
-            timeElapsed, borrow0CumulativeBefore, borrow1CumulativeBefore, marginState, realReserves, mirrorReserves
-        );
-
-        (uint256 mirrorReserve0, uint256 mirrorReserve1) = mirrorReserves.reserves();
-        (uint256 pairReserve0, uint256 pairReserve1) = pairReserves.reserves();
-        (uint256 lendReserve0, uint256 lendReserve1) = lendReserves.reserves();
-        (uint256 interestReserve0, uint256 interestReserve1) = interestReserves.reserves();
-
-        InterestUpdateParams memory params0 = InterestUpdateParams({
-            mirrorReserve: mirrorReserve0,
-            borrowCumulativeLast: borrow0CumulativeLast,
-            borrowCumulativeBefore: borrow0CumulativeBefore,
-            interestReserve: interestReserve0,
-            pairReserve: pairReserve0,
-            lendReserve: lendReserve0,
-            depositCumulativeLast: deposit0CumulativeBefore,
-            protocolFee: protocolFee
-        });
-
-        InterestUpdateResult memory result0 = updateInterestForOne(params0);
-        deposit0CumulativeLast = result0.newDepositCumulativeLast;
-
-        InterestUpdateParams memory params1 = InterestUpdateParams({
-            mirrorReserve: mirrorReserve1,
-            borrowCumulativeLast: borrow1CumulativeLast,
-            borrowCumulativeBefore: borrow1CumulativeBefore,
-            interestReserve: interestReserve1,
-            pairReserve: pairReserve1,
-            lendReserve: lendReserve1,
-            depositCumulativeLast: deposit1CumulativeBefore,
-            protocolFee: protocolFee
-        });
-
-        InterestUpdateResult memory result1 = updateInterestForOne(params1);
-        deposit1CumulativeLast = result1.newDepositCumulativeLast;
     }
 }

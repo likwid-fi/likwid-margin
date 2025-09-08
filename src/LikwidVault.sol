@@ -4,9 +4,10 @@ pragma solidity 0.8.28;
 
 import {Currency, CurrencyLibrary} from "./types/Currency.sol";
 import {PoolKey} from "./types/PoolKey.sol";
+import {MarginBalanceDelta} from "./types/MarginBalanceDelta.sol";
 import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "./types/BalanceDelta.sol";
 import {PoolId} from "./types/PoolId.sol";
-import {FeeType} from "./types/FeeType.sol";
+import {FeeTypes} from "./types/FeeTypes.sol";
 import {IVault} from "./interfaces/IVault.sol";
 import {IUnlockCallback} from "./interfaces/callback/IUnlockCallback.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
@@ -155,7 +156,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
             if (amountToProtocol > 0) {
                 _updateProtocolFees(feeCurrency, amountToProtocol);
             }
-            emit Fees(id, feeCurrency, msg.sender, uint8(FeeType.SWAP), feeAmount);
+            emit Fees(id, feeCurrency, msg.sender, uint8(FeeTypes.SWAP), feeAmount);
         }
 
         emit Swap(id, msg.sender, swapDelta.amount0(), swapDelta.amount1(), pool.slot0.totalSupply(), swapFee);
@@ -189,72 +190,28 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     }
 
     /// @inheritdoc IVault
-    function margin(PoolKey memory key, IVault.MarginParams memory params)
+    function marginBalance(PoolKey memory key, MarginBalanceDelta memory params)
         external
         onlyWhenUnlocked
-        noDelegateCall
         onlyManager
-        returns (BalanceDelta marginDelta, uint256 assetAmount, uint256 feeAmount)
+        noDelegateCall
+        returns (BalanceDelta marginDelta, uint256 feeAmount)
     {
-        if (params.amount == 0 && params.changeAmount == 0) AmountCannotBeZero.selector.revertWith();
-
         PoolId id = key.toId();
         Pool.State storage pool = _getAndUpdatePool(key);
         pool.checkPoolInitialized();
         uint256 amountToProtocol;
-        (marginDelta, assetAmount, amountToProtocol, feeAmount) = pool.margin(
-            Pool.MarginParams({
-                sender: msg.sender,
-                marginForOne: params.marginForOne,
-                amount: params.amount,
-                marginTotal: params.marginTotal,
-                borrowAmount: params.borrowAmount,
-                changeAmount: params.changeAmount,
-                minMarginLevel: params.minMarginLevel,
-                salt: params.salt
-            })
-        );
+        (marginDelta, amountToProtocol, feeAmount) = pool.margin(params);
 
         if (feeAmount > 0) {
             Currency feeCurrency = params.marginForOne ? key.currency1 : key.currency0;
             if (amountToProtocol > 0) {
                 _updateProtocolFees(feeCurrency, amountToProtocol);
             }
-            emit Fees(id, feeCurrency, msg.sender, uint8(FeeType.MARGIN), feeAmount);
+            emit Fees(id, feeCurrency, msg.sender, uint8(FeeTypes.MARGIN), feeAmount);
         }
 
         _appendPoolBalanceDelta(key, msg.sender, marginDelta);
-
-        emit Margin(
-            id, msg.sender, params.marginForOne, params.amount, params.marginTotal, params.borrowAmount, params.salt
-        );
-    }
-
-    /// @inheritdoc IVault
-    function close(PoolKey memory key, IVault.CloseParams memory params)
-        external
-        onlyWhenUnlocked
-        noDelegateCall
-        returns (BalanceDelta closeDelta, uint256 profitAmount)
-    {
-        if (params.closeMillionth == 0) AmountCannotBeZero.selector.revertWith();
-
-        PoolId id = key.toId();
-        Pool.State storage pool = _getAndUpdatePool(key);
-        pool.checkPoolInitialized();
-        (closeDelta, profitAmount) = pool.close(
-            Pool.CloseParams({
-                sender: msg.sender,
-                positionKey: params.positionKey,
-                salt: params.salt,
-                rewardAmount: params.rewardAmount,
-                closeMillionth: params.closeMillionth
-            })
-        );
-
-        _appendPoolBalanceDelta(key, msg.sender, closeDelta);
-
-        emit Close(id, msg.sender, params.positionKey, params.rewardAmount, params.closeMillionth, params.salt);
     }
 
     /// @inheritdoc IVault
@@ -369,10 +326,10 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         _pool = _pools[id];
         (uint256 pairInterest0, uint256 pairInterest1) = _pool.updateInterests(marginState);
         if (pairInterest0 > 0) {
-            emit Fees(id, key.currency0, address(this), uint8(FeeType.INTERESTS), pairInterest0);
+            emit Fees(id, key.currency0, address(this), uint8(FeeTypes.INTERESTS), pairInterest0);
         }
         if (pairInterest1 > 0) {
-            emit Fees(id, key.currency1, address(this), uint8(FeeType.INTERESTS), pairInterest1);
+            emit Fees(id, key.currency1, address(this), uint8(FeeTypes.INTERESTS), pairInterest1);
         }
     }
 
@@ -387,7 +344,9 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     /// @dev Only the owner can call this function.
     /// @param controller The address of the new margin controller.
     function setMarginController(address controller) external onlyOwner {
-        marginController = controller;
-        emit MarginControllerUpdated(controller);
+        if (marginController == address(0)) {
+            marginController = controller;
+            emit MarginControllerUpdated(controller);
+        }
     }
 }

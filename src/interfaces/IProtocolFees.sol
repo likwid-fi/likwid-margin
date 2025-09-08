@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {FeeType} from "../types/FeeType.sol";
+import {FeeTypes} from "../types/FeeTypes.sol";
 import {Currency} from "../types/Currency.sol";
 import {PoolId} from "../types/PoolId.sol";
 import {PoolKey} from "../types/PoolKey.sol";
@@ -32,7 +32,7 @@ interface IProtocolFees {
     /// @param key The key of the pool to set a protocol fee for
     /// @param feeType The type of fee to set (swap, margin, or interest)
     /// @param newFee The new protocol fee to set, represented as an integer between 0 and 200 (inclusive) where 200 represents a 100% protocol fee
-    function setProtocolFee(PoolKey memory key, FeeType feeType, uint8 newFee) external;
+    function setProtocolFee(PoolKey memory key, FeeTypes feeType, uint8 newFee) external;
 
     /// @notice Sets the protocol fee controller
     /// @param controller The new protocol fee controller

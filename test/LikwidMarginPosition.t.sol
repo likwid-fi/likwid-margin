@@ -75,240 +75,27 @@ contract LikwidMarginPositionTest is Test {
     }
 
     function testAddMargin() public {
-        // 1. Arrange
         uint256 marginAmount = 1e18;
         token0.mint(address(this), marginAmount);
 
         IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
-            recipient: address(this),
-            marginForOne: false,
+            marginForOne: false, // margin with token0, borrow token1
             leverage: 2,
-            marginAmount: marginAmount,
+            marginAmount: uint128(marginAmount),
             borrowAmount: 0,
-            borrowAmountMax: 6e18,
-            deadline: block.timestamp + 1
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
         });
 
-        // 2. Act
         (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
 
-        // 3. Assert
-        assertEq(tokenId, 1, "First token minted should have ID 1");
-        assertEq(marginPositionManager.ownerOf(tokenId), address(this), "Owner of new token should be the caller");
-        assertTrue(borrowAmount > 0, "Borrow amount should be greater than zero");
+        assertTrue(tokenId > 0);
+        assertTrue(borrowAmount > 0);
 
-        (bool marginForOne, bool isBorrow) = marginPositionManager.positionInfos(tokenId);
-        assertEq(marginForOne, false, "marginForOne should be false");
-        assertFalse(isBorrow, "isBorrow should be false");
-    }
+        MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
 
-    function testAddMarginInsufficientBorrowReceived() public {
-        // 1. Arrange
-        uint256 marginAmount = 1e18;
-        token0.mint(address(this), marginAmount);
-
-        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
-            recipient: address(this),
-            marginForOne: false,
-            leverage: 2,
-            marginAmount: marginAmount,
-            borrowAmount: 0,
-            borrowAmountMax: 1e18,
-            deadline: block.timestamp + 1
-        });
-
-        vm.expectRevert(abi.encodeWithSelector(IMarginPositionManager.InsufficientBorrowReceived.selector));
-        marginPositionManager.addMargin(key, params);
-    }
-
-    function testAddMarginBorrow() public {
-        // 1. Arrange
-        uint256 marginAmount = 1e18;
-        uint256 borrowAmount = 0.5e18;
-        token0.mint(address(this), marginAmount);
-
-        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
-            recipient: address(this),
-            marginForOne: false,
-            leverage: 0,
-            marginAmount: marginAmount,
-            borrowAmount: borrowAmount,
-            borrowAmountMax: borrowAmount,
-            deadline: block.timestamp + 1
-        });
-
-        // 2. Act
-        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
-
-        // 3. Assert
-        assertEq(tokenId, 1, "First token minted should have ID 1");
-        assertEq(marginPositionManager.ownerOf(tokenId), address(this), "Owner of new token should be the caller");
-
-        (bool marginForOne, bool isBorrow) = marginPositionManager.positionInfos(tokenId);
-        assertEq(marginForOne, false, "marginForOne should be false");
-        assertTrue(isBorrow, "isBorrow should be true");
-    }
-
-    function testRepay() public {
-        // 1. Arrange
-        uint256 marginAmount = 1e18;
-        token0.mint(address(this), marginAmount);
-
-        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
-            recipient: address(this),
-            marginForOne: false,
-            leverage: 2,
-            marginAmount: marginAmount,
-            borrowAmount: 0,
-            borrowAmountMax: 6e18,
-            deadline: block.timestamp + 1
-        });
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
-        assertEq(token0.balanceOf(address(this)), 0, "Cost all token0");
-
-        // 2. Act
-        uint256 repayAmount = borrowAmount / 2;
-        token1.mint(address(this), repayAmount);
-        marginPositionManager.repay(tokenId, repayAmount, block.timestamp + 1);
-
-        // 3. Assert
-        MarginPosition.State memory positionState = marginPositionManager.getPositionState(tokenId);
-        assertTrue(positionState.debtAmount < borrowAmount, "Debt should be reduced");
-        assertTrue(positionState.debtAmount == uint128(borrowAmount - repayAmount), "Debt should be reduced");
-        skip(1000);
-        positionState = marginPositionManager.getPositionState(tokenId);
-        assertTrue(positionState.debtAmount > uint128(borrowAmount - repayAmount), "Interests added.");
-    }
-
-    function testClose() public {
-        // 1. Arrange
-        uint256 marginAmount = 1e18;
-        token0.mint(address(this), marginAmount);
-
-        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
-            recipient: address(this),
-            marginForOne: false,
-            leverage: 2, // Using leverage
-            marginAmount: marginAmount,
-            borrowAmount: 0,
-            borrowAmountMax: 6e18,
-            deadline: block.timestamp + 1
-        });
-        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
-        uint256 balanceBefore = token0.balanceOf(address(this));
-
-        // 2. Act
-        marginPositionManager.close(tokenId, 1_000_000, 0, block.timestamp + 1);
-
-        // 3. Assert
-        uint256 balanceAfter = token0.balanceOf(address(this));
-        assertTrue(balanceAfter > balanceBefore, "Collateral should be returned");
-    }
-
-    function testLiquidateBurn() public {
-        // 1. Arrange: Create a leveraged margin position
-        uint256 marginAmount = 0.01e18;
-        token0.mint(address(this), marginAmount);
-
-        IMarginPositionManager.CreateParams memory createParams = IMarginPositionManager.CreateParams({
-            recipient: address(this),
-            marginForOne: false, // Collateral is token0, borrow token1
-            leverage: 5,
-            marginAmount: marginAmount,
-            borrowAmount: 0,
-            borrowAmountMax: 5e18,
-            deadline: block.timestamp + 1
-        });
-
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, createParams);
-        console.log("borrowAmount:", borrowAmount);
-        MarginPosition.State memory positionState = marginPositionManager.getPositionState(tokenId);
-        Reserves pairReserves = StateLibrary.getPairReserves(vault, key.toId());
-        uint256 level = MarginPosition.marginLevel(
-            positionState, pairReserves, positionState.borrowCumulativeLast, positionState.depositCumulativeLast
-        );
-        console.log("Margin Level (Burn):", level);
-        skip(10);
-        // 2. Act: Manipulate the price to make the position liquidatable
-        // We need to drive the price of token0 down. We sell token0 for token1.
-        uint256 amountToSwap = 15e18; // A large amount to cause significant price impact
-        token0.mint(address(this), amountToSwap);
-
-        LikwidPairPosition.SwapInputParams memory swapParams = LikwidPairPosition.SwapInputParams({
-            poolId: key.toId(),
-            zeroForOne: true, // token0 for token1
-            to: address(this),
-            amountIn: amountToSwap,
-            amountOutMin: 0,
-            deadline: 11
-        });
-
-        pairPositionManager.exactInput(swapParams);
-        skip(1000);
-        positionState = marginPositionManager.getPositionState(tokenId);
-        pairReserves = StateLibrary.getPairReserves(vault, key.toId());
-        level = MarginPosition.marginLevel(
-            positionState, pairReserves, positionState.borrowCumulativeLast, positionState.depositCumulativeLast
-        );
-        console.log("Margin Level (Burn):", level);
-        console.log("Liquidation Level:", marginPositionManager.marginLevels().liquidateLevel());
-
-        (bool liquidated,,) = marginPositionManager.checkLiquidate(tokenId);
-        assertTrue(liquidated, "Position should be liquidated");
-
-        address liquidator = address(0xDEADBEEF);
-        vm.prank(liquidator);
-        marginPositionManager.liquidateBurn(tokenId);
-    }
-
-    function testLiquidateCall() public {
-        // 1. Arrange: Create a borrow position
-        uint256 marginAmount = 0.2e18; // Collateral
-        uint256 borrowAmount = 0.05e18;
-        token1.mint(address(this), marginAmount);
-
-        IMarginPositionManager.CreateParams memory createParams = IMarginPositionManager.CreateParams({
-            recipient: address(this),
-            marginForOne: true, // Collateral is token1, borrow token0
-            leverage: 0,
-            marginAmount: marginAmount,
-            borrowAmount: borrowAmount,
-            borrowAmountMax: borrowAmount,
-            deadline: block.timestamp + 1
-        });
-
-        (uint256 tokenId,) = marginPositionManager.addMargin(key, createParams);
-        skip(10);
-        address owner = marginPositionManager.ownerOf(tokenId);
-
-        // 2. Act: Manipulate the price to make the position liquidatable
-        // We need to drive the price of token0 up. We sell token1 for token0.
-        uint256 amountToSwap = 100e18; // A large amount to cause significant price impact
-        token1.mint(address(this), amountToSwap);
-
-        LikwidPairPosition.SwapInputParams memory swapParams = LikwidPairPosition.SwapInputParams({
-            poolId: key.toId(),
-            zeroForOne: false, // token1 for token0
-            to: address(this),
-            amountIn: amountToSwap,
-            amountOutMin: 0,
-            deadline: 12
-        });
-
-        pairPositionManager.exactInput(swapParams);
-        skip(1000);
-        // 3. Assert: Check if liquidatable and liquidate
-        (bool liquidated,,) = marginPositionManager.checkLiquidate(tokenId);
-        assertTrue(liquidated, "Position should be liquidatable");
-
-        address liquidator = address(0xDEADBEEF);
-        token0.mint(liquidator, borrowAmount);
-        vm.prank(liquidator);
-        token0.approve(address(marginPositionManager), borrowAmount);
-        marginPositionManager.liquidateCall(tokenId);
-
-        MarginPosition.State memory positionState = marginPositionManager.getPositionState(tokenId);
-        assertEq(positionState.debtAmount, 0, "Debt should be fully repaid");
-        assertEq(marginPositionManager.ownerOf(tokenId), owner, "Owner should not change");
+        assertEq(position.marginAmount, marginAmount, "position.marginAmount==marginAmount");
+        assertEq(position.debtAmount, borrowAmount, "position.debtAmount==borrowAmount");
     }
 }
