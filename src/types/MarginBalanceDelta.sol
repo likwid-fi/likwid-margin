@@ -13,4 +13,5 @@ struct MarginBalanceDelta {
     BalanceDelta mirrorDelta;
     BalanceDelta pairDelta;
     BalanceDelta lendDelta;
+    uint256 debtDepositCumulativeLast;
 }

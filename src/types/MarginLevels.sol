@@ -15,6 +15,13 @@ library MarginLevelsLibrary {
     uint8 internal constant CALLER_PROFIT_OFFSET = 96;
     uint8 internal constant PROTOCOL_PROFIT_OFFSET = 120;
 
+    function isValidMarginLevels(MarginLevels _packed) internal pure returns (bool valid) {
+        uint24 _liquidateLevel = liquidateLevel(_packed);
+        uint24 one = 10 ** 6;
+        valid = _liquidateLevel >= one && minMarginLevel(_packed) > _liquidateLevel
+            && minBorrowLevel(_packed) > _liquidateLevel && liquidationRatio(_packed) <= one;
+    }
+
     // #### GETTERS ####
     function minMarginLevel(MarginLevels _packed) internal pure returns (uint24 _minMarginLevel) {
         assembly ("memory-safe") {

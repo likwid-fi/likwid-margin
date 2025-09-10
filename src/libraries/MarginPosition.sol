@@ -75,11 +75,11 @@ library MarginPosition {
         State storage self,
         uint256 borrowCumulativeLast,
         uint256 depositCumulativeLast,
-        int128 changeAmount,
+        int128 marginChangeAmount,
         uint256 marginWithoutFee,
         uint256 borrowAmount,
         uint256 repayAmount
-    ) internal returns (uint256 releaseAmount) {
+    ) internal returns (uint256 releaseAmount, uint256 realRepayAmount) {
         uint256 marginAmount;
         uint256 marginTotal;
         uint256 positionValue;
@@ -92,26 +92,15 @@ library MarginPosition {
         if (self.borrowCumulativeLast != 0) {
             debtAmount = Math.mulDiv(self.debtAmount, borrowCumulativeLast, self.borrowCumulativeLast);
         }
-        bool hasLeverage = marginTotal > 0 || marginWithoutFee > 0;
-        if (changeAmount > 0) {
-            // modify
-            marginAmount += uint128(changeAmount);
-            // margin or borrow
-            if (borrowAmount > 0) {
-                if (hasLeverage && marginWithoutFee == 0) {
-                    // when margin, marginWithoutFee should >0
-                    ChangeMarginAction.selector.revertWith();
-                }
-                marginTotal += marginWithoutFee;
-                debtAmount += borrowAmount;
-            }
-        } else if (changeAmount < 0) {
-            //  repay or modify
-            marginAmount -= uint128(-changeAmount);
-        }
         if (repayAmount > 0) {
-            releaseAmount = Math.mulDiv(positionValue, repayAmount.toUint128(), debtAmount);
-            debtAmount -= uint128(repayAmount);
+            if (repayAmount > debtAmount) {
+                realRepayAmount = debtAmount;
+                releaseAmount = positionValue;
+            } else {
+                releaseAmount = Math.mulDiv(positionValue, repayAmount.toUint128(), debtAmount);
+                realRepayAmount = repayAmount;
+            }
+            debtAmount -= uint128(realRepayAmount);
             if (marginTotal > 0) {
                 uint256 marginAmountReleased = Math.mulDiv(releaseAmount, marginAmount, positionValue);
                 marginAmount = marginAmount - marginAmountReleased;
@@ -122,6 +111,24 @@ library MarginPosition {
             } else {
                 marginAmount = marginAmount - releaseAmount;
             }
+        } else {
+            bool hasLeverage = marginTotal > 0 || marginWithoutFee > 0;
+            if (marginChangeAmount > 0) {
+                // modify
+                marginAmount += uint128(marginChangeAmount);
+                // margin or borrow
+                if (borrowAmount > 0) {
+                    if (hasLeverage && marginWithoutFee == 0) {
+                        // when margin, marginWithoutFee should >0
+                        ChangeMarginAction.selector.revertWith();
+                    }
+                    marginTotal += marginWithoutFee;
+                    debtAmount += borrowAmount;
+                }
+            } else if (marginChangeAmount < 0) {
+                //  repay or modify
+                marginAmount -= uint128(-marginChangeAmount);
+            }
         }
 
         self.marginAmount = marginAmount.toUint128();
@@ -129,5 +136,65 @@ library MarginPosition {
         self.depositCumulativeLast = depositCumulativeLast;
         self.debtAmount = debtAmount.toUint128();
         self.borrowCumulativeLast = borrowCumulativeLast;
+    }
+
+    function close(
+        State storage self,
+        Reserves pairReserves,
+        uint256 borrowCumulativeLast,
+        uint256 depositCumulativeLast,
+        uint256 rewardAmount,
+        uint24 closeMillionth
+    ) internal returns (uint256 releaseAmount, uint256 repayAmount, uint256 profitAmount, uint256 lostAmount) {
+        if (closeMillionth == 0 || closeMillionth > PerLibrary.ONE_MILLION) {
+            PerLibrary.InvalidMillionth.selector.revertWith();
+        }
+        if (self.debtAmount > 0) {
+            uint256 marginAmount;
+            uint256 marginTotal;
+            uint256 positionValue;
+            uint256 debtAmount;
+            if (self.depositCumulativeLast != 0) {
+                marginAmount = Math.mulDiv(self.marginAmount, depositCumulativeLast, self.depositCumulativeLast);
+                marginTotal = Math.mulDiv(self.marginTotal, depositCumulativeLast, self.depositCumulativeLast);
+                positionValue = marginAmount + marginTotal;
+            }
+            if (self.borrowCumulativeLast != 0) {
+                debtAmount = Math.mulDiv(self.debtAmount, borrowCumulativeLast, self.borrowCumulativeLast);
+            }
+            positionValue -= rewardAmount;
+            releaseAmount = Math.mulDiv(positionValue, closeMillionth, PerLibrary.ONE_MILLION);
+            repayAmount = Math.mulDiv(debtAmount, closeMillionth, PerLibrary.ONE_MILLION);
+            uint256 payedAmount = SwapMath.getAmountOut(pairReserves, !self.marginForOne, releaseAmount);
+            if (releaseAmount < positionValue && repayAmount > payedAmount) {
+                PositionLiquidated.selector.revertWith();
+            } else {
+                // releaseAmount == positionValue or repayAmount <= payedAmount
+                uint256 costAmount = SwapMath.getAmountIn(pairReserves, !self.marginForOne, repayAmount);
+                if (releaseAmount > costAmount) {
+                    profitAmount = releaseAmount - costAmount;
+                } else if (repayAmount > payedAmount) {
+                    lostAmount = repayAmount - payedAmount;
+                }
+            }
+
+            if (marginTotal > 0) {
+                uint256 marginAmountReleased = Math.mulDiv(marginAmount, closeMillionth, PerLibrary.ONE_MILLION);
+                marginAmount = marginAmount - marginAmountReleased;
+                if (releaseAmount > marginAmountReleased) {
+                    uint256 marginTotalReleased = releaseAmount - marginAmountReleased;
+                    marginTotal = marginTotal - marginTotalReleased;
+                }
+            } else {
+                marginAmount =
+                    Math.mulDiv(marginAmount, PerLibrary.ONE_MILLION - closeMillionth, PerLibrary.ONE_MILLION);
+            }
+            debtAmount -= repayAmount;
+            self.marginAmount = marginAmount.toUint128();
+            self.marginTotal = marginTotal.toUint128();
+            self.depositCumulativeLast = depositCumulativeLast;
+            self.debtAmount = debtAmount.toUint128();
+            self.borrowCumulativeLast = borrowCumulativeLast;
+        }
     }
 }

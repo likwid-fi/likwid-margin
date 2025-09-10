@@ -319,6 +319,13 @@ library Pool {
             (amountToProtocol,) = ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeTypes.MARGIN, feeAmount);
         }
         marginDelta = params.marginDelta;
+        if (params.debtDepositCumulativeLast > 0) {
+            if (params.marginForOne) {
+                self.deposit0CumulativeLast = params.debtDepositCumulativeLast;
+            } else {
+                self.deposit1CumulativeLast = params.debtDepositCumulativeLast;
+            }
+        }
         ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](4);
         deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, marginDelta);
         deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, params.pairDelta);

@@ -213,7 +213,7 @@ library StateLibrary {
         bytes32 poolStateSlot = _getPoolStateSlot(poolId);
 
         // 1. Get slot0
-        (, state.lastUpdated, state.protocolFee,,) = getSlot0(vault, poolId);
+        (, state.lastUpdated, state.protocolFee, state.lpFee, state.marginFee) = getSlot0(vault, poolId);
 
         // 2. Get all other data in one call
         bytes32 startSlot = bytes32(uint256(poolStateSlot) + 1); // BORROW_0_CUMULATIVE_LAST_OFFSET

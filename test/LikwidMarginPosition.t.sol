@@ -75,7 +75,7 @@ contract LikwidMarginPositionTest is Test {
     }
 
     function testAddMargin() public {
-        uint256 marginAmount = 1e18;
+        uint256 marginAmount = 0.1e18;
         token0.mint(address(this), marginAmount);
 
         IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({

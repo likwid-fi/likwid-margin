@@ -5,23 +5,82 @@ import {PoolId} from "../types/PoolId.sol";
 import {PoolKey} from "../types/PoolKey.sol";
 
 interface IMarginPositionManager {
-    error InvalidMinLevel();
+    error InvalidLevel();
 
-    event MinMarginLevelChanged(uint24 oldLevel, uint24 newLevel);
-
-    event MinBorrowLevelChanged(uint24 oldLevel, uint24 newLevel);
-
-    event LiquidateLevelChanged(uint24 oldLevel, uint24 newLevel);
+    event MarginLevelChanged(bytes32 oldLevel, bytes32 newLevel);
 
     error InsufficientBorrowReceived();
 
     error InsufficientCloseReceived();
 
+    error InsufficientReceived();
+
     error PositionNotLiquidated();
 
-    event LiquidationRatioChanged(uint24 oldRatio, uint24 newRatio);
-    event CallerProfitChanged(uint24 oldProfit, uint24 newProfit);
-    event ProtocolProfitChanged(uint24 oldProfit, uint24 newProfit);
+    error MirrorTooMuch();
+
+    error BorrowTooMuch();
+
+    error ReservesNotEnough();
+
+    event Margin(
+        PoolId indexed poolId,
+        address indexed owner,
+        uint256 tokenId,
+        uint256 marginAmount,
+        uint256 marginTotal,
+        uint256 debtAmount,
+        bool marginForOne
+    );
+    event Repay(
+        PoolId indexed poolId,
+        address indexed sender,
+        uint256 tokenId,
+        uint256 marginAmount,
+        uint256 marginTotal,
+        uint256 debtAmount,
+        uint256 repayAmount
+    );
+    event Close(
+        PoolId indexed poolId,
+        address indexed sender,
+        uint256 tokenId,
+        uint256 marginAmount,
+        uint256 marginTotal,
+        uint256 debtAmount,
+        uint256 profitAmount
+    );
+    event Modify(
+        PoolId indexed poolId,
+        address indexed sender,
+        uint256 tokenId,
+        uint256 marginAmount,
+        uint256 marginTotal,
+        uint256 debtAmount,
+        int256 changeAmount
+    );
+    event LiquidateBurn(
+        PoolId indexed poolId,
+        address indexed sender,
+        uint256 tokenId,
+        uint256 marginAmount,
+        uint256 marginTotal,
+        uint256 debtAmount,
+        uint256 truncatedReserves,
+        uint256 pairReserves,
+        uint256 profitAmount
+    );
+    event LiquidateCall(
+        PoolId indexed poolId,
+        address indexed sender,
+        uint256 tokenId,
+        uint256 marginAmount,
+        uint256 marginTotal,
+        uint256 debtAmount,
+        uint256 truncatedReserves,
+        uint256 pairReserves,
+        uint256 repayAmount
+    );
 
     struct CreateParams {
         /// @notice true: currency1 is marginToken, false: currency0 is marginToken
@@ -40,6 +99,16 @@ interface IMarginPositionManager {
         uint256 deadline;
     }
 
+    /// @notice Create/Add a position
+    /// @param key The key of pool
+    /// @param params The parameters of the margin position
+    /// @return tokenId The id of position
+    /// @return borrowAmount The borrow amount
+    function addMargin(PoolKey memory key, IMarginPositionManager.CreateParams calldata params)
+        external
+        payable
+        returns (uint256 tokenId, uint256 borrowAmount);
+
     struct MarginParams {
         uint256 tokenId;
         /// @notice Leverage factor of the margin position.
@@ -53,16 +122,6 @@ interface IMarginPositionManager {
         /// @notice Deadline for the transaction
         uint256 deadline;
     }
-
-    /// @notice Create/Add a position
-    /// @param key The key of pool
-    /// @param params The parameters of the margin position
-    /// @return tokenId The id of position
-    /// @return borrowAmount The borrow amount
-    function addMargin(PoolKey memory key, IMarginPositionManager.CreateParams calldata params)
-        external
-        payable
-        returns (uint256 tokenId, uint256 borrowAmount);
 
     /// @notice Margin a position
     /// @param params The parameters of the margin position
