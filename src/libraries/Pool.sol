@@ -308,7 +308,7 @@ library Pool {
         returns (BalanceDelta marginDelta, uint256 amountToProtocol, uint256 feeAmount)
     {
         if (
-            (params.action != MarginActions.CLOSE || params.action != MarginActions.LIQUIDATE_BURN)
+            (params.action != MarginActions.CLOSE && params.action != MarginActions.LIQUIDATE_BURN)
                 && params.marginDelta == BalanceDeltaLibrary.ZERO_DELTA
         ) {
             InsufficientAmount.selector.revertWith();
