@@ -60,7 +60,6 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
     function addLiquidity(PoolKey memory key, uint256 amount0, uint256 amount1, uint256 amount0Min, uint256 amount1Min)
         external
         payable
-        nonReentrant
         returns (uint256 tokenId, uint128 liquidity)
     {
         tokenId = _mintPosition(key, msg.sender);
@@ -92,7 +91,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         uint256 amount1,
         uint256 amount0Min,
         uint256 amount1Min
-    ) external payable nonReentrant returns (uint128 liquidity) {
+    ) external payable returns (uint128 liquidity) {
         _requireAuth(msg.sender, tokenId);
         PoolId poolId = poolIds[tokenId];
         if (PoolId.unwrap(poolId) == 0) {
@@ -123,7 +122,6 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
     /// @return amount1 The amount of token1 received.
     function removeLiquidity(uint256 tokenId, uint128 liquidity, uint256 amount0Min, uint256 amount1Min)
         external
-        nonReentrant
         returns (uint256 amount0, uint256 amount1)
     {
         _requireAuth(msg.sender, tokenId);

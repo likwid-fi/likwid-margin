@@ -81,7 +81,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         }
     }
 
-    function deposit(uint256 tokenId, uint256 amount) public payable nonReentrant {
+    function deposit(uint256 tokenId, uint256 amount) public payable {
         _requireAuth(msg.sender, tokenId);
         PoolId poolId = poolIds[tokenId];
         Currency currency = currencies[tokenId];
@@ -99,7 +99,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         vault.unlock(data);
     }
 
-    function withdraw(uint256 tokenId, uint256 amount) external payable nonReentrant {
+    function withdraw(uint256 tokenId, uint256 amount) external payable {
         _requireAuth(msg.sender, tokenId);
         PoolId poolId = poolIds[tokenId];
         Currency currency = currencies[tokenId];

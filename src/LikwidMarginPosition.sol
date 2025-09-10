@@ -189,7 +189,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     function addMargin(PoolKey memory key, IMarginPositionManager.CreateParams calldata params)
         external
         payable
-        nonReentrant
         ensure(params.deadline)
         returns (uint256 tokenId, uint256 borrowAmount)
     {
@@ -253,7 +252,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     function margin(IMarginPositionManager.MarginParams memory params)
         external
         payable
-        nonReentrant
         ensure(params.deadline)
         returns (uint256 borrowAmount)
     {
@@ -367,12 +365,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     }
 
     /// @inheritdoc IMarginPositionManager
-    function repay(uint256 tokenId, uint256 repayAmount, uint256 deadline)
-        external
-        payable
-        nonReentrant
-        ensure(deadline)
-    {
+    function repay(uint256 tokenId, uint256 repayAmount, uint256 deadline) external payable ensure(deadline) {
         _requireAuth(msg.sender, tokenId);
         PoolId poolId = poolIds[tokenId];
         PoolKey memory key = poolKeys[poolId];
@@ -431,7 +424,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     /// @inheritdoc IMarginPositionManager
     function close(uint256 tokenId, uint24 closeMillionth, uint256 profitAmountMin, uint256 deadline)
         external
-        nonReentrant
         ensure(deadline)
     {
         _requireAuth(msg.sender, tokenId);
@@ -491,7 +483,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     }
 
     /// @inheritdoc IMarginPositionManager
-    function liquidateBurn(uint256 tokenId) external nonReentrant returns (uint256 profit) {
+    function liquidateBurn(uint256 tokenId) external returns (uint256 profit) {
         PoolId poolId = poolIds[tokenId];
         PoolState memory poolState = _getPoolState(poolId);
         MarginPosition.State storage position = positionInfos[tokenId];
@@ -555,12 +547,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     }
 
     /// @inheritdoc IMarginPositionManager
-    function liquidateCall(uint256 tokenId)
-        external
-        payable
-        nonReentrant
-        returns (uint256 profit, uint256 repayAmount)
-    {
+    function liquidateCall(uint256 tokenId) external payable returns (uint256 profit, uint256 repayAmount) {
         PoolId poolId = poolIds[tokenId];
         PoolState memory poolState = _getPoolState(poolId);
         MarginPosition.State storage position = positionInfos[tokenId];
@@ -635,7 +622,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     }
 
     /// @inheritdoc IMarginPositionManager
-    function modify(uint256 tokenId, int128 changeAmount) external payable nonReentrant {
+    function modify(uint256 tokenId, int128 changeAmount) external payable {
         _requireAuth(msg.sender, tokenId);
         PoolId poolId = poolIds[tokenId];
         PoolKey memory key = poolKeys[poolId];
