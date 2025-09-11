@@ -144,8 +144,15 @@ interface IMarginPositionManager {
     /// @param deadline Deadline for the transaction
     function close(uint256 tokenId, uint24 closeMillionth, uint256 profitAmountMin, uint256 deadline) external;
 
+    /// @notice Liquidates a position by burning the position token.
+    /// @param tokenId The ID of the position to liquidate.
+    /// @return profit The profit from the liquidation.
     function liquidateBurn(uint256 tokenId) external returns (uint256 profit);
 
+    /// @notice Liquidates a position by making a call.
+    /// @param tokenId The ID of the position to liquidate.
+    /// @return profit The profit from the liquidation.
+    /// @return repayAmount The amount repaid.
     function liquidateCall(uint256 tokenId) external payable returns (uint256 profit, uint256 repayAmount);
 
     /// @notice Modify the margin position

@@ -49,14 +49,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         return StateLibrary.getPairPositionState(vault, poolId, address(this), salt);
     }
 
-    /// @notice Creates a new liquidity position and adds liquidity to it.
-    /// @param key The pool key of the position to create.
-    /// @param amount0 The amount of token0 to add.
-    /// @param amount1 The amount of token1 to add.
-    /// @param amount0Min The minimum amount of token0 to deposit.
-    /// @param amount1Min The minimum amount of token1 to deposit.
-    /// @return tokenId The ID of the newly created position.
-    /// @return liquidity The amount of liquidity minted for the position.
+    /// @inheritdoc IPairPositionManager
     function addLiquidity(PoolKey memory key, uint256 amount0, uint256 amount1, uint256 amount0Min, uint256 amount1Min)
         external
         payable
@@ -96,13 +89,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         (liquidity, amount0, amount1) = abi.decode(result, (uint128, uint256, uint256));
     }
 
-    /// @notice Creates a new liquidity position and adds liquidity to it.
-    /// @param tokenId The ID of the position to add liquidity to.
-    /// @param amount0 The amount of token0 to add.
-    /// @param amount1 The amount of token1 to add.
-    /// @param amount0Min The minimum amount of token0 to deposit.
-    /// @param amount1Min The minimum amount of token1 to deposit.
-    /// @return liquidity The amount of liquidity minted for the position.
+    /// @inheritdoc IPairPositionManager
     function increaseLiquidity(
         uint256 tokenId,
         uint256 amount0,
@@ -113,13 +100,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         liquidity = _increaseLiquidity(msg.sender, msg.sender, tokenId, amount0, amount1, amount0Min, amount1Min);
     }
 
-    /// @notice Removes liquidity from an existing position.
-    /// @param tokenId The ID of the position to remove liquidity from.
-    /// @param liquidity The amount of liquidity to remove.
-    /// @param amount0Min The minimum amount of token0 to receive.
-    /// @param amount1Min The minimum amount of token1 to receive.
-    /// @return amount0 The amount of token0 received.
-    /// @return amount1 The amount of token1 received.
+    /// @inheritdoc IPairPositionManager
     function removeLiquidity(uint256 tokenId, uint128 liquidity, uint256 amount0Min, uint256 amount1Min)
         external
         returns (uint256 amount0, uint256 amount1)
@@ -163,15 +144,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         return abi.encode(finalLiquidityDelta, amount0, amount1);
     }
 
-    struct SwapInputParams {
-        PoolId poolId;
-        bool zeroForOne;
-        address to;
-        uint256 amountIn;
-        uint256 amountOutMin;
-        uint256 deadline;
-    }
-
+    /// @inheritdoc IPairPositionManager
     function exactInput(SwapInputParams calldata params)
         external
         payable
@@ -198,15 +171,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         amountOut = params.zeroForOne ? amount1 : amount0;
     }
 
-    struct SwapOutputParams {
-        PoolId poolId;
-        bool zeroForOne;
-        address to;
-        uint256 amountInMax;
-        uint256 amountOut;
-        uint256 deadline;
-    }
-
+    /// @inheritdoc IPairPositionManager
     function exactOutput(SwapOutputParams calldata params)
         external
         payable

@@ -69,15 +69,16 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         position.depositCumulativeLast = depositCumulativeLast;
     }
 
-    function addLending(PoolKey memory key, Currency currency, address to, uint256 amount)
+    /// @inheritdoc ILendPositionManager
+    function addLending(PoolKey memory key, Currency currency, address recipient, uint256 amount)
         external
         payable
         returns (uint256 tokenId)
     {
-        tokenId = _mintPosition(key, to);
+        tokenId = _mintPosition(key, recipient);
         currencies[tokenId] = currency;
         if (amount > 0) {
-            _deposit(msg.sender, msg.sender, tokenId, amount);
+            _deposit(msg.sender, recipient, tokenId, amount);
         }
     }
 
@@ -97,14 +98,19 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         bytes memory data = abi.encode(Actions.DEPOSIT, callbackData);
 
         vault.unlock(data);
+
+        emit Deposit(poolId, currency, sender, tokenId, tokenOwner, amount);
     }
 
-    function deposit(uint256 tokenId, uint256 amount) public payable {
+    /// @inheritdoc ILendPositionManager
+    function deposit(uint256 tokenId, uint256 amount) external payable {
         _deposit(msg.sender, msg.sender, tokenId, amount);
     }
 
-    function withdraw(uint256 tokenId, uint256 amount) external payable {
-        _requireAuth(msg.sender, tokenId);
+    /// @inheritdoc ILendPositionManager
+    function withdraw(uint256 tokenId, uint256 amount) external {
+        address sender = msg.sender;
+        _requireAuth(sender, tokenId);
         PoolId poolId = poolIds[tokenId];
         Currency currency = currencies[tokenId];
         PoolKey memory key = poolKeys[poolId];
@@ -115,10 +121,12 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
             salt: bytes32(tokenId)
         });
 
-        bytes memory callbackData = abi.encode(msg.sender, key, params);
+        bytes memory callbackData = abi.encode(sender, key, params);
         bytes memory data = abi.encode(Actions.WITHDRAW, callbackData);
 
         vault.unlock(data);
+
+        emit Withdraw(poolId, currency, sender, tokenId, sender, amount);
     }
 
     function handleLend(bytes memory _data) internal returns (bytes memory) {
@@ -132,15 +140,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         return abi.encode(amount0, amount1);
     }
 
-    struct SwapInputParams {
-        PoolId poolId;
-        bool zeroForOne;
-        uint256 tokenId;
-        uint256 amountIn;
-        uint256 amountOutMin;
-        uint256 deadline;
-    }
-
+    /// @inheritdoc ILendPositionManager
     function exactInput(SwapInputParams calldata params)
         external
         payable
@@ -172,15 +172,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         amountOut = params.zeroForOne ? amount1 : amount0;
     }
 
-    struct SwapOutputParams {
-        PoolId poolId;
-        bool zeroForOne;
-        uint256 tokenId;
-        uint256 amountInMax;
-        uint256 amountOut;
-        uint256 deadline;
-    }
-
+    /// @inheritdoc ILendPositionManager
     function exactOutput(SwapOutputParams calldata params)
         external
         payable

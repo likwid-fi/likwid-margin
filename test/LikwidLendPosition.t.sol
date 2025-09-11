@@ -164,7 +164,7 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
         assertEq(positionBefore.lendAmount, 0, "lendAmount should be zero");
         // swap mirror token0
-        LikwidLendPosition.SwapInputParams memory params = LikwidLendPosition.SwapInputParams({
+        ILendPositionManager.SwapInputParams memory params = ILendPositionManager.SwapInputParams({
             poolId: key.toId(),
             zeroForOne: false,
             tokenId: tokenId,
@@ -209,7 +209,7 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
         assertEq(positionBefore.lendAmount, 0, "positionBefore.lendAmount should be zero");
         // swap mirror token0
-        LikwidLendPosition.SwapOutputParams memory params = LikwidLendPosition.SwapOutputParams({
+        ILendPositionManager.SwapOutputParams memory params = ILendPositionManager.SwapOutputParams({
             poolId: key.toId(),
             zeroForOne: false,
             tokenId: tokenId,
