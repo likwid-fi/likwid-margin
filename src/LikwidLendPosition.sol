@@ -77,26 +77,30 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         tokenId = _mintPosition(key, to);
         currencies[tokenId] = currency;
         if (amount > 0) {
-            deposit(tokenId, amount);
+            _deposit(msg.sender, msg.sender, tokenId, amount);
         }
     }
 
-    function deposit(uint256 tokenId, uint256 amount) public payable {
-        _requireAuth(msg.sender, tokenId);
+    function _deposit(address sender, address tokenOwner, uint256 tokenId, uint256 amount) internal {
+        _requireAuth(tokenOwner, tokenId);
         PoolId poolId = poolIds[tokenId];
         Currency currency = currencies[tokenId];
         PoolKey memory key = poolKeys[poolId];
 
         IVault.LendParams memory params = IVault.LendParams({
             lendForOne: key.currency1 == currency,
-            lendAmount: SafeCast.toInt128(amount),
+            lendAmount: -amount.toInt128(),
             salt: bytes32(tokenId)
         });
 
-        bytes memory callbackData = abi.encode(msg.sender, key, params);
+        bytes memory callbackData = abi.encode(sender, key, params);
         bytes memory data = abi.encode(Actions.DEPOSIT, callbackData);
 
         vault.unlock(data);
+    }
+
+    function deposit(uint256 tokenId, uint256 amount) public payable {
+        _deposit(msg.sender, msg.sender, tokenId, amount);
     }
 
     function withdraw(uint256 tokenId, uint256 amount) external payable {
@@ -107,7 +111,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
 
         IVault.LendParams memory params = IVault.LendParams({
             lendForOne: key.currency1 == currency,
-            lendAmount: -SafeCast.toInt128(amount),
+            lendAmount: amount.toInt128(),
             salt: bytes32(tokenId)
         });
 

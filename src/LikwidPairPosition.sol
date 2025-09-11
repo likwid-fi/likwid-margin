@@ -63,6 +63,24 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         returns (uint256 tokenId, uint128 liquidity)
     {
         tokenId = _mintPosition(key, msg.sender);
+        liquidity = _increaseLiquidity(msg.sender, msg.sender, tokenId, amount0, amount1, amount0Min, amount1Min);
+    }
+
+    function _increaseLiquidity(
+        address sender,
+        address tokenOwner,
+        uint256 tokenId,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 amount0Min,
+        uint256 amount1Min
+    ) internal returns (uint128 liquidity) {
+        _requireAuth(tokenOwner, tokenId);
+        PoolId poolId = poolIds[tokenId];
+        if (PoolId.unwrap(poolId) == 0) {
+            revert("Invalid tokenId");
+        }
+        PoolKey memory key = poolKeys[poolId];
 
         IVault.ModifyLiquidityParams memory params = IVault.ModifyLiquidityParams({
             amount0: amount0,
@@ -71,7 +89,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
             salt: bytes32(tokenId)
         });
 
-        bytes memory callbackData = abi.encode(msg.sender, key, params, amount0Min, amount1Min);
+        bytes memory callbackData = abi.encode(sender, key, params, amount0Min, amount1Min);
         bytes memory data = abi.encode(Actions.MODIFY_LIQUIDITY, callbackData);
 
         bytes memory result = vault.unlock(data);
@@ -92,25 +110,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         uint256 amount0Min,
         uint256 amount1Min
     ) external payable returns (uint128 liquidity) {
-        _requireAuth(msg.sender, tokenId);
-        PoolId poolId = poolIds[tokenId];
-        if (PoolId.unwrap(poolId) == 0) {
-            revert("Invalid tokenId");
-        }
-        PoolKey memory key = poolKeys[poolId];
-
-        IVault.ModifyLiquidityParams memory params = IVault.ModifyLiquidityParams({
-            amount0: amount0,
-            amount1: amount1,
-            liquidityDelta: 0,
-            salt: bytes32(tokenId)
-        });
-
-        bytes memory callbackData = abi.encode(msg.sender, key, params, amount0Min, amount1Min);
-        bytes memory data = abi.encode(Actions.MODIFY_LIQUIDITY, callbackData);
-
-        bytes memory result = vault.unlock(data);
-        (liquidity, amount0, amount1) = abi.decode(result, (uint128, uint256, uint256));
+        liquidity = _increaseLiquidity(msg.sender, msg.sender, tokenId, amount0, amount1, amount0Min, amount1Min);
     }
 
     /// @notice Removes liquidity from an existing position.
