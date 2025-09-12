@@ -30,9 +30,9 @@ library MarginPosition {
         bool marginForOne;
         uint128 marginAmount;
         uint128 marginTotal;
+        uint256 depositCumulativeLast;
         uint128 debtAmount;
         uint256 borrowCumulativeLast;
-        uint256 depositCumulativeLast;
     }
 
     function marginLevel(

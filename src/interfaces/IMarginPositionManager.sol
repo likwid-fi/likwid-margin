@@ -8,6 +8,7 @@ interface IMarginPositionManager {
     error InvalidLevel();
 
     event MarginLevelChanged(bytes32 oldLevel, bytes32 newLevel);
+    event MarginFeeChanged(uint24 oldFee, uint24 newFee);
 
     error InsufficientBorrowReceived();
 
@@ -159,4 +160,6 @@ interface IMarginPositionManager {
     /// @param tokenId The id of position
     /// @param changeAmount The amount to modify
     function modify(uint256 tokenId, int128 changeAmount) external payable;
+
+    function defaultMarginFee() external view returns (uint24 defaultMarginFee);
 }

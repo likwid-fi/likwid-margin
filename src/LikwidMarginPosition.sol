@@ -49,8 +49,9 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
     uint8 constant MAX_LEVERAGE = 5; // 5x
 
-    mapping(uint256 tokenId => MarginPosition.State positionInfo) public positionInfos;
+    mapping(uint256 tokenId => MarginPosition.State positionInfo) private positionInfos;
     MarginLevels public marginLevels;
+    uint24 public defaultMarginFee = 3000; // 0.3%
 
     constructor(address initialOwner, IVault _vault)
         BasePositionManager("LIKWIDMarginPositionManager", "LMPM", initialOwner, _vault)
@@ -275,7 +276,8 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         if (marginTotal > marginReserves) ReservesNotEnough.selector.revertWith();
 
         delta.marginTotal = marginTotal.toUint128();
-        (uint256 marginWithoutFee,) = poolState.marginFee.deduct(marginTotal);
+        uint24 marginFee = poolState.marginFee == 0 ? defaultMarginFee : poolState.marginFee;
+        (uint256 marginWithoutFee,) = marginFee.deduct(marginTotal);
         (borrowAmount,,) = SwapMath.getAmountIn(
             poolState.pairReserves, poolState.truncatedReserves, poolState.lpFee, position.marginForOne, marginTotal
         );
@@ -707,5 +709,11 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         bytes32 old = MarginLevels.unwrap(marginLevels);
         marginLevels = newMarginLevels;
         emit MarginLevelChanged(old, _marginLevel);
+    }
+
+    function setDefaultMarginFee(uint24 newMarginFee) external onlyOwner {
+        uint24 old = defaultMarginFee;
+        defaultMarginFee = newMarginFee;
+        emit MarginFeeChanged(old, newMarginFee);
     }
 }

@@ -49,41 +49,6 @@ abstract contract MarginBase is IMarginBase, Owned {
         marginState = _marginState;
     }
 
-    /// @notice Locks a certain amount of liquidity in stages.
-    /// @dev Internal function to manage the staged locking of liquidity.
-    /// @param id The ID of the pool.
-    /// @param amount The amount of liquidity to lock.
-    function _lockLiquidity(PoolId id, uint256 amount) internal {
-        uint256 stageSize = marginState.stageSize();
-        if (uint256(marginState.stageDuration()) * stageSize == 0) {
-            return; // No locking if stageDuration or stageSize is zero
-        }
-        uint256 lastStageTimestamp = lastStageTimestampStore[id];
-        if (lastStageTimestamp == 0) {
-            // Initialize lastStageTimestamp if it's not set
-            lastStageTimestampStore[id] = block.timestamp;
-        }
-        DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
-        uint128 lockAmount = Math.ceilDiv(amount, stageSize).toUint128(); // Ensure at least 1 unit is locked per stage
-        uint256 zeroStage = 0;
-        if (queue.empty()) {
-            for (uint32 i = 0; i < stageSize; i++) {
-                queue.pushBack(zeroStage.add(lockAmount));
-            }
-        } else {
-            uint256 queueSize = Math.min(queue.length(), stageSize);
-            // If the queue is not empty, we need to update the existing stages
-            // and add new stages if necessary
-            for (uint256 i = 0; i < queueSize; i++) {
-                uint256 stage = queue.at(i);
-                queue.set(i, stage.add(lockAmount));
-            }
-            for (uint256 i = queueSize; i < stageSize; i++) {
-                queue.pushBack(zeroStage.add(lockAmount));
-            }
-        }
-    }
-
     /// @notice Gets the amount of released and next-to-be-released liquidity.
     /// @dev Internal view function to calculate the amount of liquidity that is currently released and the amount that will be released in the next stage.
     /// @param id The ID of the pool.
@@ -118,7 +83,34 @@ abstract contract MarginBase is IMarginBase, Owned {
     /// @param id The ID of the pool.
     /// @param liquidityAdded The amount of liquidity to add.
     function _handleAddLiquidity(PoolId id, uint256 liquidityAdded) internal {
-        _lockLiquidity(id, liquidityAdded);
+        uint256 stageSize = marginState.stageSize();
+        if (uint256(marginState.stageDuration()) * stageSize == 0) {
+            return; // No locking if stageDuration or stageSize is zero
+        }
+        uint256 lastStageTimestamp = lastStageTimestampStore[id];
+        if (lastStageTimestamp == 0) {
+            // Initialize lastStageTimestamp if it's not set
+            lastStageTimestampStore[id] = block.timestamp;
+        }
+        DoubleEndedQueue.Uint256Deque storage queue = liquidityLockedQueue[id];
+        uint128 lockAmount = Math.ceilDiv(liquidityAdded, stageSize).toUint128(); // Ensure at least 1 unit is locked per stage
+        uint256 zeroStage = 0;
+        if (queue.empty()) {
+            for (uint32 i = 0; i < stageSize; i++) {
+                queue.pushBack(zeroStage.add(lockAmount));
+            }
+        } else {
+            uint256 queueSize = Math.min(queue.length(), stageSize);
+            // If the queue is not empty, we need to update the existing stages
+            // and add new stages if necessary
+            for (uint256 i = 0; i < queueSize; i++) {
+                uint256 stage = queue.at(i);
+                queue.set(i, stage.add(lockAmount));
+            }
+            for (uint256 i = queueSize; i < stageSize; i++) {
+                queue.pushBack(zeroStage.add(lockAmount));
+            }
+        }
     }
 
     /// @notice Handles the removal of liquidity from a pool.

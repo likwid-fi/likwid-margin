@@ -77,7 +77,6 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
             );
         }
 
-        // likwid pools are initialized with tick = 1
         PoolId id = key.toId();
         _pools[id].initialize(key.fee);
         emit Initialize(id, key.currency0, key.currency1, key.fee);

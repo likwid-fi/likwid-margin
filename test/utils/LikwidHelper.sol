@@ -15,10 +15,6 @@ contract LikwidHelper {
         uint24 lpFee;
         uint24 marginFee;
         uint24 protocolFee;
-        uint256 borrow0CumulativeLast;
-        uint256 borrow1CumulativeLast;
-        uint256 deposit0CumulativeLast;
-        uint256 deposit1CumulativeLast;
         uint128 realReserve0;
         uint128 realReserve1;
         uint128 mirrorReserve0;
@@ -39,10 +35,6 @@ contract LikwidHelper {
         stateInfo.lpFee = state.lpFee;
         stateInfo.marginFee = state.marginFee;
         stateInfo.protocolFee = state.protocolFee;
-        stateInfo.borrow0CumulativeLast = state.borrow0CumulativeLast;
-        stateInfo.borrow1CumulativeLast = state.borrow1CumulativeLast;
-        stateInfo.deposit0CumulativeLast = state.deposit0CumulativeLast;
-        stateInfo.deposit1CumulativeLast = state.deposit1CumulativeLast;
         (uint128 realReserve0, uint128 realReserve1) = state.realReserves.reserves();
         stateInfo.realReserve0 = realReserve0;
         stateInfo.realReserve1 = realReserve1;
