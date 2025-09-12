@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 import {LikwidVault} from "../../src/LikwidVault.sol";
 import {IVault} from "../../src/interfaces/IVault.sol";
 import {IUnlockCallback} from "../../src/interfaces/callback/IUnlockCallback.sol";
+import {MarginState} from "../../src/types/MarginState.sol";
 import {PoolKey} from "../../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../../src/types/PoolId.sol";
@@ -26,6 +27,7 @@ contract StateLibraryTest is Test, IUnlockCallback {
     Currency currency1;
     PoolKey poolKey;
     PoolId poolId;
+    uint256 initialLiquidity;
 
     function setUp() public {
         vault = new LikwidVault(address(this));
@@ -51,7 +53,7 @@ contract StateLibraryTest is Test, IUnlockCallback {
         vault.setMarginController(address(this));
 
         // Add initial liquidity
-        uint256 initialLiquidity = 10 ether;
+        initialLiquidity = 10 ether;
         token0.mint(address(this), initialLiquidity);
         token1.mint(address(this), initialLiquidity);
 
@@ -102,6 +104,17 @@ contract StateLibraryTest is Test, IUnlockCallback {
         } else if (delta.amount1() > 0) {
             vault.take(currency1, address(this), uint256(int256(delta.amount1())));
         }
+    }
+
+    function testGetStageLiquidities() public view {
+        uint128[][] memory liquidities = StateLibrary.getStageLiquidities(vault, poolId);
+        MarginState marginState = vault.marginState();
+        assertEq(liquidities.length, marginState.stageSize(), "liquidities.length==marginState.stageSize()");
+        assertEq(
+            liquidities[0][0],
+            initialLiquidity / marginState.stageSize(),
+            "liquidities[0][0]==initialLiquidity/marginState.stageSize()"
+        );
     }
 
     function testGetLendPositionState() public {

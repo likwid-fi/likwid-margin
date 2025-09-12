@@ -8,6 +8,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 import {LikwidVault} from "../src/LikwidVault.sol";
 import {LikwidPairPosition} from "../src/LikwidPairPosition.sol";
+import {IPairPositionManager} from "../src/interfaces/IPairPositionManager.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
@@ -163,7 +164,7 @@ contract LikwidPairPositionTest is Test {
         PoolId poolId = key.toId();
         bool zeroForOne = true; // Swapping token0 for token1
 
-        LikwidPairPosition.SwapInputParams memory params = LikwidPairPosition.SwapInputParams({
+        IPairPositionManager.SwapInputParams memory params = IPairPositionManager.SwapInputParams({
             poolId: poolId,
             zeroForOne: zeroForOne,
             to: address(this),
@@ -202,7 +203,7 @@ contract LikwidPairPositionTest is Test {
         PoolId poolId = key.toId();
         bool zeroForOne = true; // Swapping token0 for token1
 
-        LikwidPairPosition.SwapOutputParams memory params = LikwidPairPosition.SwapOutputParams({
+        IPairPositionManager.SwapOutputParams memory params = IPairPositionManager.SwapOutputParams({
             poolId: poolId,
             zeroForOne: zeroForOne,
             to: address(this),
