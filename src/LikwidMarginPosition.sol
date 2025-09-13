@@ -276,8 +276,8 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         if (marginTotal > marginReserves) ReservesNotEnough.selector.revertWith();
 
         delta.marginTotal = marginTotal.toUint128();
-        uint24 marginFee = poolState.marginFee == 0 ? defaultMarginFee : poolState.marginFee;
-        (uint256 marginWithoutFee,) = marginFee.deduct(marginTotal);
+        delta.marginFee = poolState.marginFee == 0 ? defaultMarginFee : poolState.marginFee;
+        (uint256 marginWithoutFee,) = delta.marginFee.deduct(marginTotal);
         (borrowAmount,,) = SwapMath.getAmountIn(
             poolState.pairReserves, poolState.truncatedReserves, poolState.lpFee, position.marginForOne, marginTotal
         );

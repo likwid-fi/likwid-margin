@@ -21,8 +21,14 @@ abstract contract MarginBase is IMarginBase, Owned {
     error LiquidityLocked();
 
     MarginState public marginState;
+    address public marginController;
     mapping(PoolId id => uint256) private lastStageTimestampStore; // Timestamp of the last stage
     mapping(PoolId id => DoubleEndedQueue.Uint256Deque) private liquidityLockedQueue;
+
+    modifier onlyManager() {
+        if (msg.sender != marginController) Unauthorized.selector.revertWith();
+        _;
+    }
 
     uint24 private constant MAX_PRICE_MOVE_PER_SECOND = 3000; // 0.3%/second
     uint24 private constant RATE_BASE = 50000;
@@ -155,6 +161,17 @@ abstract contract MarginBase is IMarginBase, Owned {
                     queue.set(0, afterStage);
                 }
             }
+        }
+    }
+
+    // ******************** OWNER CALL ********************
+    /// @notice Sets the margin controller address.
+    /// @dev Only the owner can call this function.
+    /// @param controller The address of the new margin controller.
+    function setMarginController(address controller) external onlyOwner {
+        if (marginController == address(0)) {
+            marginController = controller;
+            emit MarginControllerUpdated(controller);
         }
     }
 

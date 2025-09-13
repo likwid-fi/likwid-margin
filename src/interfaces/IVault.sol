@@ -7,11 +7,12 @@ import {MarginBalanceDelta} from "../types/MarginBalanceDelta.sol";
 import {IERC6909Claims} from "./external/IERC6909Claims.sol";
 import {BalanceDelta} from "../types/BalanceDelta.sol";
 import {PoolId} from "../types/PoolId.sol";
+import {IMarginBase} from "./IMarginBase.sol";
 import {IExtsload} from "./IExtsload.sol";
 import {IExttload} from "./IExttload.sol";
 
 /// @notice Interface for the LikwidVault
-interface IVault is IERC6909Claims, IExtsload, IExttload {
+interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
     /// @notice Thrown when a currency is not netted out after the contract is unlocked
     error CurrencyNotSettled();
 
@@ -38,8 +39,6 @@ interface IVault is IERC6909Claims, IExtsload, IExttload {
 
     /// @notice Thrown when `clear` is called with an amount that is not exactly equal to the open currency delta.
     error MustClearExactPositiveDelta();
-
-    event MarginControllerUpdated(address indexed marginController);
 
     /// @notice Emitted when a new pool is initialized
     /// @param id The abi encoded hash of the pool key struct for the new pool

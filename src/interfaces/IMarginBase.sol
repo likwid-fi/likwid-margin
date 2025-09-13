@@ -5,6 +5,10 @@ import {MarginState} from "../types/MarginState.sol";
 
 /// @notice Interface for all interest-fee related functions in the pool manager
 interface IMarginBase {
+    error Unauthorized();
+
+    event MarginControllerUpdated(address indexed marginController);
+
     /// @notice Emitted when the rate state is updated
     /// @param newMarginState The new rate state being set
     /// @dev This event is emitted when the rate state is updated, allowing external observers to
@@ -19,4 +23,6 @@ interface IMarginBase {
     function setMarginState(MarginState newMarginState) external;
 
     function marginState() external view returns (MarginState);
+
+    function marginController() external view returns (address);
 }

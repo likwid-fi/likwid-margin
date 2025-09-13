@@ -7,6 +7,7 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
+import {IBasePositionManager} from "../interfaces/IBasePositionManager.sol";
 import {ImmutableState} from "./ImmutableState.sol";
 import {PoolKey} from "../types/PoolKey.sol";
 import {BalanceDelta} from "../types/BalanceDelta.sol";
@@ -17,7 +18,7 @@ import {IUnlockCallback} from "../interfaces/callback/IUnlockCallback.sol";
 import {CustomRevert} from "../libraries/CustomRevert.sol";
 import {CurrencyPoolLibrary} from "../libraries/CurrencyPoolLibrary.sol";
 
-abstract contract BasePositionManager is ImmutableState, IUnlockCallback, ERC721, Owned {
+abstract contract BasePositionManager is IBasePositionManager, ImmutableState, IUnlockCallback, ERC721, Owned {
     using CurrencyPoolLibrary for Currency;
     using CustomRevert for bytes4;
 

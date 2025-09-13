@@ -28,8 +28,12 @@ library StateLibrary {
     using TimeLibrary for uint32;
     using StageMath for uint256;
 
+    /// @notice The storage slot of the `liquidityLockedQueue` mapping in the MarginBase contract.
+    /// @dev This is an assumption. If the storage layout of MarginBase changes, this value needs to be updated.
+    bytes32 public constant LIQUIDITY_LOCKED_QUEUE_SLOT = bytes32(uint256(4));
+
     /// @notice The storage slot of the `_pools` mapping in the LikwidVault contract.
-    bytes32 public constant POOLS_SLOT = bytes32(uint256(9));
+    bytes32 public constant POOLS_SLOT = bytes32(uint256(10));
 
     // Offsets for fields within the Pool.State struct
     uint256 internal constant BORROW_0_CUMULATIVE_LAST_OFFSET = 1;
@@ -44,10 +48,6 @@ library StateLibrary {
     uint256 internal constant INTEREST_RESERVES_OFFSET = 10;
     uint256 internal constant POSITIONS_OFFSET = 11;
     uint256 internal constant LEND_POSITIONS_OFFSET = 12;
-
-    /// @notice The storage slot of the `liquidityLockedQueue` mapping in the MarginBase contract.
-    /// @dev This is an assumption. If the storage layout of MarginBase changes, this value needs to be updated.
-    bytes32 public constant LIQUIDITY_LOCKED_QUEUE_SLOT = bytes32(uint256(3));
 
     /**
      * @notice Get the unpacked Slot0 of the pool.

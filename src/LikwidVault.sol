@@ -31,11 +31,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     using BalanceDeltaLibrary for BalanceDelta;
     using Pool for Pool.State;
 
-    error Unauthorized();
-
     mapping(PoolId id => Pool.State) private _pools;
-
-    address public marginController;
 
     /// transient storage
     bool transient unlocked;
@@ -44,11 +40,6 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     /// @notice This will revert if the contract is locked
     modifier onlyWhenUnlocked() {
         if (!unlocked) VaultLocked.selector.revertWith();
-        _;
-    }
-
-    modifier onlyManager() {
-        if (msg.sender != marginController) Unauthorized.selector.revertWith();
         _;
     }
 
@@ -336,16 +327,5 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     /// @return A boolean indicating whether the contract is unlocked.
     function _isUnlocked() internal view override returns (bool) {
         return unlocked;
-    }
-
-    // ******************** OWNER CALL ********************
-    /// @notice Sets the margin controller address.
-    /// @dev Only the owner can call this function.
-    /// @param controller The address of the new margin controller.
-    function setMarginController(address controller) external onlyOwner {
-        if (marginController == address(0)) {
-            marginController = controller;
-            emit MarginControllerUpdated(controller);
-        }
     }
 }

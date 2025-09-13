@@ -8,6 +8,7 @@ struct MarginBalanceDelta {
     MarginActions action;
     bool marginForOne;
     uint128 marginTotal;
+    uint24 marginFee;
     BalanceDelta marginDelta;
     BalanceDelta realDelta;
     BalanceDelta mirrorDelta;

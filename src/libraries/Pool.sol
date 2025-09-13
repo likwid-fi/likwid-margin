@@ -315,7 +315,7 @@ library Pool {
         }
         Slot0 _slot0 = self.slot0;
         if (params.action == MarginActions.MARGIN) {
-            (, feeAmount) = _slot0.marginFee().deduct(params.marginTotal);
+            (, feeAmount) = params.marginFee.deduct(params.marginTotal);
             (amountToProtocol,) = ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeTypes.MARGIN, feeAmount);
         }
         marginDelta = params.marginDelta;

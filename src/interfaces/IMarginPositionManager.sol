@@ -3,8 +3,11 @@ pragma solidity ^0.8.26;
 
 import {PoolId} from "../types/PoolId.sol";
 import {PoolKey} from "../types/PoolKey.sol";
+import {MarginLevels} from "../types/MarginLevels.sol";
+import {IBasePositionManager} from "./IBasePositionManager.sol";
+import {MarginPosition} from "../libraries/MarginPosition.sol";
 
-interface IMarginPositionManager {
+interface IMarginPositionManager is IBasePositionManager {
     error InvalidLevel();
 
     event MarginLevelChanged(bytes32 oldLevel, bytes32 newLevel);
@@ -82,6 +85,8 @@ interface IMarginPositionManager {
         uint256 pairReserves,
         uint256 repayAmount
     );
+
+    function getPositionState(uint256 tokenId) external view returns (MarginPosition.State memory position);
 
     struct CreateParams {
         /// @notice true: currency1 is marginToken, false: currency0 is marginToken
@@ -162,4 +167,5 @@ interface IMarginPositionManager {
     function modify(uint256 tokenId, int128 changeAmount) external payable;
 
     function defaultMarginFee() external view returns (uint24 defaultMarginFee);
+    function marginLevels() external view returns (MarginLevels marginLevel);
 }
