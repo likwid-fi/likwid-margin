@@ -35,6 +35,11 @@ library Slot0Library {
         }
     }
 
+    function protocolFee(Slot0 _packed, uint24 defaultFee) internal pure returns (uint24 _protocolFee) {
+        _protocolFee = protocolFee(_packed);
+        _protocolFee = _protocolFee == 0 ? defaultFee : _protocolFee;
+    }
+
     function lpFee(Slot0 _packed) internal pure returns (uint24 _lpFee) {
         assembly ("memory-safe") {
             _lpFee := and(MASK_24_BITS, shr(LP_FEE_OFFSET, _packed))

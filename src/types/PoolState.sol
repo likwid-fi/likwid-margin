@@ -6,6 +6,7 @@ import {Reserves} from "./Reserves.sol";
 
 struct PoolState {
     MarginState marginState;
+    uint128 totalSupply;
     uint32 lastUpdated;
     uint24 lpFee;
     uint24 marginFee;

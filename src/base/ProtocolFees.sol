@@ -26,7 +26,12 @@ abstract contract ProtocolFees is IProtocolFees, MarginBase {
     /// @inheritdoc IProtocolFees
     address public protocolFeeController;
 
-    constructor(address initialOwner) MarginBase(initialOwner) {}
+    uint24 public defaultProtocolFee;
+
+    constructor(address initialOwner) MarginBase(initialOwner) {
+        defaultProtocolFee = defaultProtocolFee.setProtocolFee(FeeTypes.SWAP, 20).setProtocolFee(FeeTypes.MARGIN, 40)
+            .setProtocolFee(FeeTypes.INTERESTS, 10); // 10% SWAP,20% MARGIN,5% INTERESTS
+    }
 
     /// @inheritdoc IProtocolFees
     function setProtocolFeeController(address controller) external onlyOwner {
@@ -38,7 +43,7 @@ abstract contract ProtocolFees is IProtocolFees, MarginBase {
     function setProtocolFee(PoolKey memory key, FeeTypes feeType, uint8 newFee) external {
         if (msg.sender != protocolFeeController) InvalidCaller.selector.revertWith();
         Pool.State storage pool = _getAndUpdatePool(key);
-        uint24 newProtocolFee = pool.slot0.protocolFee().setProtocolFee(feeType, newFee);
+        uint24 newProtocolFee = pool.slot0.protocolFee(defaultProtocolFee).setProtocolFee(feeType, newFee);
         if (!newProtocolFee.isValidProtocolFee()) ProtocolFeeTooLarge.selector.revertWith(newProtocolFee);
         pool.setProtocolFee(newProtocolFee);
         emit ProtocolFeeUpdated(key.toId(), newProtocolFee);

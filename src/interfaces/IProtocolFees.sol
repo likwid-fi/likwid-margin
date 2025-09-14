@@ -51,4 +51,8 @@ interface IProtocolFees {
     /// @notice Returns the current protocol fee controller address
     /// @return address The current protocol fee controller address
     function protocolFeeController() external view returns (address);
+
+    /// @notice Returns the default vault of protocol fee
+    /// @return uint24 The current protocol fee default vault
+    function defaultProtocolFee() external view returns (uint24);
 }

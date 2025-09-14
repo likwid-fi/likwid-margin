@@ -35,7 +35,7 @@ contract Slot0Test is Test {
     function testSetAndGetProtocolFee() public {
         uint24 protocolFee = 1500; // 0.15%
         slot0 = slot0.setProtocolFee(protocolFee);
-        assertEq(slot0.protocolFee(), protocolFee);
+        assertEq(slot0.protocolFee(0), protocolFee);
     }
 
     function testSetAndGetMarginFee() public {

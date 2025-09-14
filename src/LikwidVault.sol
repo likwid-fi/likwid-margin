@@ -127,7 +127,8 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
                 amountSpecified: params.amountSpecified,
                 useMirror: params.useMirror,
                 salt: params.salt
-            })
+            }),
+            defaultProtocolFee
         );
         if (params.useMirror) {
             BalanceDelta realDelta;
@@ -191,7 +192,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         Pool.State storage pool = _getAndUpdatePool(key);
         pool.checkPoolInitialized();
         uint256 amountToProtocol;
-        (marginDelta, amountToProtocol, feeAmount) = pool.margin(params);
+        (marginDelta, amountToProtocol, feeAmount) = pool.margin(params, defaultProtocolFee);
 
         if (feeAmount > 0) {
             Currency feeCurrency = params.marginForOne ? key.currency1 : key.currency0;
@@ -314,7 +315,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     function _getAndUpdatePool(PoolKey memory key) internal override returns (Pool.State storage _pool) {
         PoolId id = key.toId();
         _pool = _pools[id];
-        (uint256 pairInterest0, uint256 pairInterest1) = _pool.updateInterests(marginState);
+        (uint256 pairInterest0, uint256 pairInterest1) = _pool.updateInterests(marginState, defaultProtocolFee);
         if (pairInterest0 > 0) {
             emit Fees(id, key.currency0, address(this), uint8(FeeTypes.INTERESTS), pairInterest0);
         }

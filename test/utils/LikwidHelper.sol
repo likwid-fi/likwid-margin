@@ -4,10 +4,10 @@ pragma solidity ^0.8.20;
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 
-import {MarginState} from "../../src/types/MarginState.sol";
 import {Reserves} from "../../src/types/Reserves.sol";
 import {PoolState} from "../../src/types/PoolState.sol";
 import {PoolId} from "../../src/types/PoolId.sol";
+import {Currency} from "../../src/types/Currency.sol";
 import {MarginLevels} from "../../src/types/MarginLevels.sol";
 import {IVault} from "../../src/interfaces/IVault.sol";
 import {IMarginPositionManager} from "../../src/interfaces/IMarginPositionManager.sol";
@@ -28,6 +28,7 @@ contract LikwidHelper is Owned {
     }
 
     struct PoolStateInfo {
+        uint128 totalSupply;
         uint32 lastUpdated;
         uint24 lpFee;
         uint24 marginFee;
@@ -48,6 +49,7 @@ contract LikwidHelper is Owned {
 
     function getPoolStateInfo(PoolId poolId) external view returns (PoolStateInfo memory stateInfo) {
         PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
+        stateInfo.totalSupply = state.totalSupply;
         stateInfo.lastUpdated = state.lastUpdated;
         stateInfo.lpFee = state.lpFee;
         stateInfo.marginFee = state.marginFee;
@@ -106,8 +108,7 @@ contract LikwidHelper is Owned {
         }
     }
 
-    function getBorrowRate(PoolId poolId, bool marginForOne) external view returns (uint256) {
-        PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
+    function _getBorrowRate(PoolState memory state, bool marginForOne) internal pure returns (uint256) {
         (uint128 realReserve0, uint128 realReserve1) = state.realReserves.reserves();
         (uint128 mirrorReserve0, uint128 mirrorReserve1) = state.mirrorReserves.reserves();
         uint256 borrowReserve;
@@ -120,6 +121,11 @@ contract LikwidHelper is Owned {
             borrowReserve = mirrorReserve1 + realReserve1;
         }
         return InterestMath.getBorrowRateByReserves(state.marginState, borrowReserve, mirrorReserve);
+    }
+
+    function getBorrowRate(PoolId poolId, bool marginForOne) external view returns (uint256) {
+        PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
+        return _getBorrowRate(state, marginForOne);
     }
 
     function getPoolFees(PoolId poolId, bool zeroForOne, uint256 amountIn, uint256 amountOut)
@@ -188,6 +194,30 @@ contract LikwidHelper is Owned {
         repayAmount = Math.mulDiv(reserveBorrow, _position.marginAmount + _position.marginTotal, reserveMargin);
         MarginLevels marginLevels = manager.marginLevels();
         repayAmount = repayAmount.mulDivMillion(marginLevels.liquidationRatio());
+    }
+
+    function getLendingAPR(PoolId poolId, bool borrowForOne, uint256 inputAmount) public view returns (uint256 apr) {
+        PoolState memory _state = StateLibrary.getCurrentState(vault, poolId);
+        (uint128 mirrorReserve0, uint128 mirrorReserve1) = _state.mirrorReserves.reserves();
+        uint256 mirrorReserve = borrowForOne ? mirrorReserve1 : mirrorReserve0;
+        uint256 borrowRate = _getBorrowRate(_state, !borrowForOne);
+        (uint256 reserve0, uint256 reserve1) = _state.pairReserves.reserves();
+        (uint256 lendReserve0, uint256 lendReserve1) = _state.lendReserves.reserves();
+        uint256 flowReserve = borrowForOne ? reserve1 : reserve0;
+        uint256 totalSupply = borrowForOne ? lendReserve1 : lendReserve0;
+        uint256 allInterestReserve = flowReserve + inputAmount + totalSupply;
+        if (allInterestReserve > 0) {
+            apr = Math.mulDiv(borrowRate, mirrorReserve, allInterestReserve);
+        }
+    }
+
+    function getBorrowAPR(PoolId poolId, bool borrowForOne) external view returns (uint256 rate) {
+        PoolState memory _state = StateLibrary.getCurrentState(vault, poolId);
+        (uint256 realReserve0, uint256 realReserve1) = _state.realReserves.reserves();
+        (uint256 mirrorReserve0, uint256 mirrorReserve1) = _state.mirrorReserves.reserves();
+        rate = borrowForOne
+            ? InterestMath.getBorrowRateByReserves(_state.marginState, realReserve1 + mirrorReserve1, mirrorReserve1)
+            : InterestMath.getBorrowRateByReserves(_state.marginState, realReserve0 + mirrorReserve0, mirrorReserve0);
     }
 
     // ******************** OWNER CALL ********************

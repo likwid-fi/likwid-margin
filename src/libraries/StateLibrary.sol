@@ -67,7 +67,6 @@ library StateLibrary {
     {
         bytes32 stateSlot = _getPoolStateSlot(poolId);
         Slot0 slot0 = Slot0.wrap(vault.extsload(stateSlot));
-
         totalSupply = slot0.totalSupply();
         lastUpdated = slot0.lastUpdated();
         protocolFee = slot0.protocolFee();
@@ -245,7 +244,8 @@ library StateLibrary {
         bytes32 poolStateSlot = _getPoolStateSlot(poolId);
 
         // 1. Get slot0
-        (, state.lastUpdated, state.protocolFee, state.lpFee, state.marginFee) = getSlot0(vault, poolId);
+        (state.totalSupply, state.lastUpdated, state.protocolFee, state.lpFee, state.marginFee) =
+            getSlot0(vault, poolId);
 
         // 2. Get all other data in one call
         bytes32 startSlot = bytes32(uint256(poolStateSlot) + 1); // BORROW_0_CUMULATIVE_LAST_OFFSET

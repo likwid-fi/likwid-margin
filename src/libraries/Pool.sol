@@ -36,6 +36,7 @@ library Pool {
     using PairPosition for mapping(bytes32 => PairPosition.State);
     using LendPosition for LendPosition.State;
     using LendPosition for mapping(bytes32 => LendPosition.State);
+    using ProtocolFeeLibrary for uint24;
 
     /// @notice Thrown when trying to initialize an already initialized pool
     error PoolAlreadyInitialized();
@@ -86,7 +87,6 @@ library Pool {
     function initialize(State storage self, uint24 lpFee) internal {
         if (self.borrow0CumulativeLast != 0) PoolAlreadyInitialized.selector.revertWith();
 
-        // the initial protocolFee is 0 so doesn't need to be set
         self.slot0 = Slot0.wrap(bytes32(0)).setLastUpdated(uint32(block.timestamp)).setLpFee(lpFee);
         self.borrow0CumulativeLast = FixedPoint96.Q96;
         self.borrow1CumulativeLast = FixedPoint96.Q96;
@@ -194,7 +194,7 @@ library Pool {
     /// @return amountToProtocol The amount of fees to be sent to the protocol
     /// @return swapFee The fee for the swap
     /// @return feeAmount The total fee amount for the swap.
-    function swap(State storage self, SwapParams memory params)
+    function swap(State storage self, SwapParams memory params, uint24 defaultProtocolFee)
         internal
         returns (BalanceDelta swapDelta, uint256 amountToProtocol, uint24 swapFee, uint256 feeAmount)
     {
@@ -218,7 +218,8 @@ library Pool {
                 SwapMath.getAmountIn(_pairReserves, _truncatedReserves, _lpFee, params.zeroForOne, amountOut);
         }
 
-        (amountToProtocol, feeAmount) = ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeTypes.SWAP, feeAmount);
+        (amountToProtocol, feeAmount) =
+            ProtocolFeeLibrary.splitFee(_slot0.protocolFee(defaultProtocolFee), FeeTypes.SWAP, feeAmount);
 
         int128 amount0Delta;
         int128 amount1Delta;
@@ -303,7 +304,7 @@ library Pool {
         self.lendPositions.get(params.sender, params.lendForOne, params.salt).update(depositCumulativeLast, lendDelta);
     }
 
-    function margin(State storage self, MarginBalanceDelta memory params)
+    function margin(State storage self, MarginBalanceDelta memory params, uint24 defaultProtocolFee)
         internal
         returns (BalanceDelta marginDelta, uint256 amountToProtocol, uint256 feeAmount)
     {
@@ -316,7 +317,8 @@ library Pool {
         Slot0 _slot0 = self.slot0;
         if (params.action == MarginActions.MARGIN) {
             (, feeAmount) = params.marginFee.deduct(params.marginTotal);
-            (amountToProtocol,) = ProtocolFeeLibrary.splitFee(_slot0.protocolFee(), FeeTypes.MARGIN, feeAmount);
+            (amountToProtocol,) =
+                ProtocolFeeLibrary.splitFee(_slot0.protocolFee(defaultProtocolFee), FeeTypes.MARGIN, feeAmount);
         }
         marginDelta = params.marginDelta;
         if (params.debtDepositCumulativeLast > 0) {
@@ -345,7 +347,7 @@ library Pool {
     /// @param marginState The current rate state.
     /// @return pairInterest0 The interest earned by the pair for token0.
     /// @return pairInterest1 The interest earned by the pair for token1.
-    function updateInterests(State storage self, MarginState marginState)
+    function updateInterests(State storage self, MarginState marginState, uint24 defaultProtocolFee)
         internal
         returns (uint256 pairInterest0, uint256 pairInterest1)
     {
@@ -379,7 +381,7 @@ library Pool {
                 pairReserve: pairReserve0,
                 lendReserve: lendReserve0,
                 depositCumulativeLast: self.deposit0CumulativeLast,
-                protocolFee: _slot0.protocolFee()
+                protocolFee: _slot0.protocolFee(defaultProtocolFee)
             })
         );
 
@@ -402,7 +404,7 @@ library Pool {
                 pairReserve: pairReserve1,
                 lendReserve: lendReserve1,
                 depositCumulativeLast: self.deposit1CumulativeLast,
-                protocolFee: _slot0.protocolFee()
+                protocolFee: _slot0.protocolFee(defaultProtocolFee)
             })
         );
 
