@@ -309,8 +309,9 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         assertEq(token0.balanceOf(address(vault)), initialLiquidity0 + amountToSwap, "Vault token0 balance");
         assertEq(token1.balanceOf(address(vault)), initialLiquidity1 - actualAmountOut, "Vault token1 balance");
 
-        // Protocol fee is 0 by default
-        assertEq(vault.protocolFeesAccrued(currency0), 0, "Protocol fee for token0 should be 0");
+        assertEq(
+            vault.protocolFeesAccrued(currency0), amountToSwap * 3 / 10000, "Protocol fee for token0 should be 0.03%"
+        );
         assertEq(vault.protocolFeesAccrued(currency1), 0, "Protocol fee for token1 should be 0");
         _checkPoolReserves(key);
     }
