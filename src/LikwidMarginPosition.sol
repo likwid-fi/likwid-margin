@@ -424,7 +424,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     }
 
     /// @inheritdoc IMarginPositionManager
-    function close(uint256 tokenId, uint24 closeMillionth, uint256 profitAmountMin, uint256 deadline)
+    function close(uint256 tokenId, uint24 closeMillionth, uint256 closeAmountMin, uint256 deadline)
         external
         ensure(deadline)
     {
@@ -438,9 +438,9 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
             _getPoolCumulativeValues(poolState, position.marginForOne);
 
-        (uint256 releaseAmount, uint256 repayAmount, uint256 profitAmount, uint256 lostAmount) =
+        (uint256 releaseAmount, uint256 repayAmount, uint256 closeAmount, uint256 lostAmount) =
             position.close(poolState.pairReserves, borrowCumulativeLast, depositCumulativeLast, 0, closeMillionth);
-        if (lostAmount > 0 || (profitAmountMin > 0 && profitAmount < profitAmountMin)) {
+        if (lostAmount > 0 || (closeAmountMin > 0 && closeAmount < closeAmountMin)) {
             InsufficientCloseReceived.selector.revertWith();
         }
         MarginLevels _marginLevels = marginLevels;
@@ -455,15 +455,15 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         int128 amount0Delta;
         int128 amount1Delta;
         if (position.marginForOne) {
-            amount1Delta = profitAmount.toInt128();
+            amount1Delta = closeAmount.toInt128();
             delta.lendDelta = toBalanceDelta(0, releaseAmount.toInt128());
             delta.mirrorDelta = toBalanceDelta(repayAmount.toInt128(), 0);
-            delta.pairDelta = toBalanceDelta(repayAmount.toInt128(), -(releaseAmount - profitAmount).toInt128());
+            delta.pairDelta = toBalanceDelta(repayAmount.toInt128(), -(releaseAmount - closeAmount).toInt128());
         } else {
-            amount0Delta = profitAmount.toInt128();
+            amount0Delta = closeAmount.toInt128();
             delta.lendDelta = toBalanceDelta(releaseAmount.toInt128(), 0);
             delta.mirrorDelta = toBalanceDelta(0, repayAmount.toInt128());
-            delta.pairDelta = toBalanceDelta(-(releaseAmount - profitAmount).toInt128(), repayAmount.toInt128());
+            delta.pairDelta = toBalanceDelta(-(releaseAmount - closeAmount).toInt128(), repayAmount.toInt128());
         }
         delta.action = MarginActions.CLOSE;
         delta.marginForOne = position.marginForOne;
@@ -480,7 +480,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
             position.marginAmount,
             position.marginTotal,
             position.debtAmount,
-            profitAmount
+            closeAmount
         );
     }
 
