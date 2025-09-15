@@ -23,8 +23,13 @@ contract DeployAllScript is Script {
 
     function run() public {
         vm.startBroadcast();
+
         address owner = msg.sender;
+        console.log("owner:", owner);
         address sender = msg.sender;
+        console.log("sender:", sender);
+        address protocolFeeController = msg.sender;
+
         vault = new LikwidVault(sender);
         console.log("vault:", address(vault));
         lendPosition = new LikwidLendPosition(owner, vault);
@@ -35,11 +40,14 @@ contract DeployAllScript is Script {
         console.log("pairPosition:", address(pairPosition));
 
         vault.setMarginController(address(marginPosition));
+        vault.setProtocolFeeController(protocolFeeController);
         if (owner != sender) {
             vault.transferOwnership(owner);
         }
+
         helper = new LikwidHelper(owner, vault);
         console.log("helper:", address(helper));
+
         vm.stopBroadcast();
     }
 }

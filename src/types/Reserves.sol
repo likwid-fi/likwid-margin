@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {console} from "forge-std/console.sol";
-
 import {Panic} from "@openzeppelin/contracts/utils/Panic.sol";
 
 import {Math} from "../libraries/Math.sol";
@@ -97,8 +95,6 @@ library ReservesLibrary {
             if (d0 > 0) {
                 uint128 amount0 = uint128(d0);
                 if (r0 < amount0) {
-                    console.log("r0", r0);
-                    console.log("amount0", amount0);
                     if (enableOverflow) {
                         r0 = amount0;
                     } else {
@@ -113,8 +109,6 @@ library ReservesLibrary {
             if (d1 > 0) {
                 uint128 amount1 = uint128(d1);
                 if (r1 < amount1) {
-                    console.log("r1", r1);
-                    console.log("amount1", amount1);
                     if (enableOverflow) {
                         r1 = amount1;
                     } else {
