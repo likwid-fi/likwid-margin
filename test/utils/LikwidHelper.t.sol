@@ -10,6 +10,7 @@ import {LikwidMarginPosition} from "../../src/LikwidMarginPosition.sol";
 import {LikwidPairPosition} from "../../src/LikwidPairPosition.sol";
 import {LikwidHelper} from "./LikwidHelper.sol";
 import {IMarginPositionManager} from "../../src/interfaces/IMarginPositionManager.sol";
+import {IPairPositionManager} from "../../src/interfaces/IPairPositionManager.sol";
 import {PoolKey} from "../../src/types/PoolKey.sol";
 import {PoolId} from "../../src/types/PoolId.sol";
 import {PoolState} from "../../src/types/PoolState.sol";
@@ -112,29 +113,64 @@ contract LikwidHelperTest is Test {
         assertEq(liquidities[0][1], stage);
     }
 
-    function testGetAmountOut() public view {
-        (uint256 amountOut,,) = helper.getAmountOut(poolId, true, 1e17, false);
+    function testHelperGetAmountOut() public {
+        bool zeroForOne = true;
+        uint256 amountIn = 1e17;
+        (uint256 amountOut,,) = helper.getAmountOut(poolId, zeroForOne, amountIn, false);
         PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
-        (uint256 expectedAmountOut,) = SwapMath.getAmountOut(state.pairReserves, state.lpFee, true, 1e17);
+        (uint256 expectedAmountOut,) = SwapMath.getAmountOut(state.pairReserves, state.lpFee, zeroForOne, amountIn);
         assertEq(amountOut, expectedAmountOut);
 
-        (amountOut,,) = helper.getAmountOut(poolId, true, 1e17, true);
+        (amountOut,,) = helper.getAmountOut(poolId, zeroForOne, amountIn, true);
         (expectedAmountOut,,) =
-            SwapMath.getAmountOut(state.pairReserves, state.truncatedReserves, state.lpFee, true, 1e17);
+            SwapMath.getAmountOut(state.pairReserves, state.truncatedReserves, state.lpFee, true, amountIn);
         assertEq(amountOut, expectedAmountOut);
+
+        token0.mint(address(this), amountIn);
+
+        IPairPositionManager.SwapInputParams memory params = IPairPositionManager.SwapInputParams({
+            poolId: poolId,
+            zeroForOne: zeroForOne,
+            to: address(this),
+            amountIn: amountIn,
+            amountOutMin: 0,
+            deadline: block.timestamp + 1
+        });
+
+        (,, uint256 actAmountOut) = pairPositionManager.exactInput(params);
+        assertEq(actAmountOut, expectedAmountOut);
+        assertEq(expectedAmountOut, token1.balanceOf(address(this)));
     }
 
-    function testGetAmountIn() public view {
+    function testHelperGetAmountIn() public {
+        bool zeroForOne = true;
+        uint256 amountOut = 1e17;
         PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
 
-        (uint256 amountIn,,) = helper.getAmountIn(poolId, true, 1e17, false);
-        (uint256 expectedAmountIn,) = SwapMath.getAmountIn(state.pairReserves, state.lpFee, true, 1e17);
+        (uint256 amountIn,,) = helper.getAmountIn(poolId, zeroForOne, amountOut, false);
+        (uint256 expectedAmountIn,) = SwapMath.getAmountIn(state.pairReserves, state.lpFee, zeroForOne, amountOut);
         assertEq(amountIn, expectedAmountIn);
 
-        (amountIn,,) = helper.getAmountIn(poolId, true, 1e17, true);
+        (amountIn,,) = helper.getAmountIn(poolId, zeroForOne, amountOut, true);
         (expectedAmountIn,,) =
-            SwapMath.getAmountIn(state.pairReserves, state.truncatedReserves, state.lpFee, true, 1e17);
+            SwapMath.getAmountIn(state.pairReserves, state.truncatedReserves, state.lpFee, zeroForOne, amountOut);
         assertEq(amountIn, expectedAmountIn);
+
+        token0.mint(address(this), amountIn);
+
+        IPairPositionManager.SwapOutputParams memory params = IPairPositionManager.SwapOutputParams({
+            poolId: poolId,
+            zeroForOne: zeroForOne,
+            to: address(this),
+            amountInMax: 20e18,
+            amountOut: amountOut,
+            deadline: block.timestamp + 1
+        });
+
+        (,, uint256 actAmountIn) = pairPositionManager.exactOutput(params);
+
+        assertEq(actAmountIn, expectedAmountIn);
+        assertEq(amountOut, token1.balanceOf(address(this)));
     }
 
     function testGetBorrowRate() public view {
