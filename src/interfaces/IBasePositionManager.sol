@@ -7,5 +7,13 @@ import {MarginLevels} from "../types/MarginLevels.sol";
 import {IImmutableState} from "./IImmutableState.sol";
 
 interface IBasePositionManager is IImmutableState {
+    error NotOwner();
+
+    error InvalidCallback();
+
+    error PriceSlippageTooHigh();
+
+    error MismatchedPoolKey();
+
     function poolIds(uint256 tokenId) external view returns (PoolId poolId);
 }

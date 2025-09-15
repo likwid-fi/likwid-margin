@@ -109,8 +109,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
 
     /// @inheritdoc ILendPositionManager
     function withdraw(uint256 tokenId, uint256 amount) external {
-        address sender = msg.sender;
-        _requireAuth(sender, tokenId);
+        _requireAuth(msg.sender, tokenId);
         PoolId poolId = poolIds[tokenId];
         Currency currency = currencies[tokenId];
         PoolKey memory key = poolKeys[poolId];
@@ -121,12 +120,12 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
             salt: bytes32(tokenId)
         });
 
-        bytes memory callbackData = abi.encode(sender, key, params);
+        bytes memory callbackData = abi.encode(msg.sender, key, params);
         bytes memory data = abi.encode(Actions.WITHDRAW, callbackData);
 
         vault.unlock(data);
 
-        emit Withdraw(poolId, currency, sender, tokenId, sender, amount);
+        emit Withdraw(poolId, currency, msg.sender, tokenId, msg.sender, amount);
     }
 
     function handleLend(bytes memory _data) internal returns (bytes memory) {

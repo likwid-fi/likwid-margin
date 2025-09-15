@@ -20,6 +20,9 @@ interface IProtocolFees {
     /// @notice Emitted when the protocol fee controller address is updated in setProtocolFeeController.
     event ProtocolFeeControllerUpdated(address indexed protocolFeeController);
 
+    /// @notice Emitted when the default protocol fee is updated.
+    event DefaultProtocolFeeUpdated(uint8 feeType, uint8 newFee);
+
     /// @notice Emitted when the protocol fee is updated for a pool.
     event ProtocolFeeUpdated(PoolId indexed id, uint24 protocolFee);
 
@@ -27,6 +30,11 @@ interface IProtocolFees {
     /// @param currency The currency to check
     /// @return amount The amount of protocol fees accrued in the currency
     function protocolFeesAccrued(Currency currency) external view returns (uint256 amount);
+
+    /// @notice Sets the default protocol fee
+    /// @param feeType The fee type to set a protocol fee for
+    /// @param newFee The new protocol fee
+    function setDefaultProtocolFee(FeeTypes feeType, uint8 newFee) external;
 
     /// @notice Sets the protocol fee for the given pool
     /// @param key The key of the pool to set a protocol fee for

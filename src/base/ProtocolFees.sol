@@ -40,6 +40,13 @@ abstract contract ProtocolFees is IProtocolFees, MarginBase {
     }
 
     /// @inheritdoc IProtocolFees
+    function setDefaultProtocolFee(FeeTypes feeType, uint8 newFee) external onlyOwner {
+        uint24 newProtocolFee = defaultProtocolFee.setProtocolFee(feeType, newFee);
+        if (!newProtocolFee.isValidProtocolFee()) ProtocolFeeTooLarge.selector.revertWith(newProtocolFee);
+        emit DefaultProtocolFeeUpdated(uint8(feeType), newFee);
+    }
+
+    /// @inheritdoc IProtocolFees
     function setProtocolFee(PoolKey memory key, FeeTypes feeType, uint8 newFee) external {
         if (msg.sender != protocolFeeController) InvalidCaller.selector.revertWith();
         Pool.State storage pool = _getAndUpdatePool(key);

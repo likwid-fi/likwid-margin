@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 
 // Openzeppelin
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
@@ -18,17 +19,15 @@ import {IUnlockCallback} from "../interfaces/callback/IUnlockCallback.sol";
 import {CustomRevert} from "../libraries/CustomRevert.sol";
 import {CurrencyPoolLibrary} from "../libraries/CurrencyPoolLibrary.sol";
 
-abstract contract BasePositionManager is IBasePositionManager, ImmutableState, IUnlockCallback, ERC721, Owned {
+abstract contract BasePositionManager is
+    IBasePositionManager,
+    ImmutableState,
+    IUnlockCallback,
+    ERC721Enumerable,
+    Owned
+{
     using CurrencyPoolLibrary for Currency;
     using CustomRevert for bytes4;
-
-    error NotOwner();
-
-    error InvalidCallback();
-
-    error PriceSlippageTooHigh();
-
-    error MismatchedPoolKey();
 
     uint256 public nextId = 1;
 
