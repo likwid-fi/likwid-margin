@@ -37,7 +37,7 @@ abstract contract MarginBase is IMarginBase, Owned {
     uint24 private constant M_LOW = 10;
     uint24 private constant M_MIDDLE = 100;
     uint24 private constant M_HIGH = 10000;
-    uint24 private constant STAGE_DURATION = 1 hours; // default: 1 hour seconds
+    uint24 private constant STAGE_DURATION = 12 hours; // default: 12 hour seconds
     uint24 private constant STAGE_SIZE = 5; // default: 5 stages
     uint24 private constant STAGE_LEAVE_PART = 5; // default: 5, meaning 20% of the total liquidity is free
 

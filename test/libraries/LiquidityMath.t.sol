@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {LiquidityMath} from "../../src/libraries/LiquidityMath.sol";
 
 contract LiquidityMathTest is Test {
-    function testAddInvestmentPositive() public pure {
+    function testAddInvestmentPositive01() public pure {
         uint256 prev = 0;
         int128 amount0 = 100;
         int128 amount1 = 200;
@@ -16,6 +16,19 @@ contract LiquidityMathTest is Test {
 
         assertEq(currentAmount0, 100);
         assertEq(currentAmount1, 200);
+    }
+
+    function testAddInvestmentPositive02() public pure {
+        uint256 prev = 0;
+        int128 amount0 = -10000000000000000000;
+        int128 amount1 = -20000000000000000000;
+        uint256 current = LiquidityMath.addInvestment(prev, amount0, amount1);
+
+        int128 currentAmount0 = int128(uint128(current >> 128));
+        int128 currentAmount1 = int128(uint128(current));
+
+        assertEq(currentAmount0, amount0);
+        assertEq(currentAmount1, amount1);
     }
 
     function testAddInvestmentNegative() public pure {

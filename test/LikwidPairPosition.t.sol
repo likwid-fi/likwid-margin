@@ -13,6 +13,7 @@ import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
 import {StateLibrary} from "../src/libraries/StateLibrary.sol";
+import {PairPosition} from "../src/libraries/PairPosition.sol";
 import {Reserves} from "../src/types/Reserves.sol";
 
 contract LikwidPairPositionTest is Test {
@@ -102,6 +103,19 @@ contract LikwidPairPositionTest is Test {
         Reserves reserves = StateLibrary.getPairReserves(vault, id);
         assertEq(reserves.reserve0(), amount0ToAdd, "Vault internal reserve0 should match");
         assertEq(reserves.reserve1(), amount1ToAdd, "Vault internal reserve1 should match");
+
+        PairPosition.State memory _positionState = pairPositionManager.getPositionState(tokenId);
+        assertEq(_positionState.liquidity, liquidity, "positionState.liquidity == liquidity");
+        uint256 prev = _positionState.totalInvestment;
+        int128 prevAmount0;
+        int128 prevAmount1;
+        assembly ("memory-safe") {
+            // Unpack prev into two 128-bit values
+            prevAmount0 := shr(128, prev)
+            prevAmount1 := and(prev, 0xffffffffffffffffffffffffffffffff)
+        }
+        assertEq(amount0ToAdd, uint256(-int256(prevAmount0)), "amount0ToAdd == -prevAmount0");
+        assertEq(amount1ToAdd, uint256(-int256(prevAmount1)), "amount1ToAdd == -prevAmount1");
     }
 
     function testRemoveLiquidity() public {

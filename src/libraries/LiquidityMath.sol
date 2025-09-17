@@ -22,7 +22,7 @@ library LiquidityMath {
         assembly ("memory-safe") {
             // Unpack prev into two 128-bit values
             let prevAmount0 := shr(128, prev)
-            let prevAmount1 := and(prev, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
+            let prevAmount1 := and(prev, 0xffffffffffffffffffffffffffffffff)
 
             // Add deltas, checking for int128 overflow
             let currentAmount0 := add(signextend(15, prevAmount0), signextend(15, amount0))
@@ -41,8 +41,8 @@ library LiquidityMath {
 
             // Pack the results back into a uint256
             current := or(
-                shl(128, and(currentAmount0, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)),
-                and(currentAmount1, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
+                shl(128, and(currentAmount0, 0xffffffffffffffffffffffffffffffff)),
+                and(currentAmount1, 0xffffffffffffffffffffffffffffffff)
             )
         }
     }

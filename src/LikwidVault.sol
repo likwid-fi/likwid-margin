@@ -103,7 +103,8 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         } else if (liquidityAfter < liquidityBefore) {
             _handleRemoveLiquidity(id, liquidityBefore - liquidityAfter);
         }
-        emit ModifyLiquidity(id, msg.sender, BalanceDelta.unwrap(callerDelta), params.liquidityDelta, params.salt);
+        int256 liquidityDelta = liquidityAfter.toInt256() - liquidityBefore.toInt256();
+        emit ModifyLiquidity(id, msg.sender, BalanceDelta.unwrap(callerDelta), liquidityDelta, params.salt);
         _appendPoolBalanceDelta(key, msg.sender, callerDelta);
     }
 
