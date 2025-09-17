@@ -132,12 +132,18 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         );
         if (params.useMirror) {
             BalanceDelta realDelta;
+            int128 lendAmount;
             if (params.zeroForOne) {
                 realDelta = toBalanceDelta(swapDelta.amount0(), 0);
+                lendAmount = -swapDelta.amount1();
             } else {
                 realDelta = toBalanceDelta(0, swapDelta.amount1());
+                lendAmount = -swapDelta.amount0();
             }
             _appendPoolBalanceDelta(key, msg.sender, realDelta);
+            uint256 depositCumulativeLast =
+                params.zeroForOne ? pool.deposit1CumulativeLast : pool.deposit0CumulativeLast;
+            emit Lend(id, msg.sender, params.zeroForOne, lendAmount, depositCumulativeLast, params.salt);
         } else {
             _appendPoolBalanceDelta(key, msg.sender, swapDelta);
         }
@@ -150,7 +156,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
             emit Fees(id, feeCurrency, msg.sender, uint8(FeeTypes.SWAP), feeAmount);
         }
 
-        emit Swap(id, msg.sender, swapDelta.amount0(), swapDelta.amount1(), pool.slot0.totalSupply(), swapFee);
+        emit Swap(id, msg.sender, swapDelta.amount0(), swapDelta.amount1(), swapFee);
     }
 
     /// @inheritdoc IVault
@@ -176,7 +182,6 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         );
 
         _appendPoolBalanceDelta(key, msg.sender, lendDelta);
-
         emit Lend(id, msg.sender, params.lendForOne, params.lendAmount, depositCumulativeLast, params.salt);
     }
 

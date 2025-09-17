@@ -52,7 +52,7 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 marginAmount,
         uint256 marginTotal,
         uint256 debtAmount,
-        uint256 profitAmount
+        uint256 closeAmount
     );
     event Modify(
         PoolId indexed poolId,

@@ -62,12 +62,15 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
     /// @param sender The address that initiated the swap call, and that received the callback
     /// @param amount0 The delta of the currency0 balance of the pool
     /// @param amount1 The delta of the currency1 balance of the pool
-    /// @param liquidity The liquidity of the pool after the swap
     /// @param fee The swap fee in hundredths of a bip
-    event Swap(
-        PoolId indexed id, address indexed sender, int128 amount0, int128 amount1, uint128 liquidity, uint24 fee
-    );
+    event Swap(PoolId indexed id, address indexed sender, int128 amount0, int128 amount1, uint24 fee);
 
+    /// @notice Emitted for fees
+    /// @param id The abi encoded hash of the pool key struct for the pool that was modified
+    /// @param currency The currency of the fee
+    /// @param sender The address that paid the fee
+    /// @param feeType The type of fee
+    /// @param feeAmount The amount of the fee
     event Fees(PoolId indexed id, Currency indexed currency, address indexed sender, uint8 feeType, uint256 feeAmount);
 
     event Lend(

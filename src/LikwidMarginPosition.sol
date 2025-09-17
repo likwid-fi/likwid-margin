@@ -663,6 +663,15 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         bytes memory data = abi.encode(delta.action, callbackData);
 
         vault.unlock(data);
+        emit Modify(
+            key.toId(),
+            msg.sender,
+            tokenId,
+            position.marginAmount,
+            position.marginTotal,
+            position.debtAmount,
+            changeAmount
+        );
     }
 
     function handleMargin(bytes memory _data) internal returns (bytes memory) {

@@ -14,7 +14,7 @@ interface ILendPositionManager is IERC721 {
         PoolId indexed poolId,
         Currency indexed currency,
         address indexed sender,
-        uint256 tokeId,
+        uint256 tokenId,
         address recipient,
         uint256 amount
     );
@@ -23,7 +23,7 @@ interface ILendPositionManager is IERC721 {
         PoolId indexed poolId,
         Currency indexed currency,
         address indexed sender,
-        uint256 tokeId,
+        uint256 tokenId,
         address recipient,
         uint256 amount
     );

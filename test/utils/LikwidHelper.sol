@@ -45,6 +45,10 @@ contract LikwidHelper is Owned {
         uint128 lendReserve1;
         uint128 interestReserve0;
         uint128 interestReserve1;
+        uint256 borrow0CumulativeLast;
+        uint256 borrow1CumulativeLast;
+        uint256 deposit0CumulativeLast;
+        uint256 deposit1CumulativeLast;
     }
 
     function getPoolStateInfo(PoolId poolId) external view returns (PoolStateInfo memory stateInfo) {
@@ -72,6 +76,11 @@ contract LikwidHelper is Owned {
         (uint128 interestReserve0, uint128 interestReserve1) = state.interestReserves.reserves();
         stateInfo.interestReserve0 = interestReserve0;
         stateInfo.interestReserve1 = interestReserve1;
+
+        stateInfo.borrow0CumulativeLast = state.borrow0CumulativeLast;
+        stateInfo.borrow1CumulativeLast = state.borrow1CumulativeLast;
+        stateInfo.deposit0CumulativeLast = state.deposit0CumulativeLast;
+        stateInfo.deposit1CumulativeLast = state.deposit1CumulativeLast;
     }
 
     function getStageLiquidities(PoolId poolId) external view returns (uint128[][] memory liquidities) {
