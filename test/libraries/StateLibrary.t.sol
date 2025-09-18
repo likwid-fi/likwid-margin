@@ -12,6 +12,7 @@ import {Currency, CurrencyLibrary} from "../../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../../src/types/PoolId.sol";
 import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
+import {StageMath} from "../../src/libraries/StageMath.sol";
 import {LendPosition} from "../../src/libraries/LendPosition.sol";
 import {MarginPosition} from "../../src/libraries/MarginPosition.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
@@ -19,6 +20,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 contract StateLibraryTest is Test, IUnlockCallback {
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolKey;
+    using StageMath for uint256;
 
     LikwidVault vault;
     MockERC20 token0;
@@ -107,14 +109,12 @@ contract StateLibraryTest is Test, IUnlockCallback {
     }
 
     function testGetStageLiquidities() public view {
-        uint128[][] memory liquidities = StateLibrary.getStageLiquidities(vault, poolId);
+        uint256[] memory liquidities = StateLibrary.getRawStageLiquidities(vault, poolId);
         MarginState marginState = vault.marginState();
+        (uint128 total, uint128 liquidity) = liquidities[0].decode();
         assertEq(liquidities.length, marginState.stageSize(), "liquidities.length==marginState.stageSize()");
-        assertEq(
-            liquidities[0][0],
-            initialLiquidity / marginState.stageSize(),
-            "liquidities[0][0]==initialLiquidity/marginState.stageSize()"
-        );
+        assertEq(total, initialLiquidity / marginState.stageSize(), "total0==initialLiquidity/marginState.stageSize()");
+        assertEq(total, liquidity, "total==liquidity");
     }
 
     function testGetLendPositionState() public {

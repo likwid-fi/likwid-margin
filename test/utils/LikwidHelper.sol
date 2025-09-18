@@ -11,15 +11,20 @@ import {Currency} from "../../src/types/Currency.sol";
 import {MarginLevels} from "../../src/types/MarginLevels.sol";
 import {IVault} from "../../src/interfaces/IVault.sol";
 import {IMarginPositionManager} from "../../src/interfaces/IMarginPositionManager.sol";
+import {IMarginBase} from "../../src/interfaces/IMarginBase.sol";
+import {MarginState} from "../../src/types/MarginState.sol";
+import {StageMath} from "../../src/libraries/StageMath.sol";
 import {Math} from "../../src/libraries/Math.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
 import {PerLibrary} from "../../src/libraries/PerLibrary.sol";
 import {SwapMath} from "../../src/libraries/SwapMath.sol";
+import {StageMath} from "../../src/libraries/StageMath.sol";
 import {InterestMath} from "../../src/libraries/InterestMath.sol";
 import {MarginPosition} from "../../src/libraries/MarginPosition.sol";
 
 contract LikwidHelper is Owned {
     using PerLibrary for uint256;
+    using StageMath for uint256;
 
     IVault public vault;
 
@@ -81,10 +86,6 @@ contract LikwidHelper is Owned {
         stateInfo.borrow1CumulativeLast = state.borrow1CumulativeLast;
         stateInfo.deposit0CumulativeLast = state.deposit0CumulativeLast;
         stateInfo.deposit1CumulativeLast = state.deposit1CumulativeLast;
-    }
-
-    function getStageLiquidities(PoolId poolId) external view returns (uint128[][] memory liquidities) {
-        liquidities = StateLibrary.getStageLiquidities(vault, poolId);
     }
 
     function getAmountOut(PoolId poolId, bool zeroForOne, uint256 amountIn, bool dynamicFee)
@@ -227,6 +228,42 @@ contract LikwidHelper is Owned {
         rate = borrowForOne
             ? InterestMath.getBorrowRateByReserves(_state.marginState, realReserve1 + mirrorReserve1, mirrorReserve1)
             : InterestMath.getBorrowRateByReserves(_state.marginState, realReserve0 + mirrorReserve0, mirrorReserve0);
+    }
+
+    function getStageLiquidities(PoolId poolId) external view returns (uint128[][] memory liquidities) {
+        uint256[] memory queue = StateLibrary.getRawStageLiquidities(vault, poolId);
+        liquidities = new uint128[][](queue.length);
+        for (uint256 i = 0; i < queue.length; i++) {
+            (uint128 total, uint128 liquidity) = queue[i].decode();
+            liquidities[i] = new uint128[](2);
+            liquidities[i][0] = total;
+            liquidities[i][1] = liquidity;
+        }
+    }
+
+    function getReleasedLiquidity(PoolId id) public view returns (uint128) {
+        IMarginBase marginBase = IMarginBase(address(vault));
+        MarginState marginState = marginBase.marginState();
+        uint128 releasedLiquidity;
+        uint128 nextReleasedLiquidity;
+        releasedLiquidity = type(uint128).max;
+        if (uint256(marginState.stageDuration()) * marginState.stageSize() > 0) {
+            uint256[] memory queue = StateLibrary.getRawStageLiquidities(vault, id);
+            uint256 lastStageTimestamp = StateLibrary.getLastStageTimestamp(vault, id);
+
+            if (queue.length > 0) {
+                uint256 currentStage = queue[0];
+                (, releasedLiquidity) = StageMath.decode(currentStage);
+                if (
+                    queue.length > 1 && StageMath.isFree(currentStage, marginState.stageLeavePart())
+                        && block.timestamp >= lastStageTimestamp + marginState.stageDuration()
+                ) {
+                    uint256 nextStage = queue[1];
+                    (, nextReleasedLiquidity) = StageMath.decode(nextStage);
+                }
+            }
+        }
+        return releasedLiquidity + nextReleasedLiquidity;
     }
 
     // ******************** OWNER CALL ********************

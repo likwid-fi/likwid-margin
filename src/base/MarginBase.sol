@@ -71,8 +71,7 @@ abstract contract MarginBase is IMarginBase, Owned {
             uint256 lastStageTimestamp = lastStageTimestampStore[id];
             if (!queue.empty()) {
                 uint256 currentStage = queue.front();
-                uint256 total;
-                (total, releasedLiquidity) = currentStage.decode();
+                (, releasedLiquidity) = currentStage.decode();
                 if (
                     queue.length() > 1 && currentStage.isFree(marginState.stageLeavePart())
                         && block.timestamp >= lastStageTimestamp + marginState.stageDuration()

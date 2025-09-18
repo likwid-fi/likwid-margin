@@ -16,7 +16,6 @@ import {PositionLibrary} from "./PositionLibrary.sol";
 import {InterestMath} from "./InterestMath.sol";
 import {PriceMath} from "./PriceMath.sol";
 import {SafeCast} from "./SafeCast.sol";
-import {StageMath} from "./StageMath.sol";
 
 /// @title A helper library to provide state getters for a Likwid pool
 /// @notice This library provides functions to read the state of a Likwid pool from storage.
@@ -26,8 +25,10 @@ library StateLibrary {
     using ReservesLibrary for Reserves;
     using PositionLibrary for address;
     using TimeLibrary for uint32;
-    using StageMath for uint256;
 
+    /// @notice The storage slot of the `lastStageTimestampStore` mapping in the MarginBase contract.
+    /// @dev This is an assumption. If the storage layout of MarginBase changes, this value needs to be updated.
+    bytes32 public constant LAST_STAGE_TIMESTAMP_STORE_SLOT = bytes32(uint256(3));
     /// @notice The storage slot of the `liquidityLockedQueue` mapping in the MarginBase contract.
     /// @dev This is an assumption. If the storage layout of MarginBase changes, this value needs to be updated.
     bytes32 public constant LIQUIDITY_LOCKED_QUEUE_SLOT = bytes32(uint256(4));
@@ -171,6 +172,11 @@ library StateLibrary {
         return Reserves.wrap(uint256(vault.extsload(slot)));
     }
 
+    function getLastStageTimestamp(IVault vault, PoolId poolId) internal view returns (uint256) {
+        bytes32 slot = keccak256(abi.encodePacked(PoolId.unwrap(poolId), LAST_STAGE_TIMESTAMP_STORE_SLOT));
+        return uint256(vault.extsload(slot));
+    }
+
     function getPairPositionState(IVault vault, PoolId poolId, address owner, bytes32 salt)
         internal
         view
@@ -205,7 +211,7 @@ library StateLibrary {
         _position.depositCumulativeLast = uint256(data[1]);
     }
 
-    function getStageLiquidities(IVault vault, PoolId poolId) internal view returns (uint128[][] memory liquidities) {
+    function getRawStageLiquidities(IVault vault, PoolId poolId) internal view returns (uint256[] memory liquidities) {
         bytes32 dequeSlot = keccak256(abi.encodePacked(PoolId.unwrap(poolId), LIQUIDITY_LOCKED_QUEUE_SLOT));
         bytes32 dequeValue = vault.extsload(dequeSlot);
 
@@ -217,17 +223,13 @@ library StateLibrary {
         }
 
         uint256 len = back - front;
-        liquidities = new uint128[][](len);
+        liquidities = new uint256[](len);
         bytes32 valuesSlot = bytes32(uint256(dequeSlot) + 1);
 
         for (uint256 i = 0; i < len; i++) {
             uint256 valueIndex = front + i;
             bytes32 valueSlot = keccak256(abi.encodePacked(valueIndex, valuesSlot));
-            uint256 stage = uint256(vault.extsload(valueSlot));
-            liquidities[i] = new uint128[](2);
-            (uint128 total, uint128 liquidity) = stage.decode();
-            liquidities[i][0] = total;
-            liquidities[i][1] = liquidity;
+            liquidities[i] = uint256(vault.extsload(valueSlot));
         }
     }
 
