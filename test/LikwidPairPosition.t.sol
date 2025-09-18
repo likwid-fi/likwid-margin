@@ -15,6 +15,7 @@ import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
 import {StateLibrary} from "../src/libraries/StateLibrary.sol";
 import {PairPosition} from "../src/libraries/PairPosition.sol";
 import {Reserves} from "../src/types/Reserves.sol";
+import {MarginState} from "../src/types/MarginState.sol";
 
 contract LikwidPairPositionTest is Test {
     using CurrencyLibrary for Currency;
@@ -54,6 +55,10 @@ contract LikwidPairPositionTest is Test {
 
         // The test contract is the vault's controller to settle balances
         vault.setMarginController(address(this));
+
+        // Disable liquidity locking for tests
+        MarginState currentMarginState = vault.marginState();
+        vault.setMarginState(currentMarginState.setStageDuration(0));
 
         // Approve the vault to pull funds from this test contract
         token0.approve(address(vault), type(uint256).max);
@@ -241,5 +246,143 @@ contract LikwidPairPositionTest is Test {
         Reserves reserves = StateLibrary.getPairReserves(vault, poolId);
         assertEq(reserves.reserve0(), amount0ToAdd + amountIn, "Vault reserve0 should have increased by amountIn");
         assertEq(reserves.reserve1(), amount1ToAdd - amountOut, "Vault reserve1 should have decreased by amountOut");
+    }
+
+    function test_RevertIf_RemoveLiquidityNotOwner() public {
+        // 1. Arrange: Add liquidity to create a position
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 10e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        (uint256 tokenId, uint128 liquidityAdded) =
+            pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+
+        // 2. Act & Assert: Expect revert when another user tries to remove liquidity
+        vm.prank(address(0xDEADBEEF));
+        vm.expectRevert(bytes("NotOwner()"));
+        pairPositionManager.removeLiquidity(tokenId, liquidityAdded, 0, 0);
+    }
+
+    function test_RevertIf_IncreaseLiquidityNotOwner() public {
+        // 1. Arrange: Add liquidity to create a position
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 10e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        (uint256 tokenId, ) = pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+
+        // 2. Act & Assert: Expect revert when another user tries to increase liquidity
+        vm.prank(address(0xDEADBEEF));
+        vm.expectRevert(bytes("NotOwner()"));
+        pairPositionManager.increaseLiquidity(tokenId, 1e18, 1e18, 0, 0);
+    }
+
+    function testRemoveAllLiquidity() public {
+        // 1. Arrange: Add liquidity first to create a position
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 10e18; // Use 1:1 ratio for simplicity
+
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+
+        (uint256 tokenId, uint128 liquidityAdded) =
+            pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+
+        assertEq(token0.balanceOf(address(this)), 0, "User token0 balance should be 0 after adding liquidity");
+        assertEq(token1.balanceOf(address(this)), 0, "User token1 balance should be 0 after adding liquidity");
+
+        // 2. Act: Remove the entire liquidity
+        (uint256 amount0Removed, uint256 amount1Removed) =
+            pairPositionManager.removeLiquidity(tokenId, liquidityAdded, 0, 0);
+
+        // 3. Assert
+        // Check amounts returned. Due to rounding, it might not be exactly the same, but should be very close.
+        assertApproxEqAbs(amount0Removed, amount0ToAdd, 1, "Amount of token0 removed should be close to amount added");
+        assertApproxEqAbs(amount1Removed, amount1ToAdd, 1, "Amount of token1 removed should be close to amount added");
+
+        // Check user's final token balances
+        assertEq(token0.balanceOf(address(this)), amount0Removed, "User should have received back all token0");
+        assertEq(token1.balanceOf(address(this)), amount1Removed, "User should have received back all token1");
+
+        // Check vault's final token balances (should be close to zero)
+        assertApproxEqAbs(token0.balanceOf(address(vault)), 0, 1, "Vault should have sent all token0");
+        assertApproxEqAbs(token1.balanceOf(address(vault)), 0, 1, "Vault should have sent all token1");
+
+        // Check position liquidity is now zero
+        PairPosition.State memory positionState = pairPositionManager.getPositionState(tokenId);
+        assertEq(positionState.liquidity, 0, "Position liquidity should be zero after full withdrawal");
+    }
+
+    function test_RevertIf_SwapWithExpiredDeadline() public {
+        // 1. Arrange: Add liquidity and prepare for swap
+        uint256 amount0ToAdd = 100e18;
+        uint256 amount1ToAdd = 100e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+
+        uint256 amountIn = 10e18;
+        token0.mint(address(this), amountIn);
+        PoolId poolId = key.toId();
+
+        IPairPositionManager.SwapInputParams memory params = IPairPositionManager.SwapInputParams({
+            poolId: poolId,
+            zeroForOne: true,
+            to: address(this),
+            amountIn: amountIn,
+            amountOutMin: 0,
+            deadline: block.timestamp - 1 // Expired deadline
+        });
+
+        // 2. Act & Assert
+        vm.expectRevert("EXPIRED");
+        pairPositionManager.exactInput(params);
+    }
+
+    function testIncreaseLiquidity() public {
+        // 1. Arrange: Add initial liquidity
+        uint256 initialAmount0 = 10e18;
+        uint256 initialAmount1 = 10e18;
+        token0.mint(address(this), initialAmount0);
+        token1.mint(address(this), initialAmount1);
+        (uint256 tokenId, uint128 initialLiquidity) =
+            pairPositionManager.addLiquidity(key, initialAmount0, initialAmount1, 0, 0);
+
+        // 2. Arrange: Prepare for increasing liquidity
+        uint256 increaseAmount0 = 5e18;
+        uint256 increaseAmount1 = 5e18;
+        token0.mint(address(this), increaseAmount0);
+        token1.mint(address(this), increaseAmount1);
+
+        // 3. Act
+        uint128 addedLiquidity =
+            pairPositionManager.increaseLiquidity(tokenId, increaseAmount0, increaseAmount1, 0, 0);
+
+        // 4. Assert
+        assertTrue(addedLiquidity > 0, "Added liquidity should be positive");
+
+        // Check position state
+        PairPosition.State memory positionState = pairPositionManager.getPositionState(tokenId);
+        assertEq(positionState.liquidity, initialLiquidity + addedLiquidity, "Total liquidity should have increased");
+
+        // Check vault reserves
+        Reserves reserves = StateLibrary.getPairReserves(vault, key.toId());
+        assertEq(reserves.reserve0(), initialAmount0 + increaseAmount0, "Vault reserve0 should be updated");
+        assertEq(reserves.reserve1(), initialAmount1 + increaseAmount1, "Vault reserve1 should be updated");
+
+        // Check user balances
+        assertEq(token0.balanceOf(address(this)), 0, "User should have spent all token0");
+        assertEq(token1.balanceOf(address(this)), 0, "User should have spent all token1");
+    }
+
+    function testRevert_When_Invalid_Action() public {
+        // 1. Arrange: Prepare invalid callback data
+        uint8 invalidAction = 99; // An action that doesn't exist in the Actions enum
+        bytes memory params = abi.encode("invalid params");
+        bytes memory data = abi.encode(invalidAction, params);
+
+        // 2. Act & Assert
+        vm.expectRevert();
+        pairPositionManager.unlockCallback(data);
     }
 }

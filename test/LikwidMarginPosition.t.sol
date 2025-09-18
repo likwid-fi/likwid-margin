@@ -8,6 +8,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {LikwidVault} from "../src/LikwidVault.sol";
 import {LikwidMarginPosition} from "../src/LikwidMarginPosition.sol";
 import {LikwidPairPosition} from "../src/LikwidPairPosition.sol";
+import {LikwidHelper} from "./utils/LikwidHelper.sol";
 import {IMarginPositionManager} from "../src/interfaces/IMarginPositionManager.sol";
 import {IVault} from "../src/interfaces/IVault.sol";
 import {IUnlockCallback} from "../src/interfaces/callback/IUnlockCallback.sol";
@@ -18,14 +19,22 @@ import {StateLibrary} from "../src/libraries/StateLibrary.sol";
 import {Reserves} from "../src/types/Reserves.sol";
 import {MarginPosition} from "../src/libraries/MarginPosition.sol";
 import {BalanceDelta} from "../src/types/BalanceDelta.sol";
+import {MarginLevels, MarginLevelsLibrary} from "../src/types/MarginLevels.sol";
+
+import {LikwidChecker} from "./utils/LikwidChecker.sol";
 
 contract LikwidMarginPositionTest is Test, IUnlockCallback {
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolKey;
+    using MarginLevelsLibrary for MarginLevels;
+
+    event MarginLevelChanged(bytes32 oldMarginLevel, bytes32 newMarginLevel);
+    event MarginFeeChanged(uint24 oldMarginFee, uint24 newMarginFee);
 
     LikwidVault vault;
     LikwidMarginPosition marginPositionManager;
     LikwidPairPosition pairPositionManager;
+    LikwidHelper helper;
     PoolKey key;
     MockERC20 token0;
     MockERC20 token1;
@@ -37,6 +46,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         vault = new LikwidVault(address(this));
         marginPositionManager = new LikwidMarginPosition(address(this), vault);
         pairPositionManager = new LikwidPairPosition(address(this), vault);
+        helper = new LikwidHelper(address(this), vault);
 
         // Deploy mock tokens
         address tokenA = address(new MockERC20("TokenA", "TKNA", 18));
@@ -131,6 +141,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         assertEq(position.marginAmount, marginAmount, "position.marginAmount==marginAmount");
         assertEq(position.debtAmount, borrowAmount, "position.debtAmount==borrowAmount");
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testRepay() public {
@@ -164,6 +175,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertTrue(
             positionAfter.debtAmount < positionBefore.debtAmount, "position.debtAmount should be less after repay"
         );
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testClose() public {
@@ -188,6 +200,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after close");
         assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after close");
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testModify() public {
@@ -219,6 +232,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             positionBefore.marginAmount + modifyAmount,
             "position.marginAmount should be increased"
         );
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testLiquidateCall() public {
@@ -270,6 +284,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
         assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after liquidation");
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testLiquidateBurn() public {
@@ -319,5 +334,273 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
         assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after liquidation");
         assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after liquidation");
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testAddMargin_MarginForOneTrue() public {
+        uint256 marginAmount = 0.1e18;
+        token1.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: true, // margin with token1, borrow token0
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+
+        assertTrue(tokenId > 0);
+        assertTrue(borrowAmount > 0);
+
+        MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
+
+        assertEq(position.marginAmount, marginAmount, "position.marginAmount==marginAmount");
+        assertEq(position.debtAmount, borrowAmount, "position.debtAmount==borrowAmount");
+        assertTrue(position.marginForOne, "position.marginForOne should be true");
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testAddMargin_NoLeverage() public {
+        uint256 marginAmount = 0.1e18;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 0, // No leverage, just add collateral and borrow
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 1000, // borrow a small amount
+            borrowAmountMax: 1000,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+        assertTrue(tokenId > 0);
+        assertEq(borrowAmount, 1000);
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testAddMargin_MaxLeverage() public {
+        MarginLevels newMarginLevels;
+        newMarginLevels = newMarginLevels.setMinMarginLevel(1100000);
+        newMarginLevels = newMarginLevels.setMinBorrowLevel(1200000);
+        newMarginLevels = newMarginLevels.setLiquidateLevel(1050000);
+        newMarginLevels = newMarginLevels.setLiquidationRatio(950000);
+        newMarginLevels = newMarginLevels.setCallerProfit(10000);
+        newMarginLevels = newMarginLevels.setProtocolProfit(5000);
+        marginPositionManager.setMarginLevel(MarginLevels.unwrap(newMarginLevels));
+
+        uint256 marginAmount = 0.1e18;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 5, // MAX_LEVERAGE
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+
+        assertTrue(tokenId > 0);
+        assertTrue(borrowAmount > 0);
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testRepay_Full() public {
+        uint256 marginAmount = 0.1e18;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+
+        token1.mint(address(this), borrowAmount);
+        marginPositionManager.repay(tokenId, borrowAmount, block.timestamp);
+
+        MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
+
+        assertTrue(positionAfter.debtAmount < 10, "position.debtAmount should be close to 0 after full repay");
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testClose_Partial() public {
+        uint256 marginAmount = 0.1e18;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
+        MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
+
+        marginPositionManager.close(tokenId, 500_000, 0, block.timestamp); // close 50%
+
+        MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
+
+        assertApproxEqAbs(
+            positionAfter.marginAmount, positionBefore.marginAmount / 2, 1, "marginAmount should be halved"
+        );
+        assertApproxEqAbs(positionAfter.debtAmount, positionBefore.debtAmount / 2, 1, "debtAmount should be halved");
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testModify_DecreaseCollateral() public {
+        uint256 marginAmount = 0.2e18;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
+        MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
+
+        int128 modifyAmount = -0.05e18;
+        marginPositionManager.modify(tokenId, modifyAmount);
+
+        MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
+
+        assertEq(
+            int256(uint256(positionAfter.marginAmount)),
+            int256(uint256(positionBefore.marginAmount)) + modifyAmount,
+            "position.marginAmount should be decreased"
+        );
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testModify_Fail_BelowMinBorrowLevel() public {
+        uint256 marginAmount = 0.1e18;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 4,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
+
+        int128 modifyAmount = -0.08e18; // Decrease collateral significantly
+        vm.expectRevert(bytes4(keccak256("InvalidLevel()")));
+        marginPositionManager.modify(tokenId, modifyAmount);
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testLiquidate_NotLiquidatable() public {
+        uint256 marginAmount = 0.1e18;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
+
+        (bool liquidated,,) = marginPositionManager.checkLiquidate(tokenId);
+        assertFalse(liquidated, "Position should not be liquidatable");
+
+        vm.expectRevert(bytes4(keccak256("PositionNotLiquidated()")));
+        marginPositionManager.liquidateCall(tokenId);
+
+        vm.expectRevert(bytes4(keccak256("PositionNotLiquidated()")));
+        marginPositionManager.liquidateBurn(tokenId);
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testSetMarginLevel() public {
+        MarginLevels oldLevels = marginPositionManager.marginLevels();
+        MarginLevels newMarginLevels;
+        newMarginLevels = newMarginLevels.setMinMarginLevel(1200000);
+        newMarginLevels = newMarginLevels.setMinBorrowLevel(1500000);
+        newMarginLevels = newMarginLevels.setLiquidateLevel(1150000);
+        newMarginLevels = newMarginLevels.setLiquidationRatio(900000);
+        newMarginLevels = newMarginLevels.setCallerProfit(20000);
+        newMarginLevels = newMarginLevels.setProtocolProfit(10000);
+
+        vm.expectEmit(true, true, true, true);
+        emit MarginLevelChanged(MarginLevels.unwrap(oldLevels), MarginLevels.unwrap(newMarginLevels));
+        marginPositionManager.setMarginLevel(MarginLevels.unwrap(newMarginLevels));
+
+        assertEq(
+            MarginLevels.unwrap(marginPositionManager.marginLevels()),
+            MarginLevels.unwrap(newMarginLevels),
+            "Margin levels should be updated"
+        );
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testSetMarginLevel_NotOwner() public {
+        bytes32 newLevels = keccak256(
+            abi.encodePacked(
+                uint24(1200000), uint24(1500000), uint24(1150000), uint24(900000), uint24(20000), uint24(10000)
+            )
+        );
+        address notOwner = makeAddr("notOwner");
+        vm.startPrank(notOwner);
+        vm.expectRevert(bytes("UNAUTHORIZED"));
+        marginPositionManager.setMarginLevel(newLevels);
+        vm.stopPrank();
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testSetDefaultMarginFee() public {
+        uint24 oldFee = marginPositionManager.defaultMarginFee();
+        uint24 newFee = 5000; // 0.5%
+
+        vm.expectEmit(true, true, true, true);
+        emit MarginFeeChanged(oldFee, newFee);
+        marginPositionManager.setDefaultMarginFee(newFee);
+
+        assertEq(marginPositionManager.defaultMarginFee(), newFee, "Default margin fee should be updated");
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testSetDefaultMarginFee_NotOwner() public {
+        uint24 newFee = 5000;
+        address notOwner = makeAddr("notOwner");
+        vm.startPrank(notOwner);
+        vm.expectRevert(bytes("UNAUTHORIZED"));
+        marginPositionManager.setDefaultMarginFee(newFee);
+        vm.stopPrank();
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 }
