@@ -111,6 +111,8 @@ contract LikwidHelperTest is Test {
         uint256 stage = Math.sqrt(amount0ToAdd * amount1ToAdd) / 5 + 1;
         assertEq(liquidities.length, 5);
         assertEq(liquidities[0][1], stage);
+        uint256 releasedLiquidity = helper.getReleasedLiquidity(poolId);
+        assertEq(releasedLiquidity, stage);
     }
 
     function testHelperGetAmountOut() public {

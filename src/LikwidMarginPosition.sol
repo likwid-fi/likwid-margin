@@ -328,8 +328,8 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         MarginBalanceDelta memory delta
     ) internal returns (uint256 borrowAmount) {
         uint256 borrowRealReserves = poolState.realReserves.reserve01(!position.marginForOne);
-        uint256 borrowMAXAmount =
-            SwapMath.getAmountOut(poolState.pairReserves, !position.marginForOne, params.marginAmount);
+        (uint256 borrowMAXAmount,) =
+            SwapMath.getAmountOut(poolState.pairReserves, poolState.lpFee, !position.marginForOne, params.marginAmount);
         borrowMAXAmount = Math.min(borrowMAXAmount, borrowRealReserves * 20 / 100);
         if (params.borrowAmount > borrowMAXAmount) BorrowTooMuch.selector.revertWith();
         if (params.borrowAmount == 0) params.borrowAmount = borrowMAXAmount.toUint128();
@@ -438,8 +438,9 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
             _getPoolCumulativeValues(poolState, position.marginForOne);
 
-        (uint256 releaseAmount, uint256 repayAmount, uint256 closeAmount, uint256 lostAmount) =
-            position.close(poolState.pairReserves, borrowCumulativeLast, depositCumulativeLast, 0, closeMillionth);
+        (uint256 releaseAmount, uint256 repayAmount, uint256 closeAmount, uint256 lostAmount) = position.close(
+            poolState.pairReserves, poolState.lpFee, borrowCumulativeLast, depositCumulativeLast, 0, closeMillionth
+        );
         if (lostAmount > 0 || (closeAmountMin > 0 && closeAmount < closeAmountMin)) {
             InsufficientCloseReceived.selector.revertWith();
         }
@@ -515,6 +516,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         uint256 rewardAmount = profit + protocolProfitAmount;
         (uint256 releaseAmount, uint256 repayAmount,, uint256 lostAmount) = position.close(
             poolState.pairReserves,
+            poolState.lpFee,
             borrowCumulativeLast,
             depositCumulativeLast,
             rewardAmount,

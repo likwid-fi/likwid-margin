@@ -167,7 +167,7 @@ contract LikwidHelper is Owned {
         if (_position.marginTotal > 0) {
             needAmount = Math.mulDiv(reserveMargin, debtAmount, reserveBorrow);
         } else {
-            needAmount = SwapMath.getAmountIn(_state.pairReserves, !_position.marginForOne, debtAmount);
+            (needAmount,) = SwapMath.getAmountIn(_state.pairReserves, _state.lpFee, !_position.marginForOne, debtAmount);
         }
         uint256 assetAmount = _position.marginAmount + _position.marginTotal;
 

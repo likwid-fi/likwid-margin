@@ -99,27 +99,6 @@ library SwapMath {
     }
 
     /**
-     * @notice Calculates the amount of output tokens for a given input amount, without fees.
-     * @param pairReserves The reserves of the token pair.
-     * @param zeroForOne The direction of the swap.
-     * @param amountIn The amount of input tokens.
-     * @return amountOut The calculated amount of output tokens.
-     */
-    function getAmountOut(Reserves pairReserves, bool zeroForOne, uint256 amountIn)
-        internal
-        pure
-        returns (uint256 amountOut)
-    {
-        if (amountIn == 0) InsufficientInputAmount.selector.revertWith();
-        (uint128 _reserve0, uint128 _reserve1) = pairReserves.reserves();
-        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
-        if (reserveIn == 0 || reserveOut == 0) InsufficientLiquidity.selector.revertWith();
-        uint256 numerator = amountIn * reserveOut;
-        uint256 denominator = reserveIn + amountIn;
-        amountOut = numerator / denominator;
-    }
-
-    /**
      * @notice Calculates the output amount and fee for a given input amount and fixed fee.
      * @param pairReserves The reserves of the token pair.
      * @param lpFee The liquidity provider fee.
@@ -165,25 +144,6 @@ library SwapMath {
         uint256 degree = getPriceDegree(pairReserves, truncatedReserves, lpFee, zeroForOne, amountIn, 0);
         fee = dynamicFee(lpFee, degree);
         (amountOut, feeAmount) = getAmountOut(pairReserves, fee, zeroForOne, amountIn);
-    }
-
-    /**
-     * @notice Calculates the required input amount for a given output amount, without fees.
-     * @param pairReserves The reserves of the token pair.
-     * @param zeroForOne The direction of the swap.
-     * @param amountOut The desired amount of output tokens.
-     * @return amountIn The required amount of input tokens.
-     */
-    function getAmountIn(Reserves pairReserves, bool zeroForOne, uint256 amountOut)
-        internal
-        pure
-        returns (uint256 amountIn)
-    {
-        (uint128 _reserve0, uint128 _reserve1) = pairReserves.reserves();
-        (uint256 reserveIn, uint256 reserveOut) = zeroForOne ? (_reserve0, _reserve1) : (_reserve1, _reserve0);
-        if (reserveIn == 0 || reserveOut == 0) InsufficientLiquidity.selector.revertWith();
-        if (amountOut >= reserveOut) InsufficientLiquidity.selector.revertWith();
-        amountIn = Math.mulDiv(reserveIn, amountOut, reserveOut - amountOut) + 1;
     }
 
     /**

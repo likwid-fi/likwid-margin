@@ -18,18 +18,6 @@ contract SwapMathTest is Test {
     }
 
     // =========================================
-    // Internal Wrappers for Revert Testing
-    // =========================================
-
-    function _getAmountOut_wrapper(Reserves reserves, bool zeroForOne, uint256 amountIn) public pure {
-        SwapMath.getAmountOut(reserves, zeroForOne, amountIn);
-    }
-
-    function _getAmountIn_wrapper(Reserves reserves, bool zeroForOne, uint256 amountOut) public pure {
-        SwapMath.getAmountIn(reserves, zeroForOne, amountOut);
-    }
-
-    // =========================================
     // differencePrice Tests
     // =========================================
 
@@ -71,19 +59,11 @@ contract SwapMathTest is Test {
     // getAmountOut Tests
     // =========================================
 
-    function testGetAmountOut_NoFee() public view {
-        uint256 amountIn = 100e18;
-        uint256 amountOut = SwapMath.getAmountOut(testReserves, true, amountIn);
-        // expected = (100 * 1000) / (1000 + 100) = 100000 / 1100 = 90.9090...
-        uint256 expectedAmountOut = (amountIn * 1000e18) / (1000e18 + amountIn);
-        assertEq(amountOut, expectedAmountOut);
-    }
-
     function testGetAmountOut_FixedFee() public view {
         uint256 amountIn = 100e18;
         uint24 fee = 3000; // 0.3%
         (uint256 amountOut, uint256 feeAmount) = SwapMath.getAmountOut(testReserves, fee, true, amountIn);
-        
+
         (uint256 amountInWithoutFee, uint256 expectedFeeAmount) = fee.deduct(amountIn);
         assertEq(feeAmount, expectedFeeAmount, "Fee amount should be correct");
 
@@ -94,37 +74,25 @@ contract SwapMathTest is Test {
     function testGetAmountOut_DynamicFee() public view {
         uint256 amountIn = 100e18;
         uint24 baseFee = 3000; // 0.3%
-        (uint256 amountOut, uint24 finalFee, ) = SwapMath.getAmountOut(testReserves, testTruncatedReserves, baseFee, true, amountIn);
+        (uint256 amountOut, uint24 finalFee,) =
+            SwapMath.getAmountOut(testReserves, testTruncatedReserves, baseFee, true, amountIn);
         assertTrue(finalFee > baseFee, "Dynamic fee should be higher than base fee");
-        
-        (uint256 expectedAmountOut_fixed, ) = SwapMath.getAmountOut(testReserves, baseFee, true, amountIn);
-        assertTrue(amountOut < expectedAmountOut_fixed, "Amount out with dynamic fee should be less than with fixed fee");
-    }
 
-    function testGetAmountOut_RevertZeroInput() public {
-        try this._getAmountOut_wrapper(testReserves, true, 0) {
-            fail();
-        } catch (bytes memory reason) {
-            assertEq(reason, abi.encodeWithSelector(SwapMath.InsufficientInputAmount.selector));
-        }
+        (uint256 expectedAmountOut_fixed,) = SwapMath.getAmountOut(testReserves, baseFee, true, amountIn);
+        assertTrue(
+            amountOut < expectedAmountOut_fixed, "Amount out with dynamic fee should be less than with fixed fee"
+        );
     }
 
     // =========================================
     // getAmountIn Tests
     // =========================================
 
-    function testGetAmountIn_NoFee() public view {
-        uint256 amountOut = 100e18;
-        uint256 amountIn = SwapMath.getAmountIn(testReserves, true, amountOut);
-        uint256 expectedAmountIn = (1000e18 * amountOut) / (1000e18 - amountOut) + 1;
-        assertEq(amountIn, expectedAmountIn);
-    }
-
     function testGetAmountIn_FixedFee() public view {
         uint256 amountOut = 100e18;
         uint24 fee = 3000; // 0.3%
         (uint256 amountIn, uint256 feeAmount) = SwapMath.getAmountIn(testReserves, fee, true, amountOut);
-        
+
         uint256 expectedAmountInWithoutFee = (1000e18 * amountOut) / (1000e18 - amountOut) + 1;
         uint256 expectedAmountIn = (expectedAmountInWithoutFee * 1e6 + (1e6 - fee - 1)) / (1e6 - fee);
         uint256 expectedFeeAmount = expectedAmountIn - expectedAmountInWithoutFee;
@@ -136,20 +104,12 @@ contract SwapMathTest is Test {
     function testGetAmountIn_DynamicFee() public view {
         uint256 amountOut = 100e18;
         uint24 baseFee = 3000; // 0.3%
-        (uint256 amountIn, uint24 finalFee, ) = SwapMath.getAmountIn(testReserves, testTruncatedReserves, baseFee, true, amountOut);
+        (uint256 amountIn, uint24 finalFee,) =
+            SwapMath.getAmountIn(testReserves, testTruncatedReserves, baseFee, true, amountOut);
         assertTrue(finalFee > baseFee, "Dynamic fee should be higher than base fee");
 
-        (uint256 expectedAmountIn_fixed, ) = SwapMath.getAmountIn(testReserves, baseFee, true, amountOut);
+        (uint256 expectedAmountIn_fixed,) = SwapMath.getAmountIn(testReserves, baseFee, true, amountOut);
         assertTrue(amountIn > expectedAmountIn_fixed, "Amount in with dynamic fee should be greater");
-    }
-
-    function testGetAmountIn_RevertInsufficientLiquidity() public {
-        uint256 amountOut = 1000e18; // Equal to reserve
-        try this._getAmountIn_wrapper(testReserves, true, amountOut) {
-            fail();
-        } catch (bytes memory reason) {
-            assertEq(reason, abi.encodeWithSelector(SwapMath.InsufficientLiquidity.selector));
-        }
     }
 
     // =========================================
