@@ -241,7 +241,7 @@ contract LikwidHelper is Owned {
         }
     }
 
-    function getReleasedLiquidity(PoolId id) public view returns (uint128) {
+    function getReleasedLiquidity(PoolId id) external view returns (uint128) {
         IMarginBase marginBase = IMarginBase(address(vault));
         MarginState marginState = marginBase.marginState();
         uint128 releasedLiquidity;
@@ -264,6 +264,19 @@ contract LikwidHelper is Owned {
             }
         }
         return releasedLiquidity + nextReleasedLiquidity;
+    }
+
+    function getStageState(PoolId id)
+        external
+        view
+        returns (uint24 stageSize, uint24 stageLeavePart, uint24 stageDuration, uint256 lastStageTimestamp)
+    {
+        IMarginBase marginBase = IMarginBase(address(vault));
+        MarginState marginState = marginBase.marginState();
+        stageSize = marginState.stageSize();
+        stageLeavePart = marginState.stageLeavePart();
+        stageDuration = marginState.stageDuration();
+        lastStageTimestamp = StateLibrary.getLastStageTimestamp(vault, id);
     }
 
     // ******************** OWNER CALL ********************
