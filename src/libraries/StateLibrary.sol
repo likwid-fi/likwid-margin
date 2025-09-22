@@ -206,8 +206,7 @@ library StateLibrary {
 
         bytes32[] memory data = vault.extsload(positionSlot, 2);
         uint256 slot0 = uint256(data[0]);
-        _position.lendForOne = uint8(slot0) == 1;
-        _position.lendAmount = uint128(slot0 >> 8);
+        _position.lendAmount = uint128(slot0);
         _position.depositCumulativeLast = uint256(data[1]);
     }
 

@@ -35,11 +35,11 @@ interface ILendPositionManager is IERC721 {
 
     /// @notice Creates a new lending position.
     /// @param key The key of the pool to lend to.
-    /// @param currency The currency to lend.
+    /// @param lendForOne The direction of lend.
     /// @param recipient The recipient of the position.
     /// @param amount The amount to lend.
     /// @return tokenId The ID of the new position.
-    function addLending(PoolKey memory key, Currency currency, address recipient, uint256 amount)
+    function addLending(PoolKey memory key, bool lendForOne, address recipient, uint256 amount)
         external
         payable
         returns (uint256 tokenId);

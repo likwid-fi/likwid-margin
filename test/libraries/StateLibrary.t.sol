@@ -117,7 +117,7 @@ contract StateLibraryTest is Test, IUnlockCallback {
         assertEq(total, liquidity, "total==liquidity");
     }
 
-    function testGetLendPositionState() public {
+    function testGetLendPositionStateForZero() public {
         // 1. Lend to the pool to create a lend position
         int128 amountToLend = -1 ether;
         bool lendForOne = false;
@@ -137,7 +137,30 @@ contract StateLibraryTest is Test, IUnlockCallback {
             StateLibrary.getLendPositionState(vault, poolId, address(this), lendForOne, salt);
 
         // 3. Assert the state is correct
-        assertEq(positionState.lendForOne, lendForOne, "lendForOne should be correct");
+        assertEq(uint256(positionState.lendAmount), uint256(-int256(amountToLend)), "lendAmount should be correct");
+        assertTrue(positionState.depositCumulativeLast != 0, "depositCumulativeLast should be set");
+    }
+
+    function testGetLendPositionStateForOne() public {
+        // 1. Lend to the pool to create a lend position
+        int128 amountToLend = -1 ether;
+        bool lendForOne = true;
+        bytes32 salt = keccak256("my_lend_position");
+
+        token1.mint(address(this), uint256(-int256(amountToLend)));
+
+        IVault.LendParams memory lendParams =
+            IVault.LendParams({lendForOne: lendForOne, lendAmount: amountToLend, salt: salt});
+
+        bytes memory innerData = abi.encode(poolKey, lendParams);
+        bytes memory data = abi.encode(this.lend_callback.selector, innerData);
+        vault.unlock(data);
+
+        // 2. Get the position state using the library function
+        LendPosition.State memory positionState =
+            StateLibrary.getLendPositionState(vault, poolId, address(this), lendForOne, salt);
+
+        // 3. Assert the state is correct
         assertEq(uint256(positionState.lendAmount), uint256(-int256(amountToLend)), "lendAmount should be correct");
         assertTrue(positionState.depositCumulativeLast != 0, "depositCumulativeLast should be set");
     }

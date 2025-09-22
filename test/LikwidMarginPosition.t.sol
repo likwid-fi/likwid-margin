@@ -36,6 +36,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
     LikwidPairPosition pairPositionManager;
     LikwidHelper helper;
     PoolKey key;
+    PoolKey keyNative;
     MockERC20 token0;
     MockERC20 token1;
     Currency currency0;
@@ -80,11 +81,17 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         key = PoolKey({currency0: currency0, currency1: currency1, fee: fee});
         vault.initialize(key);
 
+        keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee});
+        vault.initialize(keyNative);
+
         uint256 amount0ToAdd = 10e18;
         uint256 amount1ToAdd = 20e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
         pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity{value: amount0ToAdd}(keyNative, amount0ToAdd, amount1ToAdd, 0, 0);
     }
 
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
@@ -115,6 +122,9 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         }
         return "";
     }
+
+    fallback() external payable {}
+    receive() external payable {}
 
     function swap_callback(PoolKey memory, IVault.SwapParams memory) external pure {}
 
@@ -602,5 +612,217 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         marginPositionManager.setDefaultMarginFee(newFee);
         vm.stopPrank();
         LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testAddMarginNative() public {
+        uint256 marginAmount = 0.1e18;
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false, // margin with native, borrow token1
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId, uint256 borrowAmount) =
+            marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
+
+        assertTrue(tokenId > 0);
+        assertTrue(borrowAmount > 0);
+
+        MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
+
+        assertEq(position.marginAmount, marginAmount, "position.marginAmount==marginAmount");
+        assertEq(position.debtAmount, borrowAmount, "position.debtAmount==borrowAmount");
+        LikwidChecker.checkPoolReserves(vault, keyNative);
+    }
+
+    function testAddMarginNative_MarginForOneTrue() public {
+        uint256 marginAmount = 0.1e18;
+        token1.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: true, // margin with token1, borrow native
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(keyNative, params);
+
+        assertTrue(tokenId > 0);
+        assertTrue(borrowAmount > 0);
+
+        MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
+
+        assertEq(position.marginAmount, marginAmount, "position.marginAmount==marginAmount");
+        assertEq(position.debtAmount, borrowAmount, "position.debtAmount==borrowAmount");
+        assertTrue(position.marginForOne, "position.marginForOne should be true");
+        LikwidChecker.checkPoolReserves(vault, keyNative);
+    }
+
+    function testRepayNative() public {
+        uint256 marginAmount = 0.1e18;
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false, // margin with native, borrow token1
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId, uint256 borrowAmount) =
+            marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
+
+        assertTrue(tokenId > 0);
+        assertTrue(borrowAmount > 0);
+
+        uint256 repayAmount = borrowAmount / 2;
+        token1.mint(address(this), repayAmount);
+
+        MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
+
+        marginPositionManager.repay(tokenId, repayAmount, block.timestamp);
+
+        MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
+
+        assertTrue(
+            positionAfter.debtAmount < positionBefore.debtAmount, "position.debtAmount should be less after repay"
+        );
+        LikwidChecker.checkPoolReserves(vault, keyNative);
+    }
+
+    function testRepayNative_RepayNative() public {
+        uint256 marginAmount = 0.1e18;
+        token1.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: true, // margin with token1, borrow native
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(keyNative, params);
+
+        assertTrue(tokenId > 0);
+        assertTrue(borrowAmount > 0);
+
+        uint256 repayAmount = borrowAmount / 2;
+
+        MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
+
+        marginPositionManager.repay{value: repayAmount}(tokenId, repayAmount, block.timestamp);
+
+        MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
+
+        assertTrue(
+            positionAfter.debtAmount < positionBefore.debtAmount, "position.debtAmount should be less after repay"
+        );
+        LikwidChecker.checkPoolReserves(vault, keyNative);
+    }
+
+    function testCloseNative() public {
+        uint256 marginAmount = 0.1e18;
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false, // margin with native, borrow token1
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,) = marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
+
+        uint256 balanceBefore = address(this).balance;
+        marginPositionManager.close(tokenId, 1_000_000, 0, block.timestamp); // close 100%
+        uint256 balanceAfter = address(this).balance;
+
+        assertTrue(balanceAfter > balanceBefore, "should receive native currency back");
+
+        MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
+
+        assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after close");
+        assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after close");
+        LikwidChecker.checkPoolReserves(vault, keyNative);
+    }
+
+    function testModifyNative() public {
+        uint256 marginAmount = 0.1e18;
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false, // margin with native, borrow token1
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,) = marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
+
+        MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
+
+        uint256 modifyAmount = 0.05e18;
+        marginPositionManager.modify{value: modifyAmount}(tokenId, int128(int256(modifyAmount)));
+
+        MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
+
+        assertEq(
+            positionAfter.marginAmount,
+            positionBefore.marginAmount + modifyAmount,
+            "position.marginAmount should be increased"
+        );
+        LikwidChecker.checkPoolReserves(vault, keyNative);
+    }
+
+    function testModifyNative_DecreaseCollateral() public {
+        uint256 marginAmount = 0.2e18;
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false, // margin with native, borrow token1
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,) = marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
+        MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
+
+        int128 modifyAmount = -0.05e18;
+
+        uint256 balanceBefore = address(this).balance;
+        marginPositionManager.modify(tokenId, modifyAmount);
+        uint256 balanceAfter = address(this).balance;
+
+        assertTrue(balanceAfter > balanceBefore, "should receive native currency back");
+
+        MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
+
+        assertEq(
+            int256(uint256(positionAfter.marginAmount)),
+            int256(uint256(positionBefore.marginAmount)) + modifyAmount,
+            "position.marginAmount should be decreased"
+        );
+        LikwidChecker.checkPoolReserves(vault, keyNative);
     }
 }

@@ -20,7 +20,6 @@ library LendPosition {
     error WithdrawOverflow();
 
     struct State {
-        bool lendForOne;
         uint128 lendAmount;
         uint256 depositCumulativeLast;
     }
@@ -34,16 +33,20 @@ library LendPosition {
         position = self[positionKey];
     }
 
-    function update(State storage self, uint256 depositCumulativeLast, BalanceDelta delta) internal returns (uint256) {
-        if (delta == BalanceDeltaLibrary.ZERO_DELTA && self.lendAmount == 0) {
-            CannotUpdateEmptyPosition.selector.revertWith();
-        }
+    function update(State storage self, bool lendForOne, uint256 depositCumulativeLast, BalanceDelta delta)
+        internal
+        returns (uint256)
+    {
         int128 amount;
-        if (self.lendForOne) {
+        if (lendForOne) {
             amount = delta.amount1();
         } else {
             amount = delta.amount0();
         }
+        if ((delta == BalanceDeltaLibrary.ZERO_DELTA && self.lendAmount == 0) || amount == 0) {
+            CannotUpdateEmptyPosition.selector.revertWith();
+        }
+
         uint256 lendAmount;
         if (self.depositCumulativeLast != 0) {
             lendAmount = Math.mulDiv(self.lendAmount, depositCumulativeLast, self.depositCumulativeLast);

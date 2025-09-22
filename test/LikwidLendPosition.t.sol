@@ -17,7 +17,7 @@ import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
 import {StateLibrary} from "../src/libraries/StateLibrary.sol";
-import {Reserves} from "../src/types/Reserves.sol";
+import {Reserves, ReservesLibrary} from "../src/types/Reserves.sol";
 import {LendPosition} from "../src/libraries/LendPosition.sol";
 import {BalanceDelta} from "../src/types/BalanceDelta.sol";
 
@@ -30,10 +30,13 @@ contract LikwidLendPositionTest is Test {
     LikwidPairPosition pairPositionManager;
     LikwidMarginPosition marginPositionManager;
     PoolKey key;
+    PoolKey keyNative;
     MockERC20 token0;
     MockERC20 token1;
     Currency currency0;
     Currency currency1;
+
+    receive() external payable {}
 
     function setUp() public {
         // Deploy Vault and Position Manager
@@ -81,63 +84,80 @@ contract LikwidLendPositionTest is Test {
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
         pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+
+        keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee});
+        vault.initialize(keyNative);
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity{value: amount0ToAdd}(keyNative, amount0ToAdd, amount1ToAdd, 0, 0);
     }
 
-    function testAddLending() public {
+    function testAddLendingForZero() public {
         uint256 amount = 1e18;
         token0.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(key, currency0, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount);
 
         assertTrue(tokenId > 0);
 
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
-
+        assertTrue(position.lendAmount > 0);
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
     }
 
-    function testDeposit() public {
+    function testDepositForZero() public {
         uint256 amount = 1e18;
         token0.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(key, currency0, address(this), 0);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0);
 
         lendPositionManager.deposit(tokenId, amount);
 
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
-
+        assertTrue(position.lendAmount > 0);
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
     }
 
-    function testWithdraw() public {
+    function testWithdrawForZero() public {
         uint256 amount = 1e18;
         token0.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(key, currency0, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount);
 
         LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
 
         lendPositionManager.withdraw(tokenId, amount / 2);
 
         LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
+        console.log("positionAfter.lendAmount:", positionAfter.lendAmount);
 
         assertTrue(
             positionAfter.lendAmount < positionBefore.lendAmount, "position.lendAmount should be less after withdraw"
         );
+        address liquidator = makeAddr("liquidator");
+        vm.startPrank(liquidator);
+        token0.mint(liquidator, amount);
+        token0.approve(address(lendPositionManager), amount);
+        uint256 tokenId02 = lendPositionManager.addLending(key, false, liquidator, amount);
+        assertNotEq(tokenId, tokenId02);
+        LendPosition.State memory position02 = lendPositionManager.getPositionState(tokenId02);
+        assertTrue(position02.lendAmount == amount);
+        vm.stopPrank();
+        vm.expectRevert(LendPosition.WithdrawOverflow.selector);
+        lendPositionManager.withdraw(tokenId, amount);
     }
 
-    function testGetPositionState() public {
+    function testGetPositionStateForZero() public {
         uint256 amount = 1e18;
         token0.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(key, currency0, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount);
 
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
 
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
     }
 
-    function testMirrorExactInput() public {
+    function testMirrorExactInputToken10() public {
         uint256 marginAmount = 1e18;
         token1.mint(address(this), marginAmount);
 
@@ -152,14 +172,13 @@ contract LikwidLendPositionTest is Test {
         });
 
         (uint256 marginTokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, marginParams);
-        console.log("marginTokenId:%s,borrowAmount:%s", marginTokenId, borrowAmount);
         assertTrue(marginTokenId > 0, "marginTokenId should be greater than 0");
         assertTrue(borrowAmount > 0, "borrowAmount should be greater than 0");
 
         uint256 amountIn = 0.1e18;
         token1.mint(address(this), amountIn);
 
-        uint256 tokenId = lendPositionManager.addLending(key, currency0, address(this), 0);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0);
 
         LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
         assertEq(positionBefore.lendAmount, 0, "lendAmount should be zero");
@@ -182,7 +201,7 @@ contract LikwidLendPositionTest is Test {
         assertEq(positionAfter.lendAmount, amountOut, "lendAmount should be amountOut");
     }
 
-    function testMirrorExactOutput() public {
+    function testMirrorExactOutputToken10() public {
         uint256 marginAmount = 1e18;
         token1.mint(address(this), marginAmount);
 
@@ -197,14 +216,13 @@ contract LikwidLendPositionTest is Test {
         });
 
         (uint256 marginTokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, marginParams);
-        console.log("marginTokenId:%s,borrowAmount:%s", marginTokenId, borrowAmount);
         assertTrue(marginTokenId > 0, "marginTokenId should be greater than 0");
         assertTrue(borrowAmount > 0, "borrowAmount should be greater than 0");
 
         uint256 amountOut = 1e18;
         token1.mint(address(this), amountOut * 10);
 
-        uint256 tokenId = lendPositionManager.addLending(key, currency0, address(this), 0);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0);
 
         LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
         assertEq(positionBefore.lendAmount, 0, "positionBefore.lendAmount should be zero");
@@ -225,5 +243,277 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
 
         assertEq(positionAfter.lendAmount, amountOut, "lendAmount should be amountOut");
+    }
+
+    function testMirrorExactInputToken01() public {
+        uint256 marginAmount = 1e18;
+        token0.mint(address(this), marginAmount);
+
+        bool marginForOne = false; // margin with token0, borrow token1
+        IMarginPositionManager.CreateParams memory marginParams = IMarginPositionManager.CreateParams({
+            marginForOne: marginForOne,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 marginTokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, marginParams);
+        assertTrue(marginTokenId > 0, "marginTokenId should be greater than 0");
+        assertTrue(borrowAmount > 0, "borrowAmount should be greater than 0");
+
+        uint256 amountIn = 0.1e18;
+        token0.mint(address(this), amountIn);
+
+        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), 0);
+
+        LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
+        assertEq(positionBefore.lendAmount, 0, "lendAmount should be zero");
+
+        bool zeroForOne = true; // swap mirror token1
+        ILendPositionManager.SwapInputParams memory params = ILendPositionManager.SwapInputParams({
+            poolId: key.toId(),
+            zeroForOne: zeroForOne,
+            tokenId: tokenId,
+            amountIn: amountIn,
+            amountOutMin: 0,
+            deadline: block.timestamp
+        });
+
+        (,, uint256 amountOut) = lendPositionManager.exactInput(params);
+
+        assertTrue(amountOut > 0, "amountOut should be greater than 0");
+
+        LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
+
+        assertEq(positionAfter.lendAmount, amountOut, "lendAmount should be amountOut");
+    }
+
+    function testMirrorExactOutputToken01() public {
+        uint256 marginAmount = 1e18;
+        token0.mint(address(this), marginAmount);
+
+        bool marginForOne = false; // margin with token0, borrow token1
+        IMarginPositionManager.CreateParams memory marginParams = IMarginPositionManager.CreateParams({
+            marginForOne: marginForOne,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 marginTokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, marginParams);
+        assertTrue(marginTokenId > 0, "marginTokenId should be greater than 0");
+        assertTrue(borrowAmount > 0, "borrowAmount should be greater than 0");
+
+        uint256 amountOut = 1e18;
+        token0.mint(address(this), amountOut * 10);
+
+        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), 0);
+
+        LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
+        assertEq(positionBefore.lendAmount, 0, "positionBefore.lendAmount should be zero");
+
+        bool zeroForOne = true; // swap mirror token1
+        ILendPositionManager.SwapOutputParams memory params = ILendPositionManager.SwapOutputParams({
+            poolId: key.toId(),
+            zeroForOne: zeroForOne,
+            tokenId: tokenId,
+            amountInMax: 0,
+            amountOut: amountOut,
+            deadline: block.timestamp
+        });
+
+        (,, uint256 amountInResult) = lendPositionManager.exactOutput(params);
+
+        assertTrue(amountInResult > 0, "amountIn should be greater than 0");
+
+        LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
+
+        assertEq(positionAfter.lendAmount, amountOut, "lendAmount should be amountOut");
+    }
+
+    function testAddLendingForOne() public {
+        uint256 amount = 1e18;
+        token1.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), amount);
+
+        assertTrue(tokenId > 0);
+
+        LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
+        assertTrue(position.lendAmount > 0);
+        assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+    }
+
+    function testDepositForOne() public {
+        uint256 amount = 1e18;
+        token1.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), 0);
+
+        lendPositionManager.deposit(tokenId, amount);
+
+        LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
+        assertTrue(position.lendAmount > 0);
+        assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+    }
+
+    function testWithdrawForOne() public {
+        uint256 amount = 1e18;
+        token1.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), amount);
+
+        LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
+
+        lendPositionManager.withdraw(tokenId, amount / 2);
+
+        LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
+        console.log("positionAfter.lendAmount:", positionAfter.lendAmount);
+
+        assertTrue(
+            positionAfter.lendAmount < positionBefore.lendAmount, "position.lendAmount should be less after withdraw"
+        );
+        address liquidator = makeAddr("liquidator");
+        vm.startPrank(liquidator);
+        token1.mint(liquidator, amount);
+        token1.approve(address(lendPositionManager), amount);
+        uint256 tokenId02 = lendPositionManager.addLending(key, true, liquidator, amount);
+        assertNotEq(tokenId, tokenId02);
+        LendPosition.State memory position02 = lendPositionManager.getPositionState(tokenId02);
+        assertTrue(position02.lendAmount == amount);
+        vm.stopPrank();
+        vm.expectRevert(LendPosition.WithdrawOverflow.selector);
+        lendPositionManager.withdraw(tokenId, amount);
+    }
+
+    function testGetPositionStateForOne() public {
+        uint256 amount = 1e18;
+        token1.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), amount);
+
+        LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
+
+        assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+    }
+
+    function testAddLendingForNative() public {
+        uint256 amount = 1e18;
+        uint256 tokenId = lendPositionManager.addLending{value: amount}(keyNative, false, address(this), amount);
+
+        assertTrue(tokenId > 0);
+
+        LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
+        assertTrue(position.lendAmount > 0);
+        assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+    }
+
+    function testAddLendingForOneNative() public {
+        uint256 amount = 1e18;
+        token1.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(keyNative, true, address(this), amount);
+
+        assertTrue(tokenId > 0);
+
+        LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
+        assertTrue(position.lendAmount > 0);
+        assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+    }
+
+    function testDepositForNative() public {
+        uint256 amount = 1e18;
+
+        uint256 tokenId = lendPositionManager.addLending(keyNative, false, address(this), 0);
+
+        lendPositionManager.deposit{value: amount}(tokenId, amount);
+
+        LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
+        assertTrue(position.lendAmount > 0);
+        assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+    }
+
+    function testDepositForOneNative() public {
+        uint256 amount = 1e18;
+        token1.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(keyNative, true, address(this), 0);
+
+        lendPositionManager.deposit(tokenId, amount);
+
+        LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
+        assertTrue(position.lendAmount > 0);
+        assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+    }
+
+    function testWithdrawForNative() public {
+        uint256 amount = 1e18;
+
+        uint256 tokenId = lendPositionManager.addLending{value: amount}(keyNative, false, address(this), amount);
+
+        lendPositionManager.withdraw(tokenId, amount / 2);
+
+        vm.expectRevert(ReservesLibrary.NotEnoughReserves.selector);
+        lendPositionManager.withdraw(tokenId, amount);
+
+        lendPositionManager.addLending{value: amount}(keyNative, false, address(this), amount);
+
+        vm.expectRevert(LendPosition.WithdrawOverflow.selector);
+        lendPositionManager.withdraw(tokenId, amount);
+    }
+
+    function testWithdrawForOneNative() public {
+        uint256 amount = 1e18;
+        token1.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(keyNative, true, address(this), amount);
+
+        LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
+
+        lendPositionManager.withdraw(tokenId, amount / 2);
+
+        LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
+        console.log("positionAfter.lendAmount:", positionAfter.lendAmount);
+
+        assertTrue(
+            positionAfter.lendAmount < positionBefore.lendAmount, "position.lendAmount should be less after withdraw"
+        );
+        address liquidator = makeAddr("liquidator");
+        vm.startPrank(liquidator);
+        token1.mint(liquidator, amount);
+        token1.approve(address(lendPositionManager), amount);
+        uint256 tokenId02 = lendPositionManager.addLending(keyNative, true, liquidator, amount);
+        assertNotEq(tokenId, tokenId02);
+        LendPosition.State memory position02 = lendPositionManager.getPositionState(tokenId02);
+        assertTrue(position02.lendAmount == amount);
+        vm.stopPrank();
+        vm.expectRevert(LendPosition.WithdrawOverflow.selector);
+        lendPositionManager.withdraw(tokenId, amount);
+    }
+
+    function testGetPositionStateForNative() public {
+        uint256 amount = 1e18;
+        uint256 tokenId = lendPositionManager.addLending{value: amount}(keyNative, false, address(this), amount);
+
+        LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
+
+        assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+    }
+
+    function testGetPositionStateForOneNative() public {
+        uint256 amount = 1e18;
+        token1.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(keyNative, true, address(this), amount);
+
+        LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
+
+        assertEq(position.lendAmount, amount, "position.lendAmount==amount");
     }
 }

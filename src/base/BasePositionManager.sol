@@ -74,7 +74,7 @@ abstract contract BasePositionManager is
                 PriceSlippageTooHigh.selector.revertWith();
             }
             key.currency0.settle(vault, sender, amount0, false);
-        } else {
+        } else if (delta.amount0() > 0) {
             amount0 = uint256(int256(delta.amount0()));
             if ((amount0Min > 0 && amount0 < amount0Min) || (amount0Max > 0 && amount0 > amount0Max)) {
                 PriceSlippageTooHigh.selector.revertWith();
@@ -88,7 +88,7 @@ abstract contract BasePositionManager is
                 PriceSlippageTooHigh.selector.revertWith();
             }
             key.currency1.settle(vault, sender, amount1, false);
-        } else {
+        } else if (delta.amount1() > 0) {
             amount1 = uint256(int256(delta.amount1()));
             if ((amount1Min > 0 && amount1 < amount1Min) || (amount1Max > 0 && amount1 > amount1Max)) {
                 PriceSlippageTooHigh.selector.revertWith();

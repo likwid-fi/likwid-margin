@@ -260,7 +260,7 @@ library Pool {
                 depositCumulativeLast = self.deposit0CumulativeLast;
             }
             self.lendPositions.get(params.sender, params.zeroForOne, params.salt).update(
-                depositCumulativeLast, lendDelta
+                params.zeroForOne, depositCumulativeLast, lendDelta
             );
         }
         self.updateReserves(deltaParams);
@@ -301,7 +301,9 @@ library Pool {
         deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.LEND, lendDelta);
         self.updateReserves(deltaParams);
 
-        self.lendPositions.get(params.sender, params.lendForOne, params.salt).update(depositCumulativeLast, lendDelta);
+        self.lendPositions.get(params.sender, params.lendForOne, params.salt).update(
+            params.lendForOne, depositCumulativeLast, lendDelta
+        );
     }
 
     function margin(State storage self, MarginBalanceDelta memory params, uint24 defaultProtocolFee)

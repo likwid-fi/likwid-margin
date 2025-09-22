@@ -24,7 +24,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
     using CustomRevert for bytes4;
     using SafeCast for *;
 
-    mapping(uint256 tokenId => Currency currency) public currencies;
+    mapping(uint256 tokenId => bool lendForOne) public lendDirections;
 
     constructor(address initialOwner, IVault _vault)
         BasePositionManager("LIKWIDLendPositionManager", "LLPM", initialOwner, _vault)
@@ -55,8 +55,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         bytes32 salt = bytes32(tokenId);
         PoolId poolId = poolIds[tokenId];
         PoolKey memory key = poolKeys[poolId];
-        Currency currency = currencies[tokenId];
-        bool lendForOne = key.currency1 == currency;
+        bool lendForOne = lendDirections[tokenId];
         (,, uint256 deposit0CumulativeLast, uint256 deposit1CumulativeLast) =
             StateLibrary.getBorrowDepositCumulative(vault, poolId);
         uint256 depositCumulativeLast = lendForOne ? deposit1CumulativeLast : deposit0CumulativeLast;
@@ -70,13 +69,13 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
     }
 
     /// @inheritdoc ILendPositionManager
-    function addLending(PoolKey memory key, Currency currency, address recipient, uint256 amount)
+    function addLending(PoolKey memory key, bool lendForOne, address recipient, uint256 amount)
         external
         payable
         returns (uint256 tokenId)
     {
         tokenId = _mintPosition(key, recipient);
-        currencies[tokenId] = currency;
+        lendDirections[tokenId] = lendForOne;
         if (amount > 0) {
             _deposit(msg.sender, recipient, tokenId, amount);
         }
@@ -85,20 +84,17 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
     function _deposit(address sender, address tokenOwner, uint256 tokenId, uint256 amount) internal {
         _requireAuth(tokenOwner, tokenId);
         PoolId poolId = poolIds[tokenId];
-        Currency currency = currencies[tokenId];
+        bool lendForOne = lendDirections[tokenId];
         PoolKey memory key = poolKeys[poolId];
 
-        IVault.LendParams memory params = IVault.LendParams({
-            lendForOne: key.currency1 == currency,
-            lendAmount: -amount.toInt128(),
-            salt: bytes32(tokenId)
-        });
+        IVault.LendParams memory params =
+            IVault.LendParams({lendForOne: lendForOne, lendAmount: -amount.toInt128(), salt: bytes32(tokenId)});
 
         bytes memory callbackData = abi.encode(sender, key, params);
         bytes memory data = abi.encode(Actions.DEPOSIT, callbackData);
 
         vault.unlock(data);
-
+        Currency currency = lendForOne ? key.currency1 : key.currency0;
         emit Deposit(poolId, currency, sender, tokenId, tokenOwner, amount);
     }
 
@@ -111,20 +107,17 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
     function withdraw(uint256 tokenId, uint256 amount) external {
         _requireAuth(msg.sender, tokenId);
         PoolId poolId = poolIds[tokenId];
-        Currency currency = currencies[tokenId];
+        bool lendForOne = lendDirections[tokenId];
         PoolKey memory key = poolKeys[poolId];
 
-        IVault.LendParams memory params = IVault.LendParams({
-            lendForOne: key.currency1 == currency,
-            lendAmount: amount.toInt128(),
-            salt: bytes32(tokenId)
-        });
+        IVault.LendParams memory params =
+            IVault.LendParams({lendForOne: lendForOne, lendAmount: amount.toInt128(), salt: bytes32(tokenId)});
 
         bytes memory callbackData = abi.encode(msg.sender, key, params);
         bytes memory data = abi.encode(Actions.WITHDRAW, callbackData);
 
         vault.unlock(data);
-
+        Currency currency = lendForOne ? key.currency1 : key.currency0;
         emit Withdraw(poolId, currency, msg.sender, tokenId, msg.sender, amount);
     }
 
@@ -149,7 +142,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         _requireAuth(msg.sender, params.tokenId);
         PoolKey memory key = poolKeys[params.poolId];
         Currency zeroForCurrency = params.zeroForOne ? key.currency1 : key.currency0;
-        if (!(zeroForCurrency == currencies[params.tokenId])) {
+        if (params.zeroForOne != lendDirections[params.tokenId]) {
             InvalidCurrency.selector.revertWith();
         }
         int256 amountSpecified = -int256(params.amountIn);
@@ -181,7 +174,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         _requireAuth(msg.sender, params.tokenId);
         PoolKey memory key = poolKeys[params.poolId];
         Currency zeroForCurrency = params.zeroForOne ? key.currency1 : key.currency0;
-        if (!(zeroForCurrency == currencies[params.tokenId])) {
+        if (params.zeroForOne != lendDirections[params.tokenId]) {
             InvalidCurrency.selector.revertWith();
         }
         int256 amountSpecified = int256(params.amountOut);
@@ -226,7 +219,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
                     PriceSlippageTooHigh.selector.revertWith();
                 }
                 key.currency0.settle(vault, sender, amount0, false);
-            } else {
+            } else if (delta.amount0() > 0) {
                 amount0 = uint256(int256(delta.amount0()));
                 if ((amount0Min > 0 && amount0 < amount0Min) || (amount0Max > 0 && amount0 > amount0Max)) {
                     PriceSlippageTooHigh.selector.revertWith();
@@ -238,7 +231,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
                 if ((amount1Min > 0 && amount1 < amount1Min) || (amount1Max > 0 && amount1 > amount1Max)) {
                     PriceSlippageTooHigh.selector.revertWith();
                 }
-            } else {
+            } else if (delta.amount1() > 0) {
                 amount1 = uint256(int256(delta.amount1()));
                 if ((amount1Min > 0 && amount1 < amount1Min) || (amount1Max > 0 && amount1 > amount1Max)) {
                     PriceSlippageTooHigh.selector.revertWith();
@@ -250,7 +243,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
                 if ((amount0Min > 0 && amount0 < amount0Min) || (amount0Max > 0 && amount0 > amount0Max)) {
                     PriceSlippageTooHigh.selector.revertWith();
                 }
-            } else {
+            } else if (delta.amount0() > 0) {
                 amount0 = uint256(int256(delta.amount0()));
                 if ((amount0Min > 0 && amount0 < amount0Min) || (amount0Max > 0 && amount0 > amount0Max)) {
                     PriceSlippageTooHigh.selector.revertWith();
@@ -262,7 +255,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
                     PriceSlippageTooHigh.selector.revertWith();
                 }
                 key.currency1.settle(vault, sender, amount1, false);
-            } else {
+            } else if (delta.amount1() > 0) {
                 amount1 = uint256(int256(delta.amount1()));
                 if ((amount1Min > 0 && amount1 < amount1Min) || (amount1Max > 0 && amount1 > amount1Max)) {
                     PriceSlippageTooHigh.selector.revertWith();
