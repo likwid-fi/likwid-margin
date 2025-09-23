@@ -8,6 +8,7 @@ import {MarginBalanceDelta} from "./types/MarginBalanceDelta.sol";
 import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "./types/BalanceDelta.sol";
 import {PoolId} from "./types/PoolId.sol";
 import {FeeTypes} from "./types/FeeTypes.sol";
+import {MarginActions} from "./types/MarginActions.sol";
 import {IVault} from "./interfaces/IVault.sol";
 import {IUnlockCallback} from "./interfaces/callback/IUnlockCallback.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
@@ -200,12 +201,20 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         uint256 amountToProtocol;
         (marginDelta, amountToProtocol, feeAmount) = pool.margin(params, defaultProtocolFee);
 
+        (Currency marginCurrency, Currency borrowCurrency) =
+            params.marginForOne ? (key.currency1, key.currency0) : (key.currency0, key.currency1);
         if (feeAmount > 0) {
-            Currency feeCurrency = params.marginForOne ? key.currency1 : key.currency0;
             if (amountToProtocol > 0) {
-                _updateProtocolFees(feeCurrency, amountToProtocol);
+                _updateProtocolFees(marginCurrency, amountToProtocol);
             }
-            emit Fees(id, feeCurrency, msg.sender, uint8(FeeTypes.MARGIN), feeAmount);
+            emit Fees(id, marginCurrency, msg.sender, uint8(FeeTypes.MARGIN), feeAmount);
+        }
+        if (params.swapFeeAmount > 0) {
+            if (params.action == MarginActions.MARGIN) {
+                emit Fees(id, borrowCurrency, msg.sender, uint8(FeeTypes.MARGIN_SWAP), params.swapFeeAmount);
+            } else {
+                emit Fees(id, marginCurrency, msg.sender, uint8(FeeTypes.MARGIN_CLOSE_SWAP), params.swapFeeAmount);
+            }
         }
 
         _appendPoolBalanceDelta(key, msg.sender, marginDelta);

@@ -215,7 +215,7 @@ contract LikwidHelperTest is Test {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
 
         assertTrue(tokenId > 0);
         assertTrue(borrowAmount > 0);
@@ -259,7 +259,7 @@ contract LikwidHelperTest is Test {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
 
         assertTrue(tokenId > 0);
         assertTrue(borrowAmount > 0);
@@ -291,7 +291,7 @@ contract LikwidHelperTest is Test {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
 
         assertTrue(tokenId > 0);
         assertTrue(borrowAmount > 0);
@@ -322,7 +322,7 @@ contract LikwidHelperTest is Test {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
 
         assertTrue(tokenId > 0);
         assertTrue(borrowAmount > 0);

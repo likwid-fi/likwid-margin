@@ -4,5 +4,7 @@ pragma solidity ^0.8.0;
 enum FeeTypes {
     SWAP,
     MARGIN,
-    INTERESTS
+    INTERESTS,
+    MARGIN_SWAP,
+    MARGIN_CLOSE_SWAP
 }

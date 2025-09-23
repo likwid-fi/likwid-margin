@@ -54,7 +54,6 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
     function getPositionState(uint256 tokenId) external view returns (LendPosition.State memory position) {
         bytes32 salt = bytes32(tokenId);
         PoolId poolId = poolIds[tokenId];
-        PoolKey memory key = poolKeys[poolId];
         bool lendForOne = lendDirections[tokenId];
         (,, uint256 deposit0CumulativeLast, uint256 deposit1CumulativeLast) =
             StateLibrary.getBorrowDepositCumulative(vault, poolId);
@@ -141,7 +140,6 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
     {
         _requireAuth(msg.sender, params.tokenId);
         PoolKey memory key = poolKeys[params.poolId];
-        Currency zeroForCurrency = params.zeroForOne ? key.currency1 : key.currency0;
         if (params.zeroForOne != lendDirections[params.tokenId]) {
             InvalidCurrency.selector.revertWith();
         }
@@ -173,7 +171,6 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
     {
         _requireAuth(msg.sender, params.tokenId);
         PoolKey memory key = poolKeys[params.poolId];
-        Currency zeroForCurrency = params.zeroForOne ? key.currency1 : key.currency0;
         if (params.zeroForOne != lendDirections[params.tokenId]) {
             InvalidCurrency.selector.revertWith();
         }

@@ -171,7 +171,7 @@ contract LikwidLendPositionTest is Test {
             deadline: block.timestamp
         });
 
-        (uint256 marginTokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, marginParams);
+        (uint256 marginTokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, marginParams);
         assertTrue(marginTokenId > 0, "marginTokenId should be greater than 0");
         assertTrue(borrowAmount > 0, "borrowAmount should be greater than 0");
 
@@ -215,7 +215,7 @@ contract LikwidLendPositionTest is Test {
             deadline: block.timestamp
         });
 
-        (uint256 marginTokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, marginParams);
+        (uint256 marginTokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, marginParams);
         assertTrue(marginTokenId > 0, "marginTokenId should be greater than 0");
         assertTrue(borrowAmount > 0, "borrowAmount should be greater than 0");
 
@@ -260,7 +260,7 @@ contract LikwidLendPositionTest is Test {
             deadline: block.timestamp
         });
 
-        (uint256 marginTokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, marginParams);
+        (uint256 marginTokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, marginParams);
         assertTrue(marginTokenId > 0, "marginTokenId should be greater than 0");
         assertTrue(borrowAmount > 0, "borrowAmount should be greater than 0");
 
@@ -306,7 +306,7 @@ contract LikwidLendPositionTest is Test {
             deadline: block.timestamp
         });
 
-        (uint256 marginTokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, marginParams);
+        (uint256 marginTokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, marginParams);
         assertTrue(marginTokenId > 0, "marginTokenId should be greater than 0");
         assertTrue(borrowAmount > 0, "borrowAmount should be greater than 0");
 

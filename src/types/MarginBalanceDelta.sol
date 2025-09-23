@@ -9,6 +9,7 @@ struct MarginBalanceDelta {
     bool marginForOne;
     uint128 marginTotal;
     uint24 marginFee;
+    uint256 swapFeeAmount;
     BalanceDelta marginDelta;
     BalanceDelta realDelta;
     BalanceDelta mirrorDelta;

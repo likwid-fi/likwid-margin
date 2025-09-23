@@ -142,7 +142,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
 
         assertTrue(tokenId > 0);
         assertTrue(borrowAmount > 0);
@@ -168,7 +168,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
 
         assertTrue(tokenId > 0);
         assertTrue(borrowAmount > 0);
@@ -202,7 +202,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
 
         marginPositionManager.close(tokenId, 1_000_000, 0, block.timestamp); // close 100%
 
@@ -227,7 +227,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
 
         MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
 
@@ -259,7 +259,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
 
         // Manipulate price to make position liquidatable
         // Swap a large amount of token0 for token1 to drive the price of token0 down
@@ -277,7 +277,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         bytes memory data_swap = abi.encode(this.swap_callback.selector, inner_params_swap);
         vault.unlock(data_swap);
 
-        (bool liquidated,,) = marginPositionManager.checkLiquidate(tokenId);
+        (bool liquidated,,,) = marginPositionManager.checkLiquidate(tokenId);
         assertTrue(liquidated, "Position should be liquidatable");
 
         // Liquidate
@@ -311,7 +311,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
 
         // Manipulate price to make position liquidatable
         // Swap a large amount of token0 for token1 to drive the price of token0 down
@@ -329,7 +329,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         bytes memory data_swap = abi.encode(this.swap_callback.selector, inner_params_swap);
         vault.unlock(data_swap);
 
-        (bool liquidated,,) = marginPositionManager.checkLiquidate(tokenId);
+        (bool liquidated,,,) = marginPositionManager.checkLiquidate(tokenId);
         assertTrue(liquidated, "Position should be liquidatable");
 
         // Liquidate
@@ -361,7 +361,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
 
         assertTrue(tokenId > 0);
         assertTrue(borrowAmount > 0);
@@ -388,7 +388,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
         assertTrue(tokenId > 0);
         assertEq(borrowAmount, 1000);
         LikwidChecker.checkPoolReserves(vault, key);
@@ -417,7 +417,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
 
         assertTrue(tokenId > 0);
         assertTrue(borrowAmount > 0);
@@ -438,7 +438,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
 
         token1.mint(address(this), borrowAmount);
         marginPositionManager.repay(tokenId, borrowAmount, block.timestamp);
@@ -463,7 +463,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
         MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
 
         marginPositionManager.close(tokenId, 500_000, 0, block.timestamp); // close 50%
@@ -491,7 +491,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
         MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
 
         int128 modifyAmount = -0.05e18;
@@ -521,7 +521,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
 
         int128 modifyAmount = -0.08e18; // Decrease collateral significantly
         vm.expectRevert(bytes4(keccak256("InvalidLevel()")));
@@ -543,9 +543,9 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId,) = marginPositionManager.addMargin(key, params);
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
 
-        (bool liquidated,,) = marginPositionManager.checkLiquidate(tokenId);
+        (bool liquidated,,,) = marginPositionManager.checkLiquidate(tokenId);
         assertFalse(liquidated, "Position should not be liquidatable");
 
         vm.expectRevert(bytes4(keccak256("PositionNotLiquidated()")));
@@ -627,7 +627,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) =
+        (uint256 tokenId, uint256 borrowAmount,) =
             marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
 
         assertTrue(tokenId > 0);
@@ -654,7 +654,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(keyNative, params);
+        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(keyNative, params);
 
         assertTrue(tokenId > 0);
         assertTrue(borrowAmount > 0);
@@ -680,7 +680,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) =
+        (uint256 tokenId, uint256 borrowAmount,) =
             marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
 
         assertTrue(tokenId > 0);
@@ -715,7 +715,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount) = marginPositionManager.addMargin(keyNative, params);
+        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(keyNative, params);
 
         assertTrue(tokenId > 0);
         assertTrue(borrowAmount > 0);
@@ -747,7 +747,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId,) = marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
+        (uint256 tokenId,,) = marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
 
         uint256 balanceBefore = address(this).balance;
         marginPositionManager.close(tokenId, 1_000_000, 0, block.timestamp); // close 100%
@@ -775,7 +775,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId,) = marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
+        (uint256 tokenId,,) = marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
 
         MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
 
@@ -805,7 +805,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        (uint256 tokenId,) = marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
+        (uint256 tokenId,,) = marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
         MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
 
         int128 modifyAmount = -0.05e18;

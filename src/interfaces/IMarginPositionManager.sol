@@ -43,6 +43,7 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 marginAmount,
         uint256 marginTotal,
         uint256 debtAmount,
+        uint256 releaseAmount,
         uint256 repayAmount
     );
     event Close(
@@ -52,6 +53,8 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 marginAmount,
         uint256 marginTotal,
         uint256 debtAmount,
+        uint256 releaseAmount,
+        uint256 repayAmount,
         uint256 closeAmount
     );
     event Modify(
@@ -72,7 +75,10 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 debtAmount,
         uint256 truncatedReserves,
         uint256 pairReserves,
-        uint256 profitAmount
+        uint256 releaseAmount,
+        uint256 repayAmount,
+        uint256 profitAmount,
+        uint256 lostAmount
     );
     event LiquidateCall(
         PoolId indexed poolId,
@@ -83,7 +89,10 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 debtAmount,
         uint256 truncatedReserves,
         uint256 pairReserves,
-        uint256 repayAmount
+        uint256 releaseAmount,
+        uint256 repayAmount,
+        uint256 needRepayAmount,
+        uint256 lostAmount
     );
 
     function getPositionState(uint256 tokenId) external view returns (MarginPosition.State memory position);
@@ -110,10 +119,11 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @param params The parameters of the margin position
     /// @return tokenId The id of position
     /// @return borrowAmount The borrow amount
+    /// @return swapFeeAmount The swap amount in margin
     function addMargin(PoolKey memory key, IMarginPositionManager.CreateParams calldata params)
         external
         payable
-        returns (uint256 tokenId, uint256 borrowAmount);
+        returns (uint256 tokenId, uint256 borrowAmount, uint256 swapFeeAmount);
 
     struct MarginParams {
         uint256 tokenId;
@@ -132,10 +142,11 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @notice Margin a position
     /// @param params The parameters of the margin position
     /// @return borrowAmount The borrow amount
+    /// @return swapFeeAmount The swap amount in margin
     function margin(IMarginPositionManager.MarginParams memory params)
         external
         payable
-        returns (uint256 borrowAmount);
+        returns (uint256 borrowAmount, uint256 swapFeeAmount);
 
     /// @notice Release the margin position by repaying the debt
     /// @param tokenId The id of position

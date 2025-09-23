@@ -146,7 +146,16 @@ library MarginPosition {
         uint256 depositCumulativeLast,
         uint256 rewardAmount,
         uint24 closeMillionth
-    ) internal returns (uint256 releaseAmount, uint256 repayAmount, uint256 closeAmount, uint256 lostAmount) {
+    )
+        internal
+        returns (
+            uint256 releaseAmount,
+            uint256 repayAmount,
+            uint256 closeAmount,
+            uint256 lostAmount,
+            uint256 swapFeeAmount
+        )
+    {
         if (closeMillionth == 0 || closeMillionth > PerLibrary.ONE_MILLION) {
             PerLibrary.InvalidMillionth.selector.revertWith();
         }
@@ -166,7 +175,8 @@ library MarginPosition {
             positionValue -= rewardAmount;
             releaseAmount = Math.mulDiv(positionValue, closeMillionth, PerLibrary.ONE_MILLION);
             repayAmount = Math.mulDiv(debtAmount, closeMillionth, PerLibrary.ONE_MILLION);
-            (uint256 payedAmount,) = SwapMath.getAmountOut(pairReserves, lpFee, !self.marginForOne, releaseAmount);
+            uint256 payedAmount;
+            (payedAmount, swapFeeAmount) = SwapMath.getAmountOut(pairReserves, lpFee, !self.marginForOne, releaseAmount);
             if (releaseAmount < positionValue && repayAmount > payedAmount) {
                 PositionLiquidated.selector.revertWith();
             } else {
