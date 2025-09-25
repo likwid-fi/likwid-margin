@@ -30,7 +30,9 @@ contract LikwidVaultTest is Test, IUnlockCallback {
     MockERC20 token1;
     Currency currency0;
     Currency currency1;
-    PoolKey private poolKey;
+
+    fallback() external payable {}
+    receive() external payable {}
 
     function setUp() public {
         skip(1); // Skip the first block to ensure block.timestamp is not zero
@@ -46,7 +48,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
 
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
         (bytes4 selector, bytes memory params) = abi.decode(data, (bytes4, bytes));
-
+        uint256 value;
         if (selector == this.reentrant_unlock_test.selector) {
             vault.unlock(params);
         } else if (selector == this.unsettled_take_callback.selector) {
@@ -59,10 +61,12 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             (BalanceDelta delta,) = vault.modifyLiquidity(key, mlParams);
 
             // Settle the balances
+
             if (delta.amount0() < 0) {
                 vault.sync(key.currency0);
-                token0.transfer(address(vault), uint256(-int256(delta.amount0())));
-                vault.settle();
+                if (key.currency0.isAddressZero()) value = uint256(-int256(delta.amount0()));
+                else token0.transfer(address(vault), uint256(-int256(delta.amount0())));
+                vault.settle{value: value}();
             } else if (delta.amount0() > 0) {
                 vault.take(key.currency0, address(this), uint256(int256(delta.amount0())));
             }
@@ -76,14 +80,14 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             }
         } else if (selector == this.swap_callback.selector) {
             (PoolKey memory key, IVault.SwapParams memory swapParams) = abi.decode(params, (PoolKey, IVault.SwapParams));
-
             (BalanceDelta delta,,) = vault.swap(key, swapParams);
             bool takeOutput = !swapParams.useMirror;
             // Settle the balances
             if (delta.amount0() < 0) {
                 vault.sync(key.currency0);
-                token0.transfer(address(vault), uint256(-int256(delta.amount0())));
-                vault.settle();
+                if (key.currency0.isAddressZero()) value = uint256(-int256(delta.amount0()));
+                else token0.transfer(address(vault), uint256(-int256(delta.amount0())));
+                vault.settle{value: value}();
             } else if (delta.amount0() > 0) {
                 if (takeOutput) vault.take(key.currency0, address(this), uint256(int256(delta.amount0())));
             }
@@ -105,8 +109,9 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             // Settle the balances
             if (delta.amount0() < 0) {
                 vault.sync(key.currency0);
-                token0.transfer(address(vault), uint256(-int256(delta.amount0())));
-                vault.settle();
+                if (key.currency0.isAddressZero()) value = uint256(-int256(delta.amount0()));
+                else token0.transfer(address(vault), uint256(-int256(delta.amount0())));
+                vault.settle{value: value}();
             } else if (delta.amount0() > 0) {
                 vault.take(key.currency0, address(this), uint256(int256(delta.amount0())));
             }
@@ -135,7 +140,9 @@ contract LikwidVaultTest is Test, IUnlockCallback {
     function unsettled_take_callback(Currency, address, uint256) external pure {}
 
     function _addLiquidity(PoolKey memory key, uint256 amount0, uint256 amount1) internal {
-        token0.mint(address(this), amount0);
+        if (!key.currency0.isAddressZero()) {
+            token0.mint(address(this), amount0);
+        }
         token1.mint(address(this), amount1);
         IVault.ModifyLiquidityParams memory mlParams =
             IVault.ModifyLiquidityParams({amount0: amount0, amount1: amount1, liquidityDelta: 0, salt: bytes32(0)});
@@ -153,6 +160,20 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         initialLiquidity1 = 10e18;
         uint24 fee = 3000; // 0.3%
         key = PoolKey({currency0: currency0, currency1: currency1, fee: fee});
+        vault.initialize(key);
+
+        // Add liquidity
+        _addLiquidity(key, initialLiquidity0, initialLiquidity1);
+    }
+
+    function _setupStandardPoolNative()
+        internal
+        returns (PoolKey memory key, uint256 initialLiquidity0, uint256 initialLiquidity1)
+    {
+        initialLiquidity0 = 10e18;
+        initialLiquidity1 = 10e18;
+        uint24 fee = 3000; // 0.3%
+        key = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee});
         vault.initialize(key);
 
         // Add liquidity
@@ -222,6 +243,47 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         _checkPoolReserves(key);
     }
 
+    function testSwapExactInputNativeForToken1() public {
+        // 1. Setup
+        (PoolKey memory key, uint256 initialLiquidity0, uint256 initialLiquidity1) = _setupStandardPoolNative();
+        uint256 amountToSwap = 1e18;
+
+        Reserves _pairReserves = StateLibrary.getPairReserves(vault, key.toId());
+        assertEq(_pairReserves.reserve0(), initialLiquidity0, "Initial reserve0 should match");
+        assertEq(_pairReserves.reserve1(), initialLiquidity1, "Initial reserve1 should match");
+
+        // 2. Action
+        bool zeroForOne = true; // native for token0
+        IVault.SwapParams memory swapParams = IVault.SwapParams({
+            zeroForOne: zeroForOne,
+            amountSpecified: -int256(amountToSwap),
+            useMirror: false,
+            salt: bytes32(0)
+        });
+
+        uint256 initialVaultBalance1 = token1.balanceOf(address(vault));
+
+        bytes memory inner_params_swap = abi.encode(key, swapParams);
+        bytes memory data_swap = abi.encode(this.swap_callback.selector, inner_params_swap);
+
+        vault.unlock(data_swap);
+
+        // 3. Assertions
+        uint256 finalVaultBalance1 = token1.balanceOf(address(vault));
+        uint256 actualAmountOut = initialVaultBalance1 - finalVaultBalance1;
+
+        assertEq(token1.balanceOf(address(this)), actualAmountOut, "User token1 balance should be amount out");
+        assertEq(token1.balanceOf(address(vault)), initialLiquidity1 - actualAmountOut, "Vault token1 balance");
+
+        assertEq(
+            vault.protocolFeesAccrued(CurrencyLibrary.ADDRESS_ZERO),
+            amountToSwap * 3 / 10000,
+            "Protocol fee for native should be 0.03%"
+        );
+        assertEq(vault.protocolFeesAccrued(currency1), 0, "Protocol fee for token1 should be 0");
+        _checkPoolReserves(key);
+    }
+
     function testSwapExactOutputToken1ForToken0() public {
         // 1. Setup
         (PoolKey memory key, uint256 initialLiquidity0, uint256 initialLiquidity1) = _setupStandardPool();
@@ -258,6 +320,44 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         assertEq(token0.balanceOf(address(this)), amountToReceive, "User token0 balance should be amount received");
         assertEq(token1.balanceOf(address(vault)), initialLiquidity1 + expectedAmountIn, "Vault token1 balance");
         assertEq(token0.balanceOf(address(vault)), initialLiquidity0 - amountToReceive, "Vault token0 balance");
+        _checkPoolReserves(key);
+    }
+
+    function testSwapExactOutputToken1ForNative() public {
+        // 1. Setup
+        (PoolKey memory key, uint256 initialLiquidity0, uint256 initialLiquidity1) = _setupStandardPoolNative();
+        uint256 amountToReceive = 5e17; // 0.5 token0
+
+        Reserves _pairReserves = StateLibrary.getPairReserves(vault, key.toId());
+        assertEq(_pairReserves.reserve0(), initialLiquidity0, "Initial reserve0 should match");
+        assertEq(_pairReserves.reserve1(), initialLiquidity1, "Initial reserve1 should match");
+
+        // Calculate expected amount in
+        bool zeroForOne = false; // token1 for token0
+        Reserves _truncatedReserves = StateLibrary.getTruncatedReserves(vault, key.toId());
+        (uint256 expectedAmountIn,,) =
+            SwapMath.getAmountIn(_pairReserves, _truncatedReserves, key.fee, zeroForOne, amountToReceive);
+
+        // Mint tokens for swap
+        token1.mint(address(this), expectedAmountIn);
+
+        // 2. Action
+        IVault.SwapParams memory swapParams = IVault.SwapParams({
+            zeroForOne: false, // we want native, so we swap token1 for native
+            amountSpecified: int256(amountToReceive),
+            useMirror: false,
+            salt: bytes32(0)
+        });
+
+        bytes memory inner_params_swap = abi.encode(key, swapParams);
+        bytes memory data_swap = abi.encode(this.swap_callback.selector, inner_params_swap);
+
+        vault.unlock(data_swap);
+
+        // 3. Assertions
+        assertEq(token1.balanceOf(address(this)), 0, "User token1 balance should be 0");
+        assertEq(token1.balanceOf(address(vault)), initialLiquidity1 + expectedAmountIn, "Vault token1 balance");
+        assertEq(address(vault).balance, initialLiquidity0 - amountToReceive, "Vault token0 balance");
         _checkPoolReserves(key);
     }
 

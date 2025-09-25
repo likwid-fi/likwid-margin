@@ -32,3 +32,5 @@ broadcast/DeployVault.s.sol/57054
 broadcast/DeployAll.s.sol/57054
 broadcast/DeployAll.s.sol/10143
 broadcast/DeployHelper.s.sol
+broadcast/Injective.s.sol
+script/Injective.s.sol
