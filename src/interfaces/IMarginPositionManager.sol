@@ -8,25 +8,51 @@ import {IBasePositionManager} from "./IBasePositionManager.sol";
 import {MarginPosition} from "../libraries/MarginPosition.sol";
 
 interface IMarginPositionManager is IBasePositionManager {
+    /// @notice Thrown when the provided level is invalid
     error InvalidLevel();
 
-    event MarginLevelChanged(bytes32 oldLevel, bytes32 newLevel);
-    event MarginFeeChanged(uint24 oldFee, uint24 newFee);
-
+    /// @notice Thrown when the received borrow amount is insufficient
     error InsufficientBorrowReceived();
 
+    /// @notice Thrown when the received close amount is insufficient
     error InsufficientCloseReceived();
 
+    /// @notice Thrown when the received amount is insufficient
     error InsufficientReceived();
 
+    /// @notice Thrown when the position is not liquidated
     error PositionNotLiquidated();
 
+    /// @notice Thrown when the mirror amount is too high
     error MirrorTooMuch();
 
+    /// @notice Thrown when the borrow amount is too high
     error BorrowTooMuch();
 
+    /// @notice Thrown when the reserves are not enough
     error ReservesNotEnough();
 
+    /// @notice Thrown when margin is banned for low fee pools
+    error LowFeePoolMarginBanned();
+
+    /// @notice Emitted when the margin level is changed
+    /// @param oldLevel The old margin level
+    /// @param newLevel The new margin level
+    event MarginLevelChanged(bytes32 oldLevel, bytes32 newLevel);
+
+    /// @notice Emitted when the margin fee is changed
+    /// @param oldFee The old margin fee
+    /// @param newFee The new margin fee
+    event MarginFeeChanged(uint24 oldFee, uint24 newFee);
+
+    /// @notice Emitted when a margin position is created or increased
+    /// @param poolId The ID of the pool
+    /// @param owner The owner of the position
+    /// @param tokenId The ID of the position token
+    /// @param marginAmount The amount of margin added
+    /// @param marginTotal The total margin of the position
+    /// @param debtAmount The total debt of the position
+    /// @param marginForOne Whether the margin is for currency1
     event Margin(
         PoolId indexed poolId,
         address indexed owner,
@@ -36,6 +62,16 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 debtAmount,
         bool marginForOne
     );
+
+    /// @notice Emitted when a margin position is repaid
+    /// @param poolId The ID of the pool
+    /// @param sender The address of the repayer
+    /// @param tokenId The ID of the position token
+    /// @param marginAmount The amount of margin in the position
+    /// @param marginTotal The total margin of the position
+    /// @param debtAmount The total debt of the position
+    /// @param releaseAmount The amount of margin released
+    /// @param repayAmount The amount of debt repaid
     event Repay(
         PoolId indexed poolId,
         address indexed sender,
@@ -46,6 +82,17 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 releaseAmount,
         uint256 repayAmount
     );
+
+    /// @notice Emitted when a margin position is closed
+    /// @param poolId The ID of the pool
+    /// @param sender The address of the closer
+    /// @param tokenId The ID of the position token
+    /// @param marginAmount The amount of margin in the position
+    /// @param marginTotal The total margin of the position
+    /// @param debtAmount The total debt of the position
+    /// @param releaseAmount The amount of margin released
+    /// @param repayAmount The amount of debt repaid
+    /// @param closeAmount The amount received after closing
     event Close(
         PoolId indexed poolId,
         address indexed sender,
@@ -57,6 +104,15 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 repayAmount,
         uint256 closeAmount
     );
+
+    /// @notice Emitted when a margin position is modified
+    /// @param poolId The ID of the pool
+    /// @param sender The address of the modifier
+    /// @param tokenId The ID of the position token
+    /// @param marginAmount The amount of margin in the position
+    /// @param marginTotal The total margin of the position
+    /// @param debtAmount The total debt of the position
+    /// @param changeAmount The amount of change in the position
     event Modify(
         PoolId indexed poolId,
         address indexed sender,
@@ -66,6 +122,20 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 debtAmount,
         int256 changeAmount
     );
+
+    /// @notice Emitted when a margin position is liquidated by burning
+    /// @param poolId The ID of the pool
+    /// @param sender The address of the liquidator
+    /// @param tokenId The ID of the position token
+    /// @param marginAmount The amount of margin in the position
+    /// @param marginTotal The total margin of the position
+    /// @param debtAmount The total debt of the position
+    /// @param truncatedReserves The truncated reserves of the pool
+    /// @param pairReserves The pair reserves of the pool
+    /// @param releaseAmount The amount of margin released
+    /// @param repayAmount The amount of debt repaid
+    /// @param profitAmount The profit from the liquidation
+    /// @param lostAmount The loss from the liquidation
     event LiquidateBurn(
         PoolId indexed poolId,
         address indexed sender,
@@ -80,6 +150,20 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 profitAmount,
         uint256 lostAmount
     );
+
+    /// @notice Emitted when a margin position is liquidated by calling
+    /// @param poolId The ID of the pool
+    /// @param sender The address of the liquidator
+    /// @param tokenId The ID of the position token
+    /// @param marginAmount The amount of margin in the position
+    /// @param marginTotal The total margin of the position
+    /// @param debtAmount The total debt of the position
+    /// @param truncatedReserves The truncated reserves of the pool
+    /// @param pairReserves The pair reserves of the pool
+    /// @param releaseAmount The amount of margin released
+    /// @param repayAmount The amount of debt repaid
+    /// @param needRepayAmount The amount of debt that needs to be repaid
+    /// @param lostAmount The loss from the liquidation
     event LiquidateCall(
         PoolId indexed poolId,
         address indexed sender,
@@ -95,6 +179,9 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 lostAmount
     );
 
+    /// @notice Gets the state of a position
+    /// @param tokenId The ID of the position token
+    /// @return position The state of the position
     function getPositionState(uint256 tokenId) external view returns (MarginPosition.State memory position);
 
     struct CreateParams {
@@ -177,6 +264,11 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @param changeAmount The amount to modify
     function modify(uint256 tokenId, int128 changeAmount) external payable;
 
+    /// @notice Gets the default margin fee
+    /// @return defaultMarginFee The default margin fee
     function defaultMarginFee() external view returns (uint24 defaultMarginFee);
+
+    /// @notice Gets the margin levels
+    /// @return marginLevel The margin levels
     function marginLevels() external view returns (MarginLevels marginLevel);
 }

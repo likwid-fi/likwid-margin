@@ -37,6 +37,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
     LikwidHelper helper;
     PoolKey key;
     PoolKey keyNative;
+    PoolKey keyLowFee;
     MockERC20 token0;
     MockERC20 token1;
     Currency currency0;
@@ -80,6 +81,9 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         uint24 fee = 3000; // 0.3%
         key = PoolKey({currency0: currency0, currency1: currency1, fee: fee});
         vault.initialize(key);
+
+        keyLowFee = PoolKey({currency0: currency0, currency1: currency1, fee: 1000});
+        vault.initialize(keyLowFee);
 
         keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee});
         vault.initialize(keyNative);
@@ -824,5 +828,23 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             "position.marginAmount should be decreased"
         );
         LikwidChecker.checkPoolReserves(vault, keyNative);
+    }
+
+    function testAddMargin_LowFeePoolMarginBanned() public {
+        uint256 marginAmount = 0.1e18;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false, // margin with token0, borrow token1
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        vm.expectRevert(IMarginPositionManager.LowFeePoolMarginBanned.selector);
+        marginPositionManager.addMargin(keyLowFee, params);
     }
 }

@@ -212,8 +212,9 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     {
         _requireAuth(tokenOwner, params.tokenId);
         PoolId poolId = poolIds[params.tokenId];
-        PoolKey memory key = poolKeys[poolId];
         PoolState memory poolState = _getPoolState(poolId);
+        if (poolState.lpFee < 3000) revert LowFeePoolMarginBanned();
+        PoolKey memory key = poolKeys[poolId];
         MarginPosition.State storage position = positionInfos[params.tokenId];
 
         (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
