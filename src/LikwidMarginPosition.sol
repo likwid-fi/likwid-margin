@@ -138,11 +138,9 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     {
         (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
             _getPoolCumulativeValues(state, position.marginForOne);
-
-        uint256 level =
-            MarginPosition.marginLevel(position, state.truncatedReserves, borrowCumulativeLast, depositCumulativeLast);
-
         MarginLevels _marginLevels = marginLevels;
+        // use truncatedReserves
+        uint256 level = position.marginLevel(state.truncatedReserves, borrowCumulativeLast, depositCumulativeLast);
         liquidated = level < _marginLevels.liquidateLevel();
         if (liquidated) {
             marginAmount = Math.mulDiv(position.marginAmount, depositCumulativeLast, position.depositCumulativeLast);
