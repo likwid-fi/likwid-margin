@@ -5,10 +5,12 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
+import {ERC721} from "solmate/src/tokens/ERC721.sol";
 
 import {LikwidVault} from "../src/LikwidVault.sol";
 import {LikwidPairPosition} from "../src/LikwidPairPosition.sol";
 import {IPairPositionManager} from "../src/interfaces/IPairPositionManager.sol";
+import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
@@ -473,5 +475,132 @@ contract LikwidPairPositionTest is Test {
         // 2. Act & Assert
         vm.expectRevert();
         pairPositionManager.unlockCallback(data);
+    }
+
+    function test_RevertIf_RemoveLiquidityWithInvalidTokenId() public {
+        // 1. Arrange: Add liquidity to create a position
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 10e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        (, uint128 liquidityAdded) =
+            pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+
+        // 2. Act & Assert: Expect revert when removing liquidity with an invalid tokenId
+        uint256 invalidTokenId = 999;
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, invalidTokenId));
+        pairPositionManager.removeLiquidity(invalidTokenId, liquidityAdded, 0, 0);
+    }
+
+    function test_RevertIf_IncreaseLiquidityWithInvalidTokenId() public {
+        // 1. Arrange: Add liquidity to create a position
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 10e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+
+        // 2. Act & Assert: Expect revert when increasing liquidity with an invalid tokenId
+        uint256 invalidTokenId = 999;
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, invalidTokenId));
+        pairPositionManager.increaseLiquidity(invalidTokenId, 1e18, 1e18, 0, 0);
+    }
+
+    function test_RevertIf_ExactInputWithTooHighAmountOutMin() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 100e18;
+        uint256 amount1ToAdd = 100e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+
+        // 2. Arrange: Prepare for swap
+        uint256 amountIn = 10e18;
+        token0.mint(address(this), amountIn);
+        PoolId poolId = key.toId();
+
+        IPairPositionManager.SwapInputParams memory params = IPairPositionManager.SwapInputParams({
+            poolId: poolId,
+            zeroForOne: true,
+            to: address(this),
+            amountIn: amountIn,
+            amountOutMin: 100e18, // Unrealistic minimum output
+            deadline: block.timestamp + 1
+        });
+
+        // 3. Act & Assert
+        vm.expectRevert(bytes4(keccak256("PriceSlippageTooHigh()")));
+        pairPositionManager.exactInput(params);
+    }
+
+    function test_RevertIf_ExactOutputWithTooLowAmountInMax() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 100e18;
+        uint256 amount1ToAdd = 100e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+
+        // 2. Arrange: Prepare for swap
+        uint256 amountOut = 10e18;
+        token0.mint(address(this), 5e18); // Mint insufficient token0
+        PoolId poolId = key.toId();
+
+        IPairPositionManager.SwapOutputParams memory params = IPairPositionManager.SwapOutputParams({
+            poolId: poolId,
+            zeroForOne: true,
+            to: address(this),
+            amountInMax: 5e18, // Insufficient max input
+            amountOut: amountOut,
+            deadline: block.timestamp + 1
+        });
+
+        // 3. Act & Assert
+        vm.expectRevert(bytes4(keccak256("PriceSlippageTooHigh()")));
+        pairPositionManager.exactOutput(params);
+    }
+
+    function test_RevertIf_AddLiquidityWithTooHighAmountMin() public {
+        // 1. Arrange
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 10e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+
+        // 2. Act & Assert
+        vm.expectRevert(bytes4(keccak256("PriceSlippageTooHigh()")));
+        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, amount0ToAdd + 1, 0);
+    }
+
+    function test_RevertIf_RemoveLiquidityWithTooHighAmountMin() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 10e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        (uint256 tokenId, uint128 liquidity) = pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+
+        // 2. Act & Assert
+        vm.expectRevert(bytes4(keccak256("PriceSlippageTooHigh()")));
+        pairPositionManager.removeLiquidity(tokenId, liquidity, amount0ToAdd + 1, 0);
+    }
+
+    function test_RevertIf_IncreaseLiquidityWithTooHighAmountMin() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 10e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        (uint256 tokenId,) = pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+
+        // 2. Arrange: Prepare for increasing liquidity
+        uint256 increaseAmount0 = 5e18;
+        uint256 increaseAmount1 = 5e18;
+        token0.mint(address(this), increaseAmount0);
+        token1.mint(address(this), increaseAmount1);
+
+        // 3. Act & Assert
+        vm.expectRevert(bytes4(keccak256("PriceSlippageTooHigh()")));
+        pairPositionManager.increaseLiquidity(tokenId, increaseAmount0, increaseAmount1, increaseAmount0 + 1, 0);
     }
 }

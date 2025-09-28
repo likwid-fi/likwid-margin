@@ -847,4 +847,90 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         vm.expectRevert(IMarginPositionManager.LowFeePoolMarginBanned.selector);
         marginPositionManager.addMargin(keyLowFee, params);
     }
+
+    function testAddMargin_Fail_ExpiredDeadline() public {
+        uint256 marginAmount = 0.1e18;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp - 1
+        });
+
+        vm.expectRevert(bytes("EXPIRED"));
+        marginPositionManager.addMargin(key, params);
+    }
+
+    function testAddMargin_Fail_ReservesNotEnough() public {
+        uint256 marginAmount = 10000e18; // A very large amount
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 5,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        vm.expectRevert(IMarginPositionManager.ReservesNotEnough.selector);
+        marginPositionManager.addMargin(key, params);
+    }
+
+    function testAddMargin_Fail_BorrowTooMuch() public {
+        uint256 marginAmount = 0.1e18;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 0, // No leverage
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 1e18, // Borrow a large amount
+            borrowAmountMax: 1e18,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        vm.expectRevert(IMarginPositionManager.BorrowTooMuch.selector);
+        marginPositionManager.addMargin(key, params);
+    }
+
+    function testClose_Fail_InsufficientCloseReceived() public {
+        uint256 marginAmount = 0.1e18;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
+
+        // Try to close with a very high min amount to receive
+        vm.expectRevert(IMarginPositionManager.InsufficientCloseReceived.selector);
+        marginPositionManager.close(tokenId, 1_000_000, 1e18, block.timestamp);
+    }
+
+    function testSetMarginLevel_Fail_InvalidLevels() public {
+        // An invalid level, e.g., liquidateLevel > minMarginLevel
+        MarginLevels newMarginLevels;
+        newMarginLevels = newMarginLevels.setMinMarginLevel(1100000);
+        newMarginLevels = newMarginLevels.setLiquidateLevel(1200000); // Invalid
+
+        vm.expectRevert(IMarginPositionManager.InvalidLevel.selector);
+        marginPositionManager.setMarginLevel(MarginLevels.unwrap(newMarginLevels));
+    }
 }
+

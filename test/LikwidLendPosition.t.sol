@@ -9,6 +9,7 @@ import {LikwidVault} from "../src/LikwidVault.sol";
 import {LikwidLendPosition} from "../src/LikwidLendPosition.sol";
 import {LikwidPairPosition} from "../src/LikwidPairPosition.sol";
 import {LikwidMarginPosition} from "../src/LikwidMarginPosition.sol";
+import {IBasePositionManager} from "../src/interfaces/IBasePositionManager.sol";
 import {ILendPositionManager} from "../src/interfaces/ILendPositionManager.sol";
 import {IMarginPositionManager} from "../src/interfaces/IMarginPositionManager.sol";
 import {IVault} from "../src/interfaces/IVault.sol";
@@ -515,5 +516,46 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
 
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+    }
+
+    function test_RevertIf_UnauthorizedAccess() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount);
+
+        address unauthorizedUser = makeAddr("unauthorizedUser");
+        vm.startPrank(unauthorizedUser);
+
+        bytes4 expectedError = IBasePositionManager.NotOwner.selector;
+
+        vm.expectRevert(expectedError);
+        lendPositionManager.deposit(tokenId, amount);
+
+        vm.expectRevert(expectedError);
+        lendPositionManager.withdraw(tokenId, amount);
+
+        ILendPositionManager.SwapInputParams memory swapParams = ILendPositionManager.SwapInputParams({
+            poolId: key.toId(),
+            zeroForOne: false,
+            tokenId: tokenId,
+            amountIn: amount,
+            amountOutMin: 0,
+            deadline: block.timestamp
+        });
+        vm.expectRevert(expectedError);
+        lendPositionManager.exactInput(swapParams);
+
+        ILendPositionManager.SwapOutputParams memory outputParams = ILendPositionManager.SwapOutputParams({
+            poolId: key.toId(),
+            zeroForOne: false,
+            tokenId: tokenId,
+            amountOut: amount,
+            amountInMax: type(uint256).max,
+            deadline: block.timestamp
+        });
+        vm.expectRevert(expectedError);
+        lendPositionManager.exactOutput(outputParams);
+
+        vm.stopPrank();
     }
 }
