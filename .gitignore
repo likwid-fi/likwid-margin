@@ -34,3 +34,6 @@ broadcast/DeployAll.s.sol/10143
 broadcast/DeployHelper.s.sol
 broadcast/Injective.s.sol
 script/Injective.s.sol
+broadcast/DeployAll.s.sol/50312
+broadcast/Somnia.s.sol
+script/Somnia.s.sol

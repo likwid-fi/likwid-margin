@@ -135,7 +135,7 @@ library ReservesLibrary {
     /// @notice Calculates the price of token0 in terms of token1, scaled by Q96.
     /// @param self The Reserves object.
     /// @return The price of token0, scaled by Q96.
-    function getPrice0X96(Reserves self) public pure returns (uint256) {
+    function getPrice0X96(Reserves self) internal pure returns (uint256) {
         (uint128 r0, uint128 r1) = self.reserves();
         if (r0 == 0 || r1 == 0) revert InvalidReserves();
         return Math.mulDiv(r1, FixedPoint96.Q96, r0);
