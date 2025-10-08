@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {Panic} from "@openzeppelin/contracts/utils/Panic.sol";
-
 import {Math} from "../libraries/Math.sol";
 import {FixedPoint96} from "../libraries/FixedPoint96.sol";
 import {BalanceDelta} from "./BalanceDelta.sol";

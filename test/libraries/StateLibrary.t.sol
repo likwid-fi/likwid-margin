@@ -2,7 +2,6 @@
 pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {console} from "forge-std/console.sol";
 import {LikwidVault} from "../../src/LikwidVault.sol";
 import {IVault} from "../../src/interfaces/IVault.sol";
 import {IUnlockCallback} from "../../src/interfaces/callback/IUnlockCallback.sol";
@@ -14,7 +13,6 @@ import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
 import {StageMath} from "../../src/libraries/StageMath.sol";
 import {LendPosition} from "../../src/libraries/LendPosition.sol";
-import {MarginPosition} from "../../src/libraries/MarginPosition.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 contract StateLibraryTest is Test, IUnlockCallback {

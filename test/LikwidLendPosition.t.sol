@@ -12,15 +12,15 @@ import {LikwidMarginPosition} from "../src/LikwidMarginPosition.sol";
 import {IBasePositionManager} from "../src/interfaces/IBasePositionManager.sol";
 import {ILendPositionManager} from "../src/interfaces/ILendPositionManager.sol";
 import {IMarginPositionManager} from "../src/interfaces/IMarginPositionManager.sol";
-import {IVault} from "../src/interfaces/IVault.sol";
-import {IUnlockCallback} from "../src/interfaces/callback/IUnlockCallback.sol";
+
+
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
-import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
-import {StateLibrary} from "../src/libraries/StateLibrary.sol";
-import {Reserves, ReservesLibrary} from "../src/types/Reserves.sol";
+import {PoolIdLibrary} from "../src/types/PoolId.sol";
+
+import {ReservesLibrary} from "../src/types/Reserves.sol";
 import {LendPosition} from "../src/libraries/LendPosition.sol";
-import {BalanceDelta} from "../src/types/BalanceDelta.sol";
+
 
 contract LikwidLendPositionTest is Test {
     using CurrencyLibrary for Currency;

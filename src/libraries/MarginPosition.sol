@@ -3,7 +3,6 @@
 pragma solidity ^0.8.0;
 
 import {Math} from "./Math.sol";
-import {BalanceDelta, BalanceDeltaLibrary} from "../types/BalanceDelta.sol";
 import {Reserves} from "../types/Reserves.sol";
 import {CustomRevert} from "./CustomRevert.sol";
 import {SwapMath} from "./SwapMath.sol";

@@ -78,10 +78,8 @@ contract SwapMathTest is Test {
             SwapMath.getAmountOut(testReserves, testTruncatedReserves, baseFee, true, amountIn);
         assertTrue(finalFee > baseFee, "Dynamic fee should be higher than base fee");
 
-        (uint256 expectedAmountOut_fixed,) = SwapMath.getAmountOut(testReserves, baseFee, true, amountIn);
-        assertTrue(
-            amountOut < expectedAmountOut_fixed, "Amount out with dynamic fee should be less than with fixed fee"
-        );
+        (uint256 expectedAmountOutFixed,) = SwapMath.getAmountOut(testReserves, baseFee, true, amountIn);
+        assertTrue(amountOut < expectedAmountOutFixed, "Amount out with dynamic fee should be less than with fixed fee");
     }
 
     // =========================================
@@ -108,8 +106,8 @@ contract SwapMathTest is Test {
             SwapMath.getAmountIn(testReserves, testTruncatedReserves, baseFee, true, amountOut);
         assertTrue(finalFee > baseFee, "Dynamic fee should be higher than base fee");
 
-        (uint256 expectedAmountIn_fixed,) = SwapMath.getAmountIn(testReserves, baseFee, true, amountOut);
-        assertTrue(amountIn > expectedAmountIn_fixed, "Amount in with dynamic fee should be greater");
+        (uint256 expectedAmountInFixed,) = SwapMath.getAmountIn(testReserves, baseFee, true, amountOut);
+        assertTrue(amountIn > expectedAmountInFixed, "Amount in with dynamic fee should be greater");
     }
 
     // =========================================

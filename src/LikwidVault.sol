@@ -14,13 +14,11 @@ import {IUnlockCallback} from "./interfaces/callback/IUnlockCallback.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
 import {CurrencyGuard} from "./libraries/CurrencyGuard.sol";
 import {Pool} from "./libraries/Pool.sol";
-import {MarginPosition} from "./libraries/MarginPosition.sol";
 import {ERC6909Claims} from "./base/ERC6909Claims.sol";
 import {NoDelegateCall} from "./base/NoDelegateCall.sol";
 import {ProtocolFees} from "./base/ProtocolFees.sol";
 import {Extsload} from "./base/Extsload.sol";
 import {Exttload} from "./base/Exttload.sol";
-import {Math} from "./libraries/Math.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
 
 /// @title Likwid vault

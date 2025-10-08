@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {FeeTypes} from "../types/FeeTypes.sol";
-import {Reserves, toReserves} from "../types/Reserves.sol";
+import {Reserves} from "../types/Reserves.sol";
 import {MarginState} from "../types/MarginState.sol";
 import {Math} from "./Math.sol";
 import {FixedPoint96} from "./FixedPoint96.sol";

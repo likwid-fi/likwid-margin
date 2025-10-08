@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.20;
 
-import {Test} from "forge-std/Test.sol";
-import {console} from "forge-std/console.sol";
-
 import {PoolId} from "../../src/types/PoolId.sol";
 import {PoolKey} from "../../src/types/PoolKey.sol";
 import {Reserves} from "../../src/types/Reserves.sol";

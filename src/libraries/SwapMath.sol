@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {Reserves, toReserves} from "../types/Reserves.sol";
+import {Reserves} from "../types/Reserves.sol";
 import {Math} from "./Math.sol";
 import {FeeLibrary} from "./FeeLibrary.sol";
 import {PerLibrary} from "./PerLibrary.sol";

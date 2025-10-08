@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-import "./EIP20NonStandardInterface.sol";
+import {EIP20NonStandardInterface} from "./EIP20NonStandardInterface.sol";
 
 // Note: the throw harness here always throws for errors, which is more realistic and useful
 //       for JavaScript tests. For Solidity tests, use: EIP20NonStandardReturnHarness.

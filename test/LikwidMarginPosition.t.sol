@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {console} from "forge-std/console.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 import {LikwidVault} from "../src/LikwidVault.sol";
@@ -14,9 +13,7 @@ import {IVault} from "../src/interfaces/IVault.sol";
 import {IUnlockCallback} from "../src/interfaces/callback/IUnlockCallback.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
-import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
-import {StateLibrary} from "../src/libraries/StateLibrary.sol";
-import {Reserves} from "../src/types/Reserves.sol";
+import {PoolIdLibrary} from "../src/types/PoolId.sol";
 import {MarginPosition} from "../src/libraries/MarginPosition.sol";
 import {BalanceDelta} from "../src/types/BalanceDelta.sol";
 import {MarginLevels, MarginLevelsLibrary} from "../src/types/MarginLevels.sol";
@@ -277,9 +274,9 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             useMirror: false,
             salt: bytes32(0)
         });
-        bytes memory inner_params_swap = abi.encode(key, swapParams);
-        bytes memory data_swap = abi.encode(this.swap_callback.selector, inner_params_swap);
-        vault.unlock(data_swap);
+        bytes memory innerParamsSwap = abi.encode(key, swapParams);
+        bytes memory dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
+        vault.unlock(dataSwap);
 
         (bool liquidated,,,) = marginPositionManager.checkLiquidate(tokenId);
         assertTrue(liquidated, "Position should be liquidatable");
@@ -329,9 +326,9 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             useMirror: false,
             salt: bytes32(0)
         });
-        bytes memory inner_params_swap = abi.encode(key, swapParams);
-        bytes memory data_swap = abi.encode(this.swap_callback.selector, inner_params_swap);
-        vault.unlock(data_swap);
+        bytes memory innerParamsSwap = abi.encode(key, swapParams);
+        bytes memory dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
+        vault.unlock(dataSwap);
 
         (bool liquidated,,,) = marginPositionManager.checkLiquidate(tokenId);
         assertTrue(liquidated, "Position should be liquidatable");
@@ -933,4 +930,3 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         marginPositionManager.setMarginLevel(MarginLevels.unwrap(newMarginLevels));
     }
 }
-

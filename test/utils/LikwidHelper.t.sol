@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {console} from "forge-std/console.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 import {LikwidVault} from "../../src/LikwidVault.sol";
@@ -15,8 +14,6 @@ import {PoolKey} from "../../src/types/PoolKey.sol";
 import {PoolId} from "../../src/types/PoolId.sol";
 import {PoolState} from "../../src/types/PoolState.sol";
 import {Currency} from "../../src/types/Currency.sol";
-import {Reserves, toReserves} from "../../src/types/Reserves.sol";
-import {MarginState} from "../../src/types/MarginState.sol";
 import {MarginLevels} from "../../src/types/MarginLevels.sol";
 import {MarginPosition} from "../../src/libraries/MarginPosition.sol";
 import {SwapMath} from "../../src/libraries/SwapMath.sol";

@@ -4,10 +4,8 @@ pragma solidity ^0.8.20;
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 
-import {Reserves} from "../../src/types/Reserves.sol";
 import {PoolState} from "../../src/types/PoolState.sol";
 import {PoolId} from "../../src/types/PoolId.sol";
-import {Currency} from "../../src/types/Currency.sol";
 import {MarginLevels} from "../../src/types/MarginLevels.sol";
 import {IVault} from "../../src/interfaces/IVault.sol";
 import {IMarginPositionManager} from "../../src/interfaces/IMarginPositionManager.sol";

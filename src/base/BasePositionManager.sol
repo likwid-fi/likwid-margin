@@ -12,7 +12,7 @@ import {IBasePositionManager} from "../interfaces/IBasePositionManager.sol";
 import {ImmutableState} from "./ImmutableState.sol";
 import {PoolKey} from "../types/PoolKey.sol";
 import {BalanceDelta} from "../types/BalanceDelta.sol";
-import {PoolId, PoolIdLibrary} from "../types/PoolId.sol";
+import {PoolId} from "../types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "../types/Currency.sol";
 import {IVault} from "../interfaces/IVault.sol";
 import {IUnlockCallback} from "../interfaces/callback/IUnlockCallback.sol";

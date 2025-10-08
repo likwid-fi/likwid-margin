@@ -6,12 +6,10 @@ pragma solidity ^0.8.26;
 import {BasePositionManager} from "./base/BasePositionManager.sol";
 import {IMarginPositionManager} from "./interfaces/IMarginPositionManager.sol";
 import {IProtocolFees} from "./interfaces/IProtocolFees.sol";
-import {IMarginBase} from "./interfaces/IMarginBase.sol";
 import {IVault} from "./interfaces/IVault.sol";
 import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
 import {FeeLibrary} from "./libraries/FeeLibrary.sol";
-import {InterestMath} from "./libraries/InterestMath.sol";
 import {MarginPosition} from "./libraries/MarginPosition.sol";
 import {Math} from "./libraries/Math.sol";
 import {PerLibrary} from "./libraries/PerLibrary.sol";
@@ -19,21 +17,17 @@ import {PositionLibrary} from "./libraries/PositionLibrary.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
 import {StateLibrary} from "./libraries/StateLibrary.sol";
 import {TimeLibrary} from "./libraries/TimeLibrary.sol";
-import {PriceMath} from "./libraries/PriceMath.sol";
 import {SwapMath} from "./libraries/SwapMath.sol";
-import {FixedPoint96} from "./libraries/FixedPoint96.sol";
 import {MarginActions} from "./types/MarginActions.sol";
-import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "./types/BalanceDelta.sol";
+import {BalanceDelta, toBalanceDelta} from "./types/BalanceDelta.sol";
 import {Currency, CurrencyLibrary} from "./types/Currency.sol";
 import {MarginLevels, MarginLevelsLibrary} from "./types/MarginLevels.sol";
-import {MarginState} from "./types/MarginState.sol";
 import {PoolId} from "./types/PoolId.sol";
 import {PoolKey} from "./types/PoolKey.sol";
 import {Reserves} from "./types/Reserves.sol";
 import {PoolState} from "./types/PoolState.sol";
 import {MarginBalanceDelta} from "./types/MarginBalanceDelta.sol";
 // Solmate
-import {Owned} from "solmate/src/auth/Owned.sol";
 
 contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     using SafeCast for *;
@@ -325,11 +319,11 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         MarginBalanceDelta memory delta
     ) internal returns (uint256 borrowAmount) {
         uint256 borrowRealReserves = poolState.realReserves.reserve01(!position.marginForOne);
-        (uint256 borrowMAXAmount,) =
+        (uint256 borrowMaxAmount,) =
             SwapMath.getAmountOut(poolState.pairReserves, poolState.lpFee, !position.marginForOne, params.marginAmount);
-        borrowMAXAmount = Math.min(borrowMAXAmount, borrowRealReserves * 20 / 100);
-        if (params.borrowAmount > borrowMAXAmount) BorrowTooMuch.selector.revertWith();
-        if (params.borrowAmount == 0) params.borrowAmount = borrowMAXAmount.toUint128();
+        borrowMaxAmount = Math.min(borrowMaxAmount, borrowRealReserves * 20 / 100);
+        if (params.borrowAmount > borrowMaxAmount) BorrowTooMuch.selector.revertWith();
+        if (params.borrowAmount == 0) params.borrowAmount = borrowMaxAmount.toUint128();
         borrowAmount = params.borrowAmount;
         uint256 borrowCumulativeLast;
         uint256 depositCumulativeLast;

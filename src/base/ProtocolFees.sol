@@ -7,7 +7,6 @@ import {IProtocolFees} from "../interfaces/IProtocolFees.sol";
 import {PoolKey} from "../types/PoolKey.sol";
 import {ProtocolFeeLibrary} from "../libraries/ProtocolFeeLibrary.sol";
 import {MarginBase} from "./MarginBase.sol";
-import {PoolId} from "../types/PoolId.sol";
 import {Pool} from "../libraries/Pool.sol";
 import {CustomRevert} from "../libraries/CustomRevert.sol";
 

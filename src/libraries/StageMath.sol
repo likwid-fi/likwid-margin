@@ -2,10 +2,6 @@
 // Likwid Contracts
 pragma solidity ^0.8.26;
 
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {PerLibrary} from "./PerLibrary.sol";
-import {TimeLibrary} from "./TimeLibrary.sol";
-
 library StageMath {
     function add(uint256 stage, uint128 amount) internal pure returns (uint256) {
         (uint128 _total, uint128 _liquidity) = decode(stage);

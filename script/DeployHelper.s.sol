@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "forge-std/Script.sol";
+import {Script, console} from "forge-std/Script.sol";
 import {IVault} from "../src/interfaces/IVault.sol";
 import {LikwidHelper} from "../test/utils/LikwidHelper.sol";
 

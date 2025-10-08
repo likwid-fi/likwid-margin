@@ -5,15 +5,13 @@ pragma solidity ^0.8.26;
 // Local
 import {BasePositionManager} from "./base/BasePositionManager.sol";
 import {PoolKey} from "./types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "./types/PoolId.sol";
-import {Currency, CurrencyLibrary} from "./types/Currency.sol";
+import {PoolId} from "./types/PoolId.sol";
+import {Currency} from "./types/Currency.sol";
 import {BalanceDelta} from "./types/BalanceDelta.sol";
 import {IVault} from "./interfaces/IVault.sol";
-import {IUnlockCallback} from "./interfaces/callback/IUnlockCallback.sol";
 import {IPairPositionManager} from "./interfaces/IPairPositionManager.sol";
 import {PairPosition} from "./libraries/PairPosition.sol";
 import {StateLibrary} from "./libraries/StateLibrary.sol";
-import {Pool} from "./libraries/Pool.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
 import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 

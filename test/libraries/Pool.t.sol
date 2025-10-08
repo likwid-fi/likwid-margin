@@ -3,9 +3,8 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Pool} from "../../src/libraries/Pool.sol";
-import {Slot0} from "../../src/types/Slot0.sol";
 import {BalanceDelta, toBalanceDelta} from "../../src/types/BalanceDelta.sol";
-import {Reserves, toReserves} from "../../src/types/Reserves.sol";
+import {toReserves} from "../../src/types/Reserves.sol";
 import {PairPosition} from "../../src/libraries/PairPosition.sol";
 import {Math} from "../../src/libraries/Math.sol";
 
@@ -59,20 +58,20 @@ contract PoolTest is Test {
 
     function testModifyLiquidityRemoveLiquidity() public {
         // --- Setup: Add initial liquidity first ---
-        uint256 amount0_add = 1e18;
-        uint256 amount1_add = 4e18;
-        uint128 initialLiquidity = uint128(Math.sqrt(amount0_add * amount1_add));
+        uint256 amount0Add = 1e18;
+        uint256 amount1Add = 4e18;
+        uint128 initialLiquidity = uint128(Math.sqrt(amount0Add * amount1Add));
 
         pool.slot0 = pool.slot0.setTotalSupply(initialLiquidity);
-        pool.pairReserves = toReserves(uint128(amount0_add), uint128(amount1_add));
-        pool.realReserves = toReserves(uint128(amount0_add), uint128(amount1_add));
+        pool.pairReserves = toReserves(uint128(amount0Add), uint128(amount1Add));
+        pool.realReserves = toReserves(uint128(amount0Add), uint128(amount1Add));
 
         bytes32 salt = keccak256("salt");
         address owner = address(this);
         PairPosition.update(
             pool.positions.get(owner, salt),
             int128(initialLiquidity),
-            toBalanceDelta(-int128(int256(amount0_add)), -int128(int256(amount1_add)))
+            toBalanceDelta(-int128(int256(amount0Add)), -int128(int256(amount1Add)))
         );
 
         // --- Action: Remove half of the liquidity ---
@@ -90,8 +89,8 @@ contract PoolTest is Test {
         // --- Assertions ---
 
         // 1. Check returned delta
-        uint256 expectedAmount0Out = (amount0_add / 2);
-        uint256 expectedAmount1Out = (amount1_add / 2);
+        uint256 expectedAmount0Out = (amount0Add / 2);
+        uint256 expectedAmount1Out = (amount1Add / 2);
         assertEq(uint256(int256(delta.amount0())), expectedAmount0Out, "Delta amount0 should be amount removed");
         assertEq(uint256(int256(delta.amount1())), expectedAmount1Out, "Delta amount1 should be amount removed");
 

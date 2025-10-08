@@ -2,10 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {Vm} from "forge-std/Vm.sol";
-import {console} from "forge-std/console.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
-import {ERC721} from "solmate/src/tokens/ERC721.sol";
 
 import {LikwidVault} from "../src/LikwidVault.sol";
 import {LikwidPairPosition} from "../src/LikwidPairPosition.sol";
@@ -483,8 +480,7 @@ contract LikwidPairPositionTest is Test {
         uint256 amount1ToAdd = 10e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
-        (, uint128 liquidityAdded) =
-            pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+        (, uint128 liquidityAdded) = pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
 
         // 2. Act & Assert: Expect revert when removing liquidity with an invalid tokenId
         uint256 invalidTokenId = 999;
