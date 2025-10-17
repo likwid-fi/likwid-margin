@@ -137,7 +137,8 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         returns (uint24 swapFee, uint256 feeAmount, uint256 amountOut)
     {
         _requireAuth(msg.sender, params.tokenId);
-        PoolKey memory key = poolKeys[params.poolId];
+        PoolId poolId = poolIds[params.tokenId];
+        PoolKey memory key = poolKeys[poolId];
         if (params.zeroForOne != lendDirections[params.tokenId]) {
             InvalidCurrency.selector.revertWith();
         }
@@ -168,7 +169,8 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         returns (uint24 swapFee, uint256 feeAmount, uint256 amountIn)
     {
         _requireAuth(msg.sender, params.tokenId);
-        PoolKey memory key = poolKeys[params.poolId];
+        PoolId poolId = poolIds[params.tokenId];
+        PoolKey memory key = poolKeys[poolId];
         if (params.zeroForOne != lendDirections[params.tokenId]) {
             InvalidCurrency.selector.revertWith();
         }

@@ -13,14 +13,12 @@ import {IBasePositionManager} from "../src/interfaces/IBasePositionManager.sol";
 import {ILendPositionManager} from "../src/interfaces/ILendPositionManager.sol";
 import {IMarginPositionManager} from "../src/interfaces/IMarginPositionManager.sol";
 
-
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
 import {PoolIdLibrary} from "../src/types/PoolId.sol";
 
 import {ReservesLibrary} from "../src/types/Reserves.sol";
 import {LendPosition} from "../src/libraries/LendPosition.sol";
-
 
 contract LikwidLendPositionTest is Test {
     using CurrencyLibrary for Currency;
@@ -185,7 +183,6 @@ contract LikwidLendPositionTest is Test {
         assertEq(positionBefore.lendAmount, 0, "lendAmount should be zero");
         // swap mirror token0
         ILendPositionManager.SwapInputParams memory params = ILendPositionManager.SwapInputParams({
-            poolId: key.toId(),
             zeroForOne: false,
             tokenId: tokenId,
             amountIn: amountIn,
@@ -229,7 +226,6 @@ contract LikwidLendPositionTest is Test {
         assertEq(positionBefore.lendAmount, 0, "positionBefore.lendAmount should be zero");
         // swap mirror token0
         ILendPositionManager.SwapOutputParams memory params = ILendPositionManager.SwapOutputParams({
-            poolId: key.toId(),
             zeroForOne: false,
             tokenId: tokenId,
             amountInMax: 0,
@@ -275,7 +271,6 @@ contract LikwidLendPositionTest is Test {
 
         bool zeroForOne = true; // swap mirror token1
         ILendPositionManager.SwapInputParams memory params = ILendPositionManager.SwapInputParams({
-            poolId: key.toId(),
             zeroForOne: zeroForOne,
             tokenId: tokenId,
             amountIn: amountIn,
@@ -321,7 +316,6 @@ contract LikwidLendPositionTest is Test {
 
         bool zeroForOne = true; // swap mirror token1
         ILendPositionManager.SwapOutputParams memory params = ILendPositionManager.SwapOutputParams({
-            poolId: key.toId(),
             zeroForOne: zeroForOne,
             tokenId: tokenId,
             amountInMax: 0,
@@ -518,7 +512,7 @@ contract LikwidLendPositionTest is Test {
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
     }
 
-    function test_RevertIf_UnauthorizedAccess() public {
+    function testRevertIf_UnauthorizedAccess() public {
         uint256 amount = 1e18;
         token0.mint(address(this), amount);
         uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount);
@@ -535,7 +529,6 @@ contract LikwidLendPositionTest is Test {
         lendPositionManager.withdraw(tokenId, amount);
 
         ILendPositionManager.SwapInputParams memory swapParams = ILendPositionManager.SwapInputParams({
-            poolId: key.toId(),
             zeroForOne: false,
             tokenId: tokenId,
             amountIn: amount,
@@ -546,7 +539,6 @@ contract LikwidLendPositionTest is Test {
         lendPositionManager.exactInput(swapParams);
 
         ILendPositionManager.SwapOutputParams memory outputParams = ILendPositionManager.SwapOutputParams({
-            poolId: key.toId(),
             zeroForOne: false,
             tokenId: tokenId,
             amountOut: amount,

@@ -55,7 +55,6 @@ interface ILendPositionManager is IERC721 {
     function withdraw(uint256 tokenId, uint256 amount) external;
 
     struct SwapInputParams {
-        PoolId poolId;
         bool zeroForOne;
         uint256 tokenId;
         uint256 amountIn;
@@ -74,7 +73,6 @@ interface ILendPositionManager is IERC721 {
         returns (uint24 swapFee, uint256 feeAmount, uint256 amountOut);
 
     struct SwapOutputParams {
-        PoolId poolId;
         bool zeroForOne;
         uint256 tokenId;
         uint256 amountInMax;
