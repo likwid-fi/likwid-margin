@@ -199,6 +199,9 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         internal
         returns (uint256 borrowAmount, uint256 swapFeeAmount)
     {
+        if (params.leverage > MAX_LEVERAGE) {
+            ExceedMaxLeverage.selector.revertWith();
+        }
         _requireAuth(tokenOwner, params.tokenId);
         PoolId poolId = poolIds[params.tokenId];
         PoolState memory poolState = _getPoolState(poolId);
