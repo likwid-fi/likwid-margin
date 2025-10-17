@@ -171,7 +171,7 @@ library MarginStateLibrary {
         assembly ("memory-safe") {
             _result :=
                 or(
-                    and(not(shl(STAGE_SIZE, STAGE_LEAVE_PART)), _packed),
+                    and(not(shl(STAGE_LEAVE_PART, MASK_24_BITS)), _packed),
                     shl(STAGE_LEAVE_PART, and(MASK_24_BITS, _stageLeavePart))
                 )
         }
