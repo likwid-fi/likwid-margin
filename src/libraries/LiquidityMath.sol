@@ -13,7 +13,7 @@ library LiquidityMath {
             if shr(128, z) {
                 // revert SafeCastOverflow()
                 mstore(0, 0x93dafdf1)
-                revert(0, 4)
+                revert(0x1c, 4)
             }
         }
     }
@@ -29,21 +29,22 @@ library LiquidityMath {
             if iszero(eq(signextend(15, currentAmount0), currentAmount0)) {
                 // revert SafeCastOverflow()
                 mstore(0, 0x93dafdf1)
-                revert(0, 4)
+                revert(0x1c, 4)
             }
 
             let currentAmount1 := add(signextend(15, prevAmount1), signextend(15, amount1))
             if iszero(eq(signextend(15, currentAmount1), currentAmount1)) {
                 // revert SafeCastOverflow()
                 mstore(0, 0x93dafdf1)
-                revert(0, 4)
+                revert(0x1c, 4)
             }
 
             // Pack the results back into a uint256
-            current := or(
-                shl(128, and(currentAmount0, 0xffffffffffffffffffffffffffffffff)),
-                and(currentAmount1, 0xffffffffffffffffffffffffffffffff)
-            )
+            current :=
+                or(
+                    shl(128, and(currentAmount0, 0xffffffffffffffffffffffffffffffff)),
+                    and(currentAmount1, 0xffffffffffffffffffffffffffffffff)
+                )
         }
     }
 }
