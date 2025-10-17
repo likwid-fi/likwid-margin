@@ -60,10 +60,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         marginLevels = _marginLevels;
     }
 
-    /// @notice Callback function for the vault to execute margin-related actions.
-    /// @param data The encoded action and parameters.
-    /// @return The result of the action.
-    function unlockCallback(bytes calldata data) external override returns (bytes memory) {
+    function _unlockCallback(bytes calldata data) internal override returns (bytes memory) {
         (MarginActions action, bytes memory params) = abi.decode(data, (MarginActions, bytes));
 
         if (action == MarginActions.LIQUIDATE_BURN) {

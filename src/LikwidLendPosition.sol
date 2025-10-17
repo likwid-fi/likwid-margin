@@ -34,7 +34,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         SWAP
     }
 
-    function unlockCallback(bytes calldata data) external override returns (bytes memory) {
+    function _unlockCallback(bytes calldata data) internal override returns (bytes memory) {
         (Actions action, bytes memory params) = abi.decode(data, (Actions, bytes));
 
         if (action == Actions.DEPOSIT) {

@@ -45,6 +45,12 @@ abstract contract BasePositionManager is
         _;
     }
 
+    /// @notice Only allow calls from the LikwidVault contract
+    modifier onlyVault() {
+        if (msg.sender != address(vault)) revert NotVault();
+        _;
+    }
+
     function _requireAuth(address spender, uint256 tokenId) internal view {
         if (spender != ownerOf(tokenId)) {
             NotOwner.selector.revertWith();
@@ -120,6 +126,10 @@ abstract contract BasePositionManager is
         }
     }
 
+    function _unlockCallback(bytes calldata data) internal virtual returns (bytes memory) {}
+
     /// @inheritdoc IUnlockCallback
-    function unlockCallback(bytes calldata data) external virtual returns (bytes memory);
+    function unlockCallback(bytes calldata data) external onlyVault returns (bytes memory) {
+        return _unlockCallback(data);
+    }
 }
