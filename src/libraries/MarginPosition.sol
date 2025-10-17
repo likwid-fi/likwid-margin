@@ -57,7 +57,7 @@ library MarginPosition {
                 positionValue = marginAmount + marginTotal;
             }
             if (self.borrowCumulativeLast != 0) {
-                debtAmount = Math.mulDiv(self.debtAmount, borrowCumulativeLast, self.borrowCumulativeLast);
+                debtAmount = Math.mulDivRoundingUp(self.debtAmount, borrowCumulativeLast, self.borrowCumulativeLast);
             }
             if (marginTotal > 0) {
                 repayAmount = Math.mulDiv(reserveBorrow, positionValue, reserveMargin);
