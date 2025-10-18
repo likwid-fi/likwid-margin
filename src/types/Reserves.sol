@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import {Math} from "../libraries/Math.sol";
 import {FixedPoint96} from "../libraries/FixedPoint96.sol";
+import {SafeCast} from "../libraries/SafeCast.sol";
 import {BalanceDelta} from "./BalanceDelta.sol";
 
 /// @dev Two `uint128` values packed into a single `uint256` where the upper 128 bits represent reserve0
@@ -28,6 +29,8 @@ enum ReservesType {
 
 /// @notice A library for handling the Reserves type, which packs two uint128 values into a single uint256.
 library ReservesLibrary {
+    using SafeCast for *;
+
     struct UpdateParam {
         ReservesType _type;
         BalanceDelta delta;
@@ -85,7 +88,7 @@ library ReservesLibrary {
     }
 
     function applyDelta(Reserves self, BalanceDelta delta, bool enableOverflow) internal pure returns (Reserves) {
-        (uint128 r0, uint128 r1) = self.reserves();
+        (uint256 r0, uint256 r1) = self.reserves();
         int128 d0 = delta.amount0();
         int128 d1 = delta.amount1();
 
@@ -119,7 +122,7 @@ library ReservesLibrary {
             }
         }
 
-        return toReserves(r0, r1);
+        return toReserves(r0.toUint128(), r1.toUint128());
     }
 
     /// @notice Applies a balance delta to the reserves.
