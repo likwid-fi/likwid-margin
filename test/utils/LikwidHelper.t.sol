@@ -69,7 +69,7 @@ contract LikwidHelperTest is Test {
         token1.approve(address(pairPositionManager), type(uint256).max);
 
         uint24 fee = 3000; // 0.3%
-        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee});
+        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee, marginFee: 3000});
         vault.initialize(key);
         poolId = key.toId();
         uint256 amount0ToAdd = 10e18;
@@ -85,7 +85,7 @@ contract LikwidHelperTest is Test {
         uint256 amount1ToAdd = 20e18;
         assertEq(stateInfo.lastUpdated, 1);
         assertEq(stateInfo.lpFee, 3000);
-        assertEq(stateInfo.marginFee, 0);
+        assertEq(stateInfo.marginFee, 3000);
         assertEq(stateInfo.protocolFee, 0);
         assertEq(stateInfo.realReserve0, amount0ToAdd, "stateInfo.realReserve0==amount0ToAdd");
         assertEq(stateInfo.realReserve1, amount1ToAdd, "stateInfo.realReserve1==amount1ToAdd");
@@ -194,8 +194,8 @@ contract LikwidHelperTest is Test {
         uint256 degree =
             SwapMath.getPriceDegree(state.pairReserves, state.truncatedReserves, state.lpFee, true, 1e17, 1e17);
         assertEq(fee, SwapMath.dynamicFee(state.lpFee, degree));
-        assertEq(0, state.marginFee);
-        assertEq(marginFee, marginPositionManager.defaultMarginFee());
+        assertEq(3000, state.marginFee);
+        assertEq(marginFee, state.marginFee);
     }
 
     function testGetMaxDecrease() public {

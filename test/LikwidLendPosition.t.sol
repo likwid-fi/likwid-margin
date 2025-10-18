@@ -75,7 +75,7 @@ contract LikwidLendPositionTest is Test {
         token1.approve(address(marginPositionManager), type(uint256).max);
 
         uint24 fee = 3000; // 0.3%
-        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee});
+        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee, marginFee: 3000});
         vault.initialize(key);
 
         uint256 amount0ToAdd = 1000e18;
@@ -84,7 +84,7 @@ contract LikwidLendPositionTest is Test {
         token1.mint(address(this), amount1ToAdd);
         pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
 
-        keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee});
+        keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee, marginFee: 3000});
         vault.initialize(keyNative);
         token1.mint(address(this), amount1ToAdd);
         pairPositionManager.addLiquidity{value: amount0ToAdd}(keyNative, amount0ToAdd, amount1ToAdd, 0, 0);

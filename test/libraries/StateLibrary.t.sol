@@ -47,7 +47,7 @@ contract StateLibraryTest is Test, IUnlockCallback {
             (token0, token1) = (token1, token0);
         }
 
-        poolKey = PoolKey({currency0: currency0, currency1: currency1, fee: 3000});
+        poolKey = PoolKey({currency0: currency0, currency1: currency1, fee: 3000, marginFee: 3000});
         poolId = poolKey.toId();
         vault.initialize(poolKey);
         vault.setMarginController(address(this));

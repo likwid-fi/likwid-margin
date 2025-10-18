@@ -158,7 +158,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         initialLiquidity0 = 10e18;
         initialLiquidity1 = 10e18;
         uint24 fee = 3000; // 0.3%
-        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee});
+        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee, marginFee: 3000});
         vault.initialize(key);
 
         // Add liquidity
@@ -172,7 +172,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         initialLiquidity0 = 10e18;
         initialLiquidity1 = 10e18;
         uint24 fee = 3000; // 0.3%
-        key = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee});
+        key = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee, marginFee: 3000});
         vault.initialize(key);
 
         // Add liquidity
@@ -407,7 +407,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         // 1. Setup
         uint256 amount0ToAdd = 1e18;
         uint256 amount1ToAdd = 4e18;
-        PoolKey memory key = PoolKey({currency0: currency0, currency1: currency1, fee: 25});
+        PoolKey memory key = PoolKey({currency0: currency0, currency1: currency1, fee: 25, marginFee: 30});
         vault.initialize(key);
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
@@ -433,7 +433,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
     }
 
     function testInitializeRevertsIfCurrenciesOutOfOrder() public {
-        PoolKey memory key = PoolKey({currency0: currency1, currency1: currency0, fee: 25});
+        PoolKey memory key = PoolKey({currency0: currency1, currency1: currency0, fee: 25, marginFee: 30});
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -446,7 +446,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
     }
 
     function testInitializeRevertsIfCurrenciesEqual() public {
-        PoolKey memory key = PoolKey({currency0: currency0, currency1: currency0, fee: 25});
+        PoolKey memory key = PoolKey({currency0: currency0, currency1: currency0, fee: 25, marginFee: 30});
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -459,7 +459,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
     }
 
     function testInitializeRevertsIfPoolAlreadyInitialized() public {
-        PoolKey memory key = PoolKey({currency0: currency0, currency1: currency1, fee: 25});
+        PoolKey memory key = PoolKey({currency0: currency0, currency1: currency1, fee: 25, marginFee: 30});
         vault.initialize(key);
         vm.expectRevert(abi.encodeWithSelector(Pool.PoolAlreadyInitialized.selector));
         vault.initialize(key);

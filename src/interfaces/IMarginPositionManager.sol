@@ -267,10 +267,6 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @param changeAmount The amount to modify
     function modify(uint256 tokenId, int128 changeAmount) external payable;
 
-    /// @notice Gets the default margin fee
-    /// @return defaultMarginFee The default margin fee
-    function defaultMarginFee() external view returns (uint24 defaultMarginFee);
-
     /// @notice Gets the margin levels
     /// @return marginLevel The margin levels
     function marginLevels() external view returns (MarginLevels marginLevel);

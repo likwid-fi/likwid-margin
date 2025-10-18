@@ -84,10 +84,12 @@ library Pool {
     /// @notice Initializes the pool with a given fee
     /// @param self The pool state
     /// @param lpFee The initial fee for the pool
-    function initialize(State storage self, uint24 lpFee) internal {
+    /// @param marginFee The initial margin fee for the pool
+    function initialize(State storage self, uint24 lpFee, uint24 marginFee) internal {
         if (self.borrow0CumulativeLast != 0) PoolAlreadyInitialized.selector.revertWith();
 
-        self.slot0 = Slot0.wrap(bytes32(0)).setLastUpdated(uint32(block.timestamp)).setLpFee(lpFee);
+        self.slot0 =
+            Slot0.wrap(bytes32(0)).setLastUpdated(uint32(block.timestamp)).setLpFee(lpFee).setMarginFee(marginFee);
         self.borrow0CumulativeLast = FixedPoint96.Q96;
         self.borrow1CumulativeLast = FixedPoint96.Q96;
         self.deposit0CumulativeLast = FixedPoint96.Q96;
@@ -100,14 +102,6 @@ library Pool {
     function setProtocolFee(State storage self, uint24 protocolFee) internal {
         self.checkPoolInitialized();
         self.slot0 = self.slot0.setProtocolFee(protocolFee);
-    }
-
-    /// @notice Sets the margin fee for the pool
-    /// @param self The pool state
-    /// @param marginFee The new margin fee
-    function setMarginFee(State storage self, uint24 marginFee) internal {
-        self.checkPoolInitialized();
-        self.slot0 = self.slot0.setMarginFee(marginFee);
     }
 
     /// @notice Adds or removes liquidity from the pool
@@ -223,21 +217,25 @@ library Pool {
 
         int128 amount0Delta;
         int128 amount1Delta;
+        BalanceDelta protocolFeeDelta;
 
         if (params.zeroForOne) {
             amount0Delta = -amountIn.toInt128();
             amount1Delta = amountOut.toInt128();
+            protocolFeeDelta = toBalanceDelta(amountToProtocol.toInt128(), 0);
         } else {
             amount0Delta = amountOut.toInt128();
             amount1Delta = -amountIn.toInt128();
+            protocolFeeDelta = toBalanceDelta(0, amountToProtocol.toInt128());
         }
 
         ReservesLibrary.UpdateParam[] memory deltaParams;
         swapDelta = toBalanceDelta(amount0Delta, amount1Delta);
         if (!params.useMirror) {
+            BalanceDelta changeDelta = swapDelta + protocolFeeDelta;
             deltaParams = new ReservesLibrary.UpdateParam[](2);
-            deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, swapDelta);
-            deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, swapDelta);
+            deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, changeDelta);
+            deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, changeDelta);
         } else {
             deltaParams = new ReservesLibrary.UpdateParam[](3);
             BalanceDelta realDelta;
@@ -249,10 +247,10 @@ library Pool {
                 realDelta = toBalanceDelta(0, amount1Delta);
                 lendDelta = toBalanceDelta(-amount0Delta, 0);
             }
-            deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, realDelta);
+            deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, realDelta + protocolFeeDelta);
             // pair MIRROR<=>lend MIRROR
             deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.LEND, lendDelta);
-            deltaParams[2] = ReservesLibrary.UpdateParam(ReservesType.PAIR, swapDelta);
+            deltaParams[2] = ReservesLibrary.UpdateParam(ReservesType.PAIR, swapDelta + protocolFeeDelta);
             uint256 depositCumulativeLast;
             if (params.zeroForOne) {
                 depositCumulativeLast = self.deposit1CumulativeLast;
@@ -308,7 +306,7 @@ library Pool {
 
     function margin(State storage self, MarginBalanceDelta memory params, uint24 defaultProtocolFee)
         internal
-        returns (BalanceDelta marginDelta, uint256 amountToProtocol, uint256 feeAmount)
+        returns (BalanceDelta marginDelta, uint256 marginToProtocol, uint256 swapToProtocol)
     {
         if (
             (params.action != MarginActions.CLOSE && params.action != MarginActions.LIQUIDATE_BURN)
@@ -318,10 +316,12 @@ library Pool {
         }
         Slot0 _slot0 = self.slot0;
         if (params.action == MarginActions.MARGIN) {
-            (, feeAmount) = params.marginFee.deduct(params.marginTotal);
-            (amountToProtocol,) =
-                ProtocolFeeLibrary.splitFee(_slot0.protocolFee(defaultProtocolFee), FeeTypes.MARGIN, feeAmount);
+            (marginToProtocol,) = ProtocolFeeLibrary.splitFee(
+                _slot0.protocolFee(defaultProtocolFee), FeeTypes.MARGIN, params.marginFeeAmount
+            );
         }
+        (swapToProtocol,) =
+            ProtocolFeeLibrary.splitFee(_slot0.protocolFee(defaultProtocolFee), FeeTypes.SWAP, params.swapFeeAmount);
         marginDelta = params.marginDelta;
         if (params.debtDepositCumulativeLast > 0) {
             if (params.marginForOne) {
@@ -330,9 +330,28 @@ library Pool {
                 self.deposit1CumulativeLast = params.debtDepositCumulativeLast;
             }
         }
+        BalanceDelta protocolDelta;
+        int128 amount0Delta;
+        int128 amount1Delta;
+        if (params.marginForOne) {
+            if (params.action == MarginActions.MARGIN) {
+                amount0Delta = swapToProtocol.toInt128();
+                amount1Delta = marginToProtocol.toInt128();
+            } else {
+                amount1Delta = swapToProtocol.toInt128();
+            }
+        } else {
+            if (params.action == MarginActions.MARGIN) {
+                amount0Delta = marginToProtocol.toInt128();
+                amount1Delta = swapToProtocol.toInt128();
+            } else {
+                amount0Delta = swapToProtocol.toInt128();
+            }
+        }
+        protocolDelta = toBalanceDelta(amount0Delta, amount1Delta);
         ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](4);
-        deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, marginDelta);
-        deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, params.pairDelta);
+        deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, marginDelta + protocolDelta);
+        deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, params.pairDelta + protocolDelta);
         deltaParams[2] = ReservesLibrary.UpdateParam(ReservesType.LEND, params.lendDelta);
         deltaParams[3] = ReservesLibrary.UpdateParam(ReservesType.MIRROR, params.mirrorDelta);
         self.updateReserves(deltaParams);

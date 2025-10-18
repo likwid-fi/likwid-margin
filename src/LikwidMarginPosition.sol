@@ -45,7 +45,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
     mapping(uint256 tokenId => MarginPosition.State positionInfo) private positionInfos;
     MarginLevels public marginLevels;
-    uint24 public defaultMarginFee = 3000; // 0.3%
 
     constructor(address initialOwner, IVault _vault)
         BasePositionManager("LIKWIDMarginPositionManager", "LMPM", initialOwner, _vault)
@@ -109,17 +108,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
         position.depositCumulativeLast = depositCumulativeLast;
         position.borrowCumulativeLast = borrowCumulativeLast;
-    }
-
-    function checkLiquidate(uint256 tokenId)
-        external
-        view
-        returns (bool liquidated, uint256 marginAmount, uint256 marginTotal, uint256 debtAmount)
-    {
-        PoolId poolId = poolIds[tokenId];
-        MarginPosition.State memory position = positionInfos[tokenId];
-        PoolState memory state = _getPoolState(poolId);
-        (liquidated, marginAmount, marginTotal, debtAmount) = _checkLiquidate(state, position);
     }
 
     function _checkLiquidate(PoolState memory state, MarginPosition.State memory position)
@@ -218,7 +206,8 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         uint256 minLevel;
         if (params.leverage > 0) {
             minLevel = marginLevels.minMarginLevel();
-            (borrowAmount, swapFeeAmount) = _executeAddLeverage(params, poolState, position, delta);
+            (borrowAmount, delta.marginFeeAmount, swapFeeAmount) =
+                _executeAddLeverage(params, poolState, position, delta);
         } else {
             minLevel = marginLevels.minBorrowLevel();
             borrowAmount = _executeAddCollateralAndBorrow(params, poolState, position, delta);
@@ -255,7 +244,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         PoolState memory poolState,
         MarginPosition.State storage position,
         MarginBalanceDelta memory delta
-    ) internal returns (uint256 borrowAmount, uint256 swapFeeAmount) {
+    ) internal returns (uint256 borrowAmount, uint256 marginFeeAmount, uint256 swapFeeAmount) {
         uint256 borrowMirrorReserves = poolState.mirrorReserves.reserve01(!position.marginForOne);
         uint256 borrowRealReserves = poolState.realReserves.reserve01(!position.marginForOne);
         if (Math.mulDiv(borrowMirrorReserves, 100, borrowRealReserves + borrowMirrorReserves) > 90) {
@@ -267,8 +256,8 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         if (marginTotal > marginReserves) ReservesNotEnough.selector.revertWith();
 
         delta.marginTotal = marginTotal.toUint128();
-        delta.marginFee = poolState.marginFee == 0 ? defaultMarginFee : poolState.marginFee;
-        (uint256 marginWithoutFee,) = delta.marginFee.deduct(marginTotal);
+        uint256 marginWithoutFee;
+        (marginWithoutFee, marginFeeAmount) = poolState.marginFee.deduct(marginTotal);
         (borrowAmount,, swapFeeAmount) = SwapMath.getAmountIn(
             poolState.pairReserves, poolState.truncatedReserves, poolState.lpFee, position.marginForOne, marginTotal
         );
@@ -687,11 +676,11 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         (address sender, PoolKey memory key, MarginBalanceDelta memory params) =
             abi.decode(_data, (address, PoolKey, MarginBalanceDelta));
 
-        (BalanceDelta delta, uint256 feeAmount) = vault.marginBalance(key, params);
+        (BalanceDelta delta) = vault.marginBalance(key, params);
 
         _processDelta(sender, key, delta, 0, 0, 0, 0);
 
-        return abi.encode(feeAmount);
+        return "";
     }
 
     function handleLiquidateBurn(bytes memory _data) internal returns (bytes memory) {
@@ -727,11 +716,5 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         bytes32 old = MarginLevels.unwrap(marginLevels);
         marginLevels = newMarginLevels;
         emit MarginLevelChanged(old, _marginLevel);
-    }
-
-    function setDefaultMarginFee(uint24 newMarginFee) external onlyOwner {
-        uint24 old = defaultMarginFee;
-        defaultMarginFee = newMarginFee;
-        emit MarginFeeChanged(old, newMarginFee);
     }
 }

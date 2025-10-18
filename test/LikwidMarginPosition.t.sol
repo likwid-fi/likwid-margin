@@ -76,13 +76,13 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         token1.approve(address(pairPositionManager), type(uint256).max);
 
         uint24 fee = 3000; // 0.3%
-        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee});
+        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee, marginFee: 3000});
         vault.initialize(key);
 
-        keyLowFee = PoolKey({currency0: currency0, currency1: currency1, fee: 1000});
+        keyLowFee = PoolKey({currency0: currency0, currency1: currency1, fee: 1000, marginFee: 3000});
         vault.initialize(keyLowFee);
 
-        keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee});
+        keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee, marginFee: 3000});
         vault.initialize(keyNative);
 
         uint256 amount0ToAdd = 10e18;
@@ -153,6 +153,10 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertEq(position.marginAmount, marginAmount, "position.marginAmount==marginAmount");
         assertEq(position.debtAmount, borrowAmount, "position.debtAmount==borrowAmount");
         LikwidChecker.checkPoolReserves(vault, key);
+        uint256 protocolMarginFees = vault.protocolFeesAccrued(key.currency0);
+        assertTrue(protocolMarginFees > 0, "protocolMarginFees should be accrued");
+        uint256 protocolMarginSwapFees = vault.protocolFeesAccrued(key.currency1);
+        assertTrue(protocolMarginSwapFees > 0, "protocolMarginSwapFees should be accrued");
     }
 
     function testRepay() public {
@@ -278,7 +282,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         bytes memory dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
         vault.unlock(dataSwap);
 
-        (bool liquidated,,,) = marginPositionManager.checkLiquidate(tokenId);
+        bool liquidated = helper.checkMarginPositionLiquidate(tokenId);
         assertTrue(liquidated, "Position should be liquidatable");
 
         // Liquidate
@@ -330,7 +334,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         bytes memory dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
         vault.unlock(dataSwap);
 
-        (bool liquidated,,,) = marginPositionManager.checkLiquidate(tokenId);
+        bool liquidated = helper.checkMarginPositionLiquidate(tokenId);
         assertTrue(liquidated, "Position should be liquidatable");
 
         // Liquidate
@@ -546,7 +550,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
 
-        (bool liquidated,,,) = marginPositionManager.checkLiquidate(tokenId);
+        bool liquidated = helper.checkMarginPositionLiquidate(tokenId);
         assertFalse(liquidated, "Position should not be liquidatable");
 
         vm.expectRevert(bytes4(keccak256("PositionNotLiquidated()")));
@@ -589,28 +593,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         vm.startPrank(notOwner);
         vm.expectRevert(bytes("UNAUTHORIZED"));
         marginPositionManager.setMarginLevel(newLevels);
-        vm.stopPrank();
-        LikwidChecker.checkPoolReserves(vault, key);
-    }
-
-    function testSetDefaultMarginFee() public {
-        uint24 oldFee = marginPositionManager.defaultMarginFee();
-        uint24 newFee = 5000; // 0.5%
-
-        vm.expectEmit(true, true, true, true);
-        emit MarginFeeChanged(oldFee, newFee);
-        marginPositionManager.setDefaultMarginFee(newFee);
-
-        assertEq(marginPositionManager.defaultMarginFee(), newFee, "Default margin fee should be updated");
-        LikwidChecker.checkPoolReserves(vault, key);
-    }
-
-    function testSetDefaultMarginFee_NotOwner() public {
-        uint24 newFee = 5000;
-        address notOwner = makeAddr("notOwner");
-        vm.startPrank(notOwner);
-        vm.expectRevert(bytes("UNAUTHORIZED"));
-        marginPositionManager.setDefaultMarginFee(newFee);
         vm.stopPrank();
         LikwidChecker.checkPoolReserves(vault, key);
     }

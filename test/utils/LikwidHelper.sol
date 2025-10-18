@@ -21,6 +21,7 @@ import {InterestMath} from "../../src/libraries/InterestMath.sol";
 import {MarginPosition} from "../../src/libraries/MarginPosition.sol";
 
 contract LikwidHelper is Owned {
+    using MarginPosition for MarginPosition.State;
     using PerLibrary for uint256;
     using StageMath for uint256;
 
@@ -146,8 +147,7 @@ contract LikwidHelper is Owned {
             state.pairReserves, state.truncatedReserves, state.lpFee, zeroForOne, amountIn, amountOut
         );
         _fee = SwapMath.dynamicFee(state.lpFee, degree);
-        IMarginPositionManager manager = IMarginPositionManager(vault.marginController());
-        _marginFee = state.marginFee == 0 ? manager.defaultMarginFee() : state.marginFee;
+        _marginFee = state.marginFee;
     }
 
     function _getMaxDecrease(
@@ -275,6 +275,18 @@ contract LikwidHelper is Owned {
         stageLeavePart = marginState.stageLeavePart();
         stageDuration = marginState.stageDuration();
         lastStageTimestamp = StateLibrary.getLastStageTimestamp(vault, id);
+    }
+
+    function checkMarginPositionLiquidate(uint256 tokenId) external view returns (bool liquidated) {
+        IMarginPositionManager manager = IMarginPositionManager(vault.marginController());
+        MarginPosition.State memory _position = manager.getPositionState(tokenId);
+        IVault _vault = manager.vault();
+        PoolId poolId = manager.poolIds(tokenId);
+        PoolState memory _state = StateLibrary.getCurrentState(_vault, poolId);
+        uint256 level = _position.marginLevel(
+            _state.truncatedReserves, _position.borrowCumulativeLast, _position.depositCumulativeLast
+        );
+        liquidated = level < manager.marginLevels().liquidateLevel();
     }
 
     // ******************** OWNER CALL ********************

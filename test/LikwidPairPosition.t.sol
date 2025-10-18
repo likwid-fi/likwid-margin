@@ -66,9 +66,9 @@ contract LikwidPairPositionTest is Test {
         token0.approve(address(pairPositionManager), type(uint256).max);
         token1.approve(address(pairPositionManager), type(uint256).max);
         uint24 fee = 3000; // 0.3%
-        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee});
+        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee, marginFee: 3000});
         vault.initialize(key);
-        keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee});
+        keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee, marginFee: 3000});
         vault.initialize(keyNative);
     }
 
@@ -92,9 +92,9 @@ contract LikwidPairPositionTest is Test {
         // Check NFT ownership and position data
         assertEq(tokenId, 1, "First token minted should have ID 1");
         assertEq(pairPositionManager.ownerOf(tokenId), address(this), "Owner of new token should be the caller");
-        (Currency c0, Currency c1, uint24 storedFee) =
+        (Currency c0, Currency c1, uint24 storedFee, uint24 marginFee) =
             pairPositionManager.poolKeys(pairPositionManager.poolIds(tokenId));
-        PoolKey memory storedKey = PoolKey(c0, c1, storedFee);
+        PoolKey memory storedKey = PoolKey(c0, c1, storedFee, marginFee);
         assertEq(PoolId.unwrap(storedKey.toId()), PoolId.unwrap(id), "Stored PoolKey should be correct");
         assertTrue(liquidity > 0, "Liquidity should be greater than zero");
 
@@ -144,9 +144,9 @@ contract LikwidPairPositionTest is Test {
         // Check NFT ownership and position data
         assertEq(tokenId, 1, "First token minted should have ID 1");
         assertEq(pairPositionManager.ownerOf(tokenId), address(this), "Owner of new token should be the caller");
-        (Currency c0, Currency c1, uint24 storedFee) =
+        (Currency c0, Currency c1, uint24 storedFee, uint24 marginFee) =
             pairPositionManager.poolKeys(pairPositionManager.poolIds(tokenId));
-        PoolKey memory storedKey = PoolKey(c0, c1, storedFee);
+        PoolKey memory storedKey = PoolKey(c0, c1, storedFee, marginFee);
         assertEq(PoolId.unwrap(storedKey.toId()), PoolId.unwrap(id), "Stored PoolKey should be correct");
         assertTrue(liquidity > 0, "Liquidity should be greater than zero");
 
@@ -256,8 +256,22 @@ contract LikwidPairPositionTest is Test {
 
         // Check vault reserves
         Reserves reserves = StateLibrary.getPairReserves(vault, poolId);
-        assertEq(reserves.reserve0(), amount0ToAdd + amountIn, "Vault reserve0 should have increased by amountIn");
+        assertLt(
+            reserves.reserve0(),
+            amount0ToAdd + amountIn,
+            "Vault reserve0 should have increased by amountIn without protocol fee"
+        );
         assertEq(reserves.reserve1(), amount1ToAdd - amountOut, "Vault reserve1 should have decreased by amountOut");
+
+        uint256 protocolSwapFees0 = vault.protocolFeesAccrued(key.currency0);
+        assertTrue(protocolSwapFees0 > 0, "protocolSwapFees0 should be accrued");
+        assertEq(
+            reserves.reserve0() + protocolSwapFees0,
+            token0.balanceOf(address(vault)),
+            "Vault token0 balance == reserve0 + protocolSwapFees0"
+        );
+        uint256 protocolSwapFees1 = vault.protocolFeesAccrued(key.currency1);
+        assertTrue(protocolSwapFees1 == 0, "protocolSwapFees1 should be zero");
     }
 
     function testExactInputSwapNative() public {
@@ -293,7 +307,11 @@ contract LikwidPairPositionTest is Test {
 
         // Check vault reserves
         Reserves reserves = StateLibrary.getPairReserves(vault, poolId);
-        assertEq(reserves.reserve0(), amount0ToAdd + amountIn, "Vault reserve0 should have increased by amountIn");
+        assertLt(
+            reserves.reserve0(),
+            amount0ToAdd + amountIn,
+            "Vault reserve0 should have increased by amountIn without protocol fee"
+        );
         assertEq(reserves.reserve1(), amount1ToAdd - amountOut, "Vault reserve1 should have decreased by amountOut");
     }
 
@@ -333,7 +351,11 @@ contract LikwidPairPositionTest is Test {
 
         // Check vault reserves
         Reserves reserves = StateLibrary.getPairReserves(vault, poolId);
-        assertEq(reserves.reserve0(), amount0ToAdd + amountIn, "Vault reserve0 should have increased by amountIn");
+        assertLt(
+            reserves.reserve0(),
+            amount0ToAdd + amountIn,
+            "Vault reserve0 should have increased by amountIn without protocol fee"
+        );
         assertEq(reserves.reserve1(), amount1ToAdd - amountOut, "Vault reserve1 should have decreased by amountOut");
     }
 

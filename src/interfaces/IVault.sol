@@ -45,7 +45,10 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
     /// @param currency0 The first currency of the pool by address sort order
     /// @param currency1 The second currency of the pool by address sort order
     /// @param fee The fee collected upon every swap in the pool, denominated in hundredths of a bip
-    event Initialize(PoolId indexed id, Currency indexed currency0, Currency indexed currency1, uint24 fee);
+    /// @param marginFee The fee collected upon every margin in the pool, denominated in hundredths of a bip
+    event Initialize(
+        PoolId indexed id, Currency indexed currency0, Currency indexed currency1, uint24 fee, uint24 marginFee
+    );
 
     /// @notice Emitted when a liquidity position is modified
     /// @param id The abi encoded hash of the pool key struct for the pool that was modified
@@ -148,7 +151,7 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
 
     function marginBalance(PoolKey memory key, MarginBalanceDelta memory params)
         external
-        returns (BalanceDelta marginDelta, uint256 feeAmount);
+        returns (BalanceDelta marginDelta);
 
     /// @notice Writes the current ERC20 balance of the specified currency to transient storage
     /// This is used to checkpoint balances for the manager and derive deltas for the caller.

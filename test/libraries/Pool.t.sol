@@ -15,7 +15,7 @@ contract PoolTest is Test {
     Pool.State private pool;
 
     function setUp() public {
-        pool.initialize(200); // 0.02% lpFee
+        pool.initialize(200, 3000); // 0.02% lpFee,0.3% marginFee
     }
 
     function testModifyLiquidityAddInitialLiquidity() public {
