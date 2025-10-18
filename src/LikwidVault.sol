@@ -148,12 +148,12 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
             _appendPoolBalanceDelta(key, msg.sender, swapDelta);
         }
 
+        Currency feeCurrency = params.zeroForOne ? key.currency0 : key.currency1;
         if (feeAmount > 0) {
-            Currency feeCurrency = params.zeroForOne ? key.currency0 : key.currency1;
-            if (amountToProtocol > 0) {
-                _updateProtocolFees(feeCurrency, amountToProtocol);
-            }
             emit Fees(id, feeCurrency, msg.sender, uint8(FeeTypes.SWAP), feeAmount);
+        }
+        if (amountToProtocol > 0) {
+            _updateProtocolFees(feeCurrency, amountToProtocol);
         }
 
         emit Swap(id, msg.sender, swapDelta.amount0(), swapDelta.amount1(), swapFee);
@@ -196,31 +196,29 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         PoolId id = key.toId();
         Pool.State storage pool = _getAndUpdatePool(key);
         pool.checkPoolInitialized();
-        uint256 marginToProtocol;
-        uint256 swapToProtocol;
-        (marginDelta, marginToProtocol, swapToProtocol) = pool.margin(params, defaultProtocolFee);
+
+        uint256 marginFeesToProtocol;
+        uint256 swapFeesToProtocol;
+        (marginDelta, marginFeesToProtocol, swapFeesToProtocol) = pool.margin(params, defaultProtocolFee);
+
+        bool isMargin = params.action == MarginActions.MARGIN;
         (Currency marginCurrency, Currency borrowCurrency) =
             params.marginForOne ? (key.currency1, key.currency0) : (key.currency0, key.currency1);
+        Currency swapCurrency = isMargin ? borrowCurrency : marginCurrency;
+
         if (params.marginFeeAmount > 0) {
-            uint256 marginFeeAmount = params.marginFeeAmount - marginToProtocol;
-            if (marginToProtocol > 0) {
-                _updateProtocolFees(marginCurrency, marginToProtocol);
-            }
-            emit Fees(id, marginCurrency, msg.sender, uint8(FeeTypes.MARGIN), marginFeeAmount);
+            emit Fees(id, marginCurrency, msg.sender, uint8(FeeTypes.MARGIN), params.marginFeeAmount);
         }
+        if (marginFeesToProtocol > 0) {
+            _updateProtocolFees(marginCurrency, marginFeesToProtocol);
+        }
+
         if (params.swapFeeAmount > 0) {
-            uint256 swapFeeAmount = params.swapFeeAmount - swapToProtocol;
-            if (params.action == MarginActions.MARGIN) {
-                if (swapToProtocol > 0) {
-                    _updateProtocolFees(borrowCurrency, swapToProtocol);
-                }
-                emit Fees(id, borrowCurrency, msg.sender, uint8(FeeTypes.MARGIN_SWAP), swapFeeAmount);
-            } else {
-                if (swapToProtocol > 0) {
-                    _updateProtocolFees(marginCurrency, swapToProtocol);
-                }
-                emit Fees(id, marginCurrency, msg.sender, uint8(FeeTypes.MARGIN_CLOSE_SWAP), swapFeeAmount);
-            }
+            uint8 feeType = isMargin ? uint8(FeeTypes.MARGIN_SWAP) : uint8(FeeTypes.MARGIN_CLOSE_SWAP);
+            emit Fees(id, marginCurrency, msg.sender, feeType, params.swapFeeAmount);
+        }
+        if (swapFeesToProtocol > 0) {
+            _updateProtocolFees(swapCurrency, swapFeesToProtocol);
         }
 
         _appendPoolBalanceDelta(key, msg.sender, marginDelta);

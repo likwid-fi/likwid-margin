@@ -315,12 +315,13 @@ library Pool {
             InsufficientAmount.selector.revertWith();
         }
         Slot0 _slot0 = self.slot0;
-        if (params.action == MarginActions.MARGIN) {
-            (marginToProtocol,) = ProtocolFeeLibrary.splitFee(
+        bool isMargin = params.action == MarginActions.MARGIN;
+        if (isMargin) {
+            (marginToProtocol, params.marginFeeAmount) = ProtocolFeeLibrary.splitFee(
                 _slot0.protocolFee(defaultProtocolFee), FeeTypes.MARGIN, params.marginFeeAmount
             );
         }
-        (swapToProtocol,) =
+        (swapToProtocol, params.swapFeeAmount) =
             ProtocolFeeLibrary.splitFee(_slot0.protocolFee(defaultProtocolFee), FeeTypes.SWAP, params.swapFeeAmount);
         marginDelta = params.marginDelta;
         if (params.debtDepositCumulativeLast > 0) {
@@ -334,14 +335,14 @@ library Pool {
         int128 amount0Delta;
         int128 amount1Delta;
         if (params.marginForOne) {
-            if (params.action == MarginActions.MARGIN) {
+            if (isMargin) {
                 amount0Delta = swapToProtocol.toInt128();
                 amount1Delta = marginToProtocol.toInt128();
             } else {
                 amount1Delta = swapToProtocol.toInt128();
             }
         } else {
-            if (params.action == MarginActions.MARGIN) {
+            if (isMargin) {
                 amount0Delta = marginToProtocol.toInt128();
                 amount1Delta = swapToProtocol.toInt128();
             } else {
