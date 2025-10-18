@@ -55,7 +55,7 @@ library PairPosition {
         }
 
         // Update the total investment and store it.
-        self.totalInvestment = LiquidityMath.addInvestment(self.totalInvestment, delta.amount0(), delta.amount1());
+        self.totalInvestment = LiquidityMath.addInvestment(self.totalInvestment, -delta.amount0(), -delta.amount1());
         return self.totalInvestment;
     }
 }

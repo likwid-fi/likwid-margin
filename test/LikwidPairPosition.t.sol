@@ -121,8 +121,8 @@ contract LikwidPairPositionTest is Test {
             prevAmount0 := shr(128, prev)
             prevAmount1 := and(prev, 0xffffffffffffffffffffffffffffffff)
         }
-        assertEq(amount0ToAdd, uint256(-int256(prevAmount0)), "amount0ToAdd == -prevAmount0");
-        assertEq(amount1ToAdd, uint256(-int256(prevAmount1)), "amount1ToAdd == -prevAmount1");
+        assertEq(amount0ToAdd, uint256(int256(prevAmount0)), "amount0ToAdd == prevAmount0");
+        assertEq(amount1ToAdd, uint256(int256(prevAmount1)), "amount1ToAdd == prevAmount1");
     }
 
     function testAddLiquidityCreatesPositionAndAddsLiquidityNative() public {
@@ -171,8 +171,8 @@ contract LikwidPairPositionTest is Test {
             prevAmount0 := shr(128, prev)
             prevAmount1 := and(prev, 0xffffffffffffffffffffffffffffffff)
         }
-        assertEq(amount0ToAdd, uint256(-int256(prevAmount0)), "amount0ToAdd == -prevAmount0");
-        assertEq(amount1ToAdd, uint256(-int256(prevAmount1)), "amount1ToAdd == -prevAmount1");
+        assertEq(amount0ToAdd, uint256(int256(prevAmount0)), "amount0ToAdd == prevAmount0");
+        assertEq(amount1ToAdd, uint256(int256(prevAmount1)), "amount1ToAdd == prevAmount1");
     }
 
     function testRemoveLiquidity() public {
