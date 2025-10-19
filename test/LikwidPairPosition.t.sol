@@ -196,8 +196,12 @@ contract LikwidPairPositionTest is Test {
 
         // 3. Assert
         // Check amounts returned
-        assertEq(amount0Removed, amount0ToAdd / 6, "Amount of token0 removed should equal 1/6 amount added");
-        assertEq(amount1Removed, amount1ToAdd / 6, "Amount of token1 removed should equal 1/6 amount added");
+        assertApproxEqAbs(
+            amount0ToAdd / 6 - amount0Removed, 0, 1000, "Amount of token0 removed should be close to 1/6 amount added"
+        );
+        assertApproxEqAbs(
+            amount1ToAdd / 6 - amount1Removed, 0, 1000, "Amount of token1 removed should be close to 1/6 amount added"
+        );
 
         // Check user's final token balances
         assertEq(token0.balanceOf(address(this)), amount0Removed, "User should have received back 1/6 token0");
@@ -408,16 +412,20 @@ contract LikwidPairPositionTest is Test {
 
         // 3. Assert
         // Check amounts returned. Due to rounding, it might not be exactly the same, but should be very close.
-        assertApproxEqAbs(amount0Removed, amount0ToAdd, 1, "Amount of token0 removed should be close to amount added");
-        assertApproxEqAbs(amount1Removed, amount1ToAdd, 1, "Amount of token1 removed should be close to amount added");
+        assertApproxEqAbs(
+            amount0Removed, amount0ToAdd, 1000, "Amount of token0 removed should be close to amount added"
+        );
+        assertApproxEqAbs(
+            amount1Removed, amount1ToAdd, 1000, "Amount of token1 removed should be close to amount added"
+        );
 
         // Check user's final token balances
         assertEq(token0.balanceOf(address(this)), amount0Removed, "User should have received back all token0");
         assertEq(token1.balanceOf(address(this)), amount1Removed, "User should have received back all token1");
 
         // Check vault's final token balances (should be close to zero)
-        assertApproxEqAbs(token0.balanceOf(address(vault)), 0, 1, "Vault should have sent all token0");
-        assertApproxEqAbs(token1.balanceOf(address(vault)), 0, 1, "Vault should have sent all token1");
+        assertApproxEqAbs(token0.balanceOf(address(vault)), 0, 1000, "Vault should have sent all token0");
+        assertApproxEqAbs(token1.balanceOf(address(vault)), 0, 1000, "Vault should have sent all token1");
 
         // Check position liquidity is now zero
         PairPosition.State memory positionState = pairPositionManager.getPositionState(tokenId);

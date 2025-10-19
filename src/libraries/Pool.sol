@@ -49,6 +49,8 @@ library Pool {
 
     error InsufficientAmount();
 
+    uint128 internal constant INITIAL_LIQUIDITY = 1000;
+
     struct State {
         Slot0 slot0;
         /// @notice The cumulative borrow rate of the first currency in the pool.
@@ -140,6 +142,7 @@ library Pool {
             uint256 liquidityAdded;
 
             if (totalSupply == 0) {
+                totalSupply = INITIAL_LIQUIDITY; // Initial liquidity boost to prevent precision issues
                 amount0In = params.amount0;
                 amount1In = params.amount1;
                 liquidityAdded = Math.sqrt(amount0In * amount1In);

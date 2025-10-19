@@ -47,7 +47,7 @@ contract PoolTest is Test {
         uint128 expectedLiquidity = uint128(Math.sqrt(amount0 * amount1));
         assertEq(
             uint256(pool.slot0.totalSupply()),
-            uint256(expectedLiquidity),
+            uint256(expectedLiquidity) + 1000,
             "Total supply should be sqrt(amount0 * amount1)"
         );
 

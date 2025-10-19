@@ -111,7 +111,11 @@ contract StateLibraryTest is Test, IUnlockCallback {
         MarginState marginState = vault.marginState();
         (uint128 total, uint128 liquidity) = liquidities[0].decode();
         assertEq(liquidities.length, marginState.stageSize(), "liquidities.length==marginState.stageSize()");
-        assertEq(total, initialLiquidity / marginState.stageSize(), "total0==initialLiquidity/marginState.stageSize()");
+        assertEq(
+            total,
+            (initialLiquidity + 1000) / marginState.stageSize(),
+            "total0==(initialLiquidity+1000)/marginState.stageSize()"
+        );
         assertEq(total, liquidity, "total==liquidity");
     }
 

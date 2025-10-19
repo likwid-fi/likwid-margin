@@ -105,7 +105,7 @@ contract LikwidHelperTest is Test {
         uint128[][] memory liquidities = helper.getStageLiquidities(poolId);
         uint256 amount0ToAdd = 10e18;
         uint256 amount1ToAdd = 20e18;
-        uint256 stage = Math.sqrt(amount0ToAdd * amount1ToAdd) / 5 + 1;
+        uint256 stage = (Math.sqrt(amount0ToAdd * amount1ToAdd) + 1000) / 5 + 1;
         assertEq(liquidities.length, 5);
         assertEq(liquidities[0][1], stage);
         uint256 releasedLiquidity = helper.getReleasedLiquidity(poolId);
