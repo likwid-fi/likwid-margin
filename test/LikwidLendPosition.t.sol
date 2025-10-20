@@ -20,6 +20,8 @@ import {PoolIdLibrary} from "../src/types/PoolId.sol";
 import {ReservesLibrary} from "../src/types/Reserves.sol";
 import {LendPosition} from "../src/libraries/LendPosition.sol";
 
+import {LikwidChecker} from "./utils/LikwidChecker.sol";
+
 contract LikwidLendPositionTest is Test {
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolKey;
@@ -154,6 +156,7 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
 
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testMirrorExactInputToken10() public {
@@ -197,6 +200,8 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
 
         assertEq(positionAfter.lendAmount, amountOut, "lendAmount should be amountOut");
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testMirrorExactOutputToken10() public {
@@ -240,6 +245,8 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
 
         assertEq(positionAfter.lendAmount, amountOut, "lendAmount should be amountOut");
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testMirrorExactInputToken01() public {
@@ -285,6 +292,8 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
 
         assertEq(positionAfter.lendAmount, amountOut, "lendAmount should be amountOut");
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testMirrorExactOutputToken01() public {
@@ -330,6 +339,8 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
 
         assertEq(positionAfter.lendAmount, amountOut, "lendAmount should be amountOut");
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testAddLendingForOne() public {
@@ -343,6 +354,8 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
         assertTrue(position.lendAmount > 0);
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testDepositForOne() public {
@@ -356,6 +369,8 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
         assertTrue(position.lendAmount > 0);
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testWithdrawForOne() public {
@@ -385,6 +400,8 @@ contract LikwidLendPositionTest is Test {
         vm.stopPrank();
         vm.expectRevert(LendPosition.WithdrawOverflow.selector);
         lendPositionManager.withdraw(tokenId, amount);
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testGetPositionStateForOne() public {
@@ -407,6 +424,8 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
         assertTrue(position.lendAmount > 0);
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testAddLendingForOneNative() public {
@@ -420,6 +439,8 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
         assertTrue(position.lendAmount > 0);
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testDepositForNative() public {
@@ -432,6 +453,8 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
         assertTrue(position.lendAmount > 0);
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testDepositForOneNative() public {
@@ -445,6 +468,8 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
         assertTrue(position.lendAmount > 0);
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testWithdrawForNative() public {
@@ -461,6 +486,8 @@ contract LikwidLendPositionTest is Test {
 
         vm.expectRevert(LendPosition.WithdrawOverflow.selector);
         lendPositionManager.withdraw(tokenId, amount);
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testWithdrawForOneNative() public {
@@ -490,6 +517,8 @@ contract LikwidLendPositionTest is Test {
         vm.stopPrank();
         vm.expectRevert(LendPosition.WithdrawOverflow.selector);
         lendPositionManager.withdraw(tokenId, amount);
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testGetPositionStateForNative() public {
@@ -499,6 +528,8 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
 
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testGetPositionStateForOneNative() public {
@@ -510,6 +541,8 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
 
         assertEq(position.lendAmount, amount, "position.lendAmount==amount");
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testRevertIf_UnauthorizedAccess() public {
@@ -549,5 +582,7 @@ contract LikwidLendPositionTest is Test {
         lendPositionManager.exactOutput(outputParams);
 
         vm.stopPrank();
+
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 }

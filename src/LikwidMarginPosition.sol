@@ -104,7 +104,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         position.marginTotal =
             Math.mulDiv(position.marginTotal, depositCumulativeLast, position.depositCumulativeLast).toUint128();
         position.debtAmount =
-            Math.mulDiv(position.debtAmount, borrowCumulativeLast, position.borrowCumulativeLast).toUint128();
+            Math.mulDivRoundingUp(position.debtAmount, borrowCumulativeLast, position.borrowCumulativeLast).toUint128();
 
         position.depositCumulativeLast = depositCumulativeLast;
         position.borrowCumulativeLast = borrowCumulativeLast;
@@ -124,7 +124,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         if (liquidated) {
             marginAmount = Math.mulDiv(position.marginAmount, depositCumulativeLast, position.depositCumulativeLast);
             marginTotal = Math.mulDiv(position.marginTotal, depositCumulativeLast, position.depositCumulativeLast);
-            debtAmount = Math.mulDiv(position.debtAmount, borrowCumulativeLast, position.borrowCumulativeLast);
+            debtAmount = Math.mulDivRoundingUp(position.debtAmount, borrowCumulativeLast, position.borrowCumulativeLast);
         }
     }
 

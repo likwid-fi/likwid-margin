@@ -89,7 +89,7 @@ library MarginPosition {
             positionValue = marginAmount + marginTotal;
         }
         if (self.borrowCumulativeLast != 0) {
-            debtAmount = Math.mulDiv(self.debtAmount, borrowCumulativeLast, self.borrowCumulativeLast);
+            debtAmount = Math.mulDivRoundingUp(self.debtAmount, borrowCumulativeLast, self.borrowCumulativeLast);
         }
         if (repayAmount > 0) {
             if (repayAmount > debtAmount) {
@@ -169,7 +169,7 @@ library MarginPosition {
                 positionValue = marginAmount + marginTotal;
             }
             if (self.borrowCumulativeLast != 0) {
-                debtAmount = Math.mulDiv(self.debtAmount, borrowCumulativeLast, self.borrowCumulativeLast);
+                debtAmount = Math.mulDivRoundingUp(self.debtAmount, borrowCumulativeLast, self.borrowCumulativeLast);
             }
             positionValue -= rewardAmount;
             releaseAmount = Math.mulDiv(positionValue, closeMillionth, PerLibrary.ONE_MILLION);
