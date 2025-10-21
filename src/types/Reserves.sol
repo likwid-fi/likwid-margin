@@ -4,11 +4,13 @@ pragma solidity ^0.8.0;
 import {Math} from "../libraries/Math.sol";
 import {FixedPoint96} from "../libraries/FixedPoint96.sol";
 import {SafeCast} from "../libraries/SafeCast.sol";
-import {BalanceDelta} from "./BalanceDelta.sol";
+import {BalanceDelta, toBalanceDelta} from "./BalanceDelta.sol";
 
 /// @dev Two `uint128` values packed into a single `uint256` where the upper 128 bits represent reserve0
 /// and the lower 128 bits represent reserve1.
 type Reserves is uint256;
+
+using {eq as ==, neq as !=} for Reserves global;
 
 using ReservesLibrary for Reserves global;
 
@@ -18,6 +20,14 @@ using ReservesLibrary for Reserves global;
 /// @return A Reserves object.
 function toReserves(uint128 _reserve0, uint128 _reserve1) pure returns (Reserves) {
     return Reserves.wrap((uint256(_reserve0) << 128) | _reserve1);
+}
+
+function eq(Reserves a, Reserves b) pure returns (bool) {
+    return Reserves.unwrap(a) == Reserves.unwrap(b);
+}
+
+function neq(Reserves a, Reserves b) pure returns (bool) {
+    return Reserves.unwrap(a) != Reserves.unwrap(b);
 }
 
 enum ReservesType {
@@ -87,16 +97,24 @@ library ReservesLibrary {
         return toReserves(self.reserve0(), newReserve1);
     }
 
-    function applyDelta(Reserves self, BalanceDelta delta, bool enableOverflow) internal pure returns (Reserves) {
+    function applyDelta(Reserves self, BalanceDelta delta, bool enableOverflow)
+        internal
+        pure
+        returns (Reserves, BalanceDelta)
+    {
         (uint256 r0, uint256 r1) = self.reserves();
         int128 d0 = delta.amount0();
         int128 d1 = delta.amount1();
+
+        uint256 overflowAmount0;
+        uint256 overflowAmount1;
 
         unchecked {
             if (d0 > 0) {
                 uint128 amount0 = uint128(d0);
                 if (r0 < amount0) {
                     if (enableOverflow) {
+                        overflowAmount0 = amount0 - uint128(r0);
                         r0 = amount0;
                     } else {
                         revert NotEnoughReserves();
@@ -111,6 +129,7 @@ library ReservesLibrary {
                 uint128 amount1 = uint128(d1);
                 if (r1 < amount1) {
                     if (enableOverflow) {
+                        overflowAmount1 = amount1 - uint128(r1);
                         r1 = amount1;
                     } else {
                         revert NotEnoughReserves();
@@ -122,7 +141,10 @@ library ReservesLibrary {
             }
         }
 
-        return toReserves(r0.toUint128(), r1.toUint128());
+        return (
+            toReserves(r0.toUint128(), r1.toUint128()),
+            toBalanceDelta(overflowAmount0.toInt128(), overflowAmount1.toInt128())
+        );
     }
 
     /// @notice Applies a balance delta to the reserves.
@@ -130,7 +152,8 @@ library ReservesLibrary {
     /// @param delta The balance delta to apply.
     /// @return The updated Reserves object.
     function applyDelta(Reserves self, BalanceDelta delta) internal pure returns (Reserves) {
-        return applyDelta(self, delta, false);
+        (Reserves _reserves,) = applyDelta(self, delta, false);
+        return _reserves;
     }
 
     /// @notice Calculates the price of token0 in terms of token1, scaled by Q96.

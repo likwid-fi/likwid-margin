@@ -7,9 +7,11 @@ import {IVault} from "../../src/interfaces/IVault.sol";
 import {IUnlockCallback} from "../../src/interfaces/callback/IUnlockCallback.sol";
 import {MarginState} from "../../src/types/MarginState.sol";
 import {PoolKey} from "../../src/types/PoolKey.sol";
+import {PoolState} from "../../src/types/PoolState.sol";
 import {Currency, CurrencyLibrary} from "../../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../../src/types/PoolId.sol";
 import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
+import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
 import {StageMath} from "../../src/libraries/StageMath.sol";
 import {LendPosition} from "../../src/libraries/LendPosition.sol";
@@ -165,5 +167,11 @@ contract StateLibraryTest is Test, IUnlockCallback {
         // 3. Assert the state is correct
         assertEq(uint256(positionState.lendAmount), uint256(-int256(amountToLend)), "lendAmount should be correct");
         assertTrue(positionState.depositCumulativeLast != 0, "depositCumulativeLast should be set");
+    }
+
+    function testGetCurrentState() public view {
+        PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
+        uint24 protocolFee = vault.defaultProtocolFee();
+        assertEq(protocolFee, state.protocolFee, "defaultProtocolFee should match state.protocolFee");
     }
 }

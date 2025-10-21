@@ -12,6 +12,7 @@ import {IMarginPositionManager} from "../../src/interfaces/IMarginPositionManage
 import {IPairPositionManager} from "../../src/interfaces/IPairPositionManager.sol";
 import {PoolKey} from "../../src/types/PoolKey.sol";
 import {PoolId} from "../../src/types/PoolId.sol";
+import {FeeTypes} from "../../src/types/FeeTypes.sol";
 import {PoolState} from "../../src/types/PoolState.sol";
 import {Currency} from "../../src/types/Currency.sol";
 import {MarginLevels} from "../../src/types/MarginLevels.sol";
@@ -21,9 +22,11 @@ import {InterestMath} from "../../src/libraries/InterestMath.sol";
 import {Math} from "../../src/libraries/Math.sol";
 import {PerLibrary} from "../../src/libraries/PerLibrary.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
+import {ProtocolFeeLibrary} from "../../src/libraries/ProtocolFeeLibrary.sol";
 
 contract LikwidHelperTest is Test {
     using PerLibrary for uint256;
+    using ProtocolFeeLibrary for uint24;
 
     LikwidVault vault;
     LikwidMarginPosition marginPositionManager;
@@ -86,7 +89,7 @@ contract LikwidHelperTest is Test {
         assertEq(stateInfo.lastUpdated, 1);
         assertEq(stateInfo.lpFee, 3000);
         assertEq(stateInfo.marginFee, 3000);
-        assertEq(stateInfo.protocolFee, 0);
+        assertEq(stateInfo.protocolFee, vault.defaultProtocolFee());
         assertEq(stateInfo.realReserve0, amount0ToAdd, "stateInfo.realReserve0==amount0ToAdd");
         assertEq(stateInfo.realReserve1, amount1ToAdd, "stateInfo.realReserve1==amount1ToAdd");
         assertEq(stateInfo.mirrorReserve0, 0);
@@ -99,6 +102,15 @@ contract LikwidHelperTest is Test {
         assertEq(stateInfo.lendReserve1, 0);
         assertEq(stateInfo.interestReserve0, 0);
         assertEq(stateInfo.interestReserve1, 0);
+    }
+
+    function testChangePoolProtocolFee() public {
+        FeeTypes feeType = FeeTypes.SWAP;
+        uint8 newFee = 50;
+        vault.setProtocolFee(key, feeType, 50);
+        LikwidHelper.PoolStateInfo memory stateInfo = helper.getPoolStateInfo(poolId);
+        assertNotEq(stateInfo.protocolFee, vault.defaultProtocolFee());
+        assertEq(stateInfo.protocolFee, vault.defaultProtocolFee().setProtocolFee(feeType, newFee));
     }
 
     function testGetStageLiquidities() public view {

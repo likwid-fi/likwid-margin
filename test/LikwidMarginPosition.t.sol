@@ -191,6 +191,20 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             positionAfter.debtAmount < positionBefore.debtAmount, "position.debtAmount should be less after repay"
         );
         LikwidChecker.checkPoolReserves(vault, key);
+        skip(1000);
+
+        positionBefore = marginPositionManager.getPositionState(tokenId);
+
+        repayAmount = positionBefore.debtAmount + 100;
+        assertTrue(repayAmount > borrowAmount / 2, "repayAmount should be greater than borrowAmount / 2");
+        token1.mint(address(this), repayAmount);
+        marginPositionManager.repay(tokenId, repayAmount, block.timestamp);
+        positionAfter = marginPositionManager.getPositionState(tokenId);
+        assertTrue(positionAfter.debtAmount == 0, "position.debtAmount should be zero after full repay");
+        assertEq(
+            token1.balanceOf(address(this)), repayAmount - positionBefore.debtAmount, "excess repay should be returned"
+        );
+        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testClose() public {
@@ -209,9 +223,71 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
 
-        marginPositionManager.close(tokenId, 1_000_000, 0, block.timestamp); // close 100%
-
+        marginPositionManager.close(tokenId, 500_000, 0, block.timestamp);
+        // close 50%
         MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
+
+        assertGt(position.marginAmount, 0, "position.marginAmount should not be 0 after close");
+        assertGt(position.debtAmount, 0, "position.debtAmount should not be 0 after close");
+
+        LikwidChecker.checkPoolReserves(vault, key);
+
+        skip(1000);
+
+        marginPositionManager.close(tokenId, 1_000_000, 0, block.timestamp); // close remaining
+
+        position = marginPositionManager.getPositionState(tokenId);
+
+        assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after close");
+        assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after close");
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testRepayAndClose() public {
+        uint256 marginAmount = 0.1e18;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false, // margin with token0, borrow token1
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
+
+        marginPositionManager.close(tokenId, 500_000, 0, block.timestamp);
+        // close 50%
+        MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
+
+        assertGt(position.marginAmount, 0, "position.marginAmount should not be 0 after close");
+        assertGt(position.debtAmount, 0, "position.debtAmount should not be 0 after close");
+
+        LikwidChecker.checkPoolReserves(vault, key);
+
+        skip(1000);
+
+        MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
+        uint256 repayAmount = positionBefore.debtAmount / 2;
+        token1.mint(address(this), repayAmount);
+        marginPositionManager.repay(tokenId, repayAmount, block.timestamp);
+
+        MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
+
+        assertTrue(
+            positionAfter.debtAmount < positionBefore.debtAmount, "position.debtAmount should be less after repay"
+        );
+
+        LikwidChecker.checkPoolReserves(vault, key);
+
+        skip(1000);
+
+        marginPositionManager.close(tokenId, 1_000_000, 0, block.timestamp); // close remaining
+
+        position = marginPositionManager.getPositionState(tokenId);
 
         assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after close");
         assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after close");
@@ -265,7 +341,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         });
 
         (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
-
+        skip(1000);
         // Manipulate price to make position liquidatable
         // Swap a large amount of token0 for token1 to drive the price of token0 down
         uint256 swapAmount = 5e18;
@@ -281,7 +357,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         bytes memory innerParamsSwap = abi.encode(key, swapParams);
         bytes memory dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
         vault.unlock(dataSwap);
-
+        skip(1000);
         bool liquidated = helper.checkMarginPositionLiquidate(tokenId);
         assertTrue(liquidated, "Position should be liquidatable");
 
@@ -317,7 +393,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         });
 
         (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
-
+        skip(1000);
         // Manipulate price to make position liquidatable
         // Swap a large amount of token0 for token1 to drive the price of token0 down
         uint256 swapAmount = 5e18;
@@ -333,7 +409,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         bytes memory innerParamsSwap = abi.encode(key, swapParams);
         bytes memory dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
         vault.unlock(dataSwap);
-
+        skip(1000);
         bool liquidated = helper.checkMarginPositionLiquidate(tokenId);
         assertTrue(liquidated, "Position should be liquidatable");
 
@@ -375,6 +451,15 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         assertEq(position.marginAmount, marginAmount, "position.marginAmount==marginAmount");
         assertEq(position.debtAmount, borrowAmount, "position.debtAmount==borrowAmount");
+        assertTrue(position.marginForOne, "position.marginForOne should be true");
+        LikwidChecker.checkPoolReserves(vault, key);
+
+        skip(1000);
+
+        position = marginPositionManager.getPositionState(tokenId);
+
+        assertEq(position.marginAmount, marginAmount, "position.marginAmount==marginAmount");
+        assertGt(position.debtAmount, borrowAmount, "position.debtAmount>borrowAmount");
         assertTrue(position.marginForOne, "position.marginForOne should be true");
         LikwidChecker.checkPoolReserves(vault, key);
     }

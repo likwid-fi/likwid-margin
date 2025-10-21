@@ -31,6 +31,9 @@ library StateLibrary {
     /// @dev This is an assumption. If the storage layout of MarginBase changes, this value needs to be updated.
     bytes32 public constant LIQUIDITY_LOCKED_QUEUE_SLOT = bytes32(uint256(4));
 
+    /// @notice The storage slot of the `defaultProtocolFee` in the LikwidVault contract.
+    bytes32 public constant DEFAULT_PROTOCOL_FEE_SLOT = bytes32(uint256(6));
+
     /// @notice The storage slot of the `_pools` mapping in the LikwidVault contract.
     bytes32 public constant POOLS_SLOT = bytes32(uint256(10));
 
@@ -245,6 +248,11 @@ library StateLibrary {
         // 1. Get slot0
         (state.totalSupply, state.lastUpdated, state.protocolFee, state.lpFee, state.marginFee) =
             getSlot0(vault, poolId);
+
+        if (state.protocolFee == 0) {
+            uint256 value = uint256(vault.extsload(DEFAULT_PROTOCOL_FEE_SLOT));
+            state.protocolFee = uint24(value >> 160);
+        }
 
         // 2. Get all other data in one call
         bytes32 startSlot = bytes32(uint256(poolStateSlot) + 1); // BORROW_0_CUMULATIVE_LAST_OFFSET

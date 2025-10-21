@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.20;
 
+import {console} from "forge-std/console.sol";
+
 import {PoolId} from "../../src/types/PoolId.sol";
 import {PoolKey} from "../../src/types/PoolKey.sol";
 import {Reserves} from "../../src/types/Reserves.sol";
@@ -18,6 +20,16 @@ library LikwidChecker {
         (uint128 mirrorReserve0, uint128 mirrorReserve1) = mirrorReserves.reserves();
         (uint128 pairReserve0, uint128 pairReserve1) = pairReserves.reserves();
         (uint128 lendReserve0, uint128 lendReserve1) = lendReserves.reserves();
+        uint256 part01 = realReserve0 + mirrorReserve0;
+        uint256 part02 = pairReserve0 + lendReserve0;
+        uint256 part11 = realReserve1 + mirrorReserve1;
+        uint256 part12 = pairReserve1 + lendReserve1;
+        if (part01 != part02) {
+            console.log("Reserve0 mismatch:", part01, part02);
+        }
+        if (part11 != part12) {
+            console.log("Reserve1 mismatch:", part11, part12);
+        }
         require(realReserve0 + mirrorReserve0 == pairReserve0 + lendReserve0, "reserve0 should equal pair + lend");
         require(realReserve1 + mirrorReserve1 == pairReserve1 + lendReserve1, "reserve1 should equal pair + lend");
     }

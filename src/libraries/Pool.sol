@@ -49,6 +49,8 @@ library Pool {
 
     error InsufficientAmount();
 
+    error InconsistentReserves();
+
     uint128 internal constant INITIAL_LIQUIDITY = 1000;
 
     struct State {
@@ -474,22 +476,46 @@ library Pool {
         Reserves _mirrorReserves = self.mirrorReserves;
         Reserves _pairReserves = self.pairReserves;
         Reserves _lendReserves = self.lendReserves;
+        BalanceDelta _overflowDelta;
+        BalanceDelta _realOddDelta;
         for (uint256 i = 0; i < params.length; i++) {
             ReservesType _type = params[i]._type;
             BalanceDelta delta = params[i].delta;
             if (_type == ReservesType.REAL) {
                 _realReserves = _realReserves.applyDelta(delta);
             } else if (_type == ReservesType.MIRROR) {
-                _mirrorReserves = _mirrorReserves.applyDelta(delta, true);
+                (_mirrorReserves, _overflowDelta) = _mirrorReserves.applyDelta(delta, true);
+                _realOddDelta = _realOddDelta + _overflowDelta;
             } else if (_type == ReservesType.PAIR) {
                 _pairReserves = _pairReserves.applyDelta(delta);
             } else if (_type == ReservesType.LEND) {
                 _lendReserves = _lendReserves.applyDelta(delta);
             }
         }
+        _realReserves = _realReserves.applyDelta(_realOddDelta);
+        _checkReservesConsistent(_realReserves, _mirrorReserves, _pairReserves, _lendReserves);
         self.realReserves = _realReserves;
         self.mirrorReserves = _mirrorReserves;
         self.pairReserves = _pairReserves;
         self.lendReserves = _lendReserves;
+    }
+
+    function _checkReservesConsistent(
+        Reserves _realReserves,
+        Reserves _mirrorReserves,
+        Reserves _pairReserves,
+        Reserves _lendReserves
+    ) internal pure {
+        (uint256 realReserve0, uint256 realReserve1) = _realReserves.reserves();
+        (uint256 mirrorReserve0, uint256 mirrorReserve1) = _mirrorReserves.reserves();
+        (uint256 pairReserve0, uint256 pairReserve1) = _pairReserves.reserves();
+        (uint256 lendReserve0, uint256 lendReserve1) = _lendReserves.reserves();
+        uint256 part01 = realReserve0 + mirrorReserve0;
+        uint256 part02 = pairReserve0 + lendReserve0;
+        uint256 part11 = realReserve1 + mirrorReserve1;
+        uint256 part12 = pairReserve1 + lendReserve1;
+        if (part01 != part02 || part11 != part12) {
+            InconsistentReserves.selector.revertWith();
+        }
     }
 }
