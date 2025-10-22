@@ -191,8 +191,8 @@ library MarginPosition {
             if (marginTotal > 0) {
                 uint256 marginAmountReleased = Math.mulDiv(marginAmount, closeMillionth, PerLibrary.ONE_MILLION);
                 marginAmount = marginAmount - marginAmountReleased;
-                if (releaseAmount > marginAmountReleased) {
-                    uint256 marginTotalReleased = releaseAmount - marginAmountReleased;
+                if (releaseAmount + rewardAmount > marginAmountReleased) {
+                    uint256 marginTotalReleased = releaseAmount + rewardAmount - marginAmountReleased;
                     marginTotal = marginTotal - marginTotalReleased;
                 }
             } else {

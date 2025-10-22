@@ -375,6 +375,8 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
         assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after liquidation");
+        assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after liquidation");
+        assertEq(position.marginTotal, 0, "position.marginTotal should be 0 after liquidation");
         LikwidChecker.checkPoolReserves(vault, key);
     }
 
@@ -441,6 +443,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         position = marginPositionManager.getPositionState(tokenId);
         assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after liquidation");
         assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after liquidation");
+        assertEq(position.marginTotal, 0, "position.marginTotal should be 0 after liquidation");
         LikwidChecker.checkPoolReserves(vault, key);
     }
 
