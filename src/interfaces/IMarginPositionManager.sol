@@ -247,9 +247,9 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @notice Close the margin position
     /// @param tokenId The id of position
     /// @param closeMillionth The repayment ratio is calculated as one millionth
-    /// @param profitAmountMin The minimum profit amount to be received after closing the position
+    /// @param closeAmountMin The minimum close amount (margin) to be received after closing the position
     /// @param deadline Deadline for the transaction
-    function close(uint256 tokenId, uint24 closeMillionth, uint256 profitAmountMin, uint256 deadline) external;
+    function close(uint256 tokenId, uint24 closeMillionth, uint256 closeAmountMin, uint256 deadline) external;
 
     /// @notice Liquidates a position by burning the position token.
     /// @param tokenId The ID of the position to liquidate.
