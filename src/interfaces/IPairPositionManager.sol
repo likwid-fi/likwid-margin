@@ -27,12 +27,17 @@ interface IPairPositionManager is IERC721 {
     /// @param amount1 The amount of token1 to add.
     /// @param amount0Min The minimum amount of token0 to deposit.
     /// @param amount1Min The minimum amount of token1 to deposit.
+    /// @param deadline Deadline for the transaction.
     /// @return tokenId The ID of the newly created position.
     /// @return liquidity The amount of liquidity minted for the position.
-    function addLiquidity(PoolKey memory key, uint256 amount0, uint256 amount1, uint256 amount0Min, uint256 amount1Min)
-        external
-        payable
-        returns (uint256 tokenId, uint128 liquidity);
+    function addLiquidity(
+        PoolKey memory key,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        uint256 deadline
+    ) external payable returns (uint256 tokenId, uint128 liquidity);
 
     /// @notice Creates a new liquidity position and adds liquidity to it.
     /// @param tokenId The ID of the position to add liquidity to.
@@ -40,13 +45,15 @@ interface IPairPositionManager is IERC721 {
     /// @param amount1 The amount of token1 to add.
     /// @param amount0Min The minimum amount of token0 to deposit.
     /// @param amount1Min The minimum amount of token1 to deposit.
+    /// @param deadline Deadline for the transaction.
     /// @return liquidity The amount of liquidity minted for the position.
     function increaseLiquidity(
         uint256 tokenId,
         uint256 amount0,
         uint256 amount1,
         uint256 amount0Min,
-        uint256 amount1Min
+        uint256 amount1Min,
+        uint256 deadline
     ) external payable returns (uint128 liquidity);
 
     /// @notice Removes liquidity from an existing position.
@@ -54,11 +61,16 @@ interface IPairPositionManager is IERC721 {
     /// @param liquidity The amount of liquidity to remove.
     /// @param amount0Min The minimum amount of token0 to receive.
     /// @param amount1Min The minimum amount of token1 to receive.
+    /// @param deadline Deadline for the transaction.
     /// @return amount0 The amount of token0 received.
     /// @return amount1 The amount of token1 received.
-    function removeLiquidity(uint256 tokenId, uint128 liquidity, uint256 amount0Min, uint256 amount1Min)
-        external
-        returns (uint256 amount0, uint256 amount1);
+    function removeLiquidity(
+        uint256 tokenId,
+        uint128 liquidity,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        uint256 deadline
+    ) external returns (uint256 amount0, uint256 amount1);
 
     struct SwapInputParams {
         PoolId poolId;

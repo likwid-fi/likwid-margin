@@ -48,11 +48,14 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
     }
 
     /// @inheritdoc IPairPositionManager
-    function addLiquidity(PoolKey memory key, uint256 amount0, uint256 amount1, uint256 amount0Min, uint256 amount1Min)
-        external
-        payable
-        returns (uint256 tokenId, uint128 liquidity)
-    {
+    function addLiquidity(
+        PoolKey memory key,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        uint256 deadline
+    ) external payable ensure(deadline) returns (uint256 tokenId, uint128 liquidity) {
         tokenId = _mintPosition(key, msg.sender);
         liquidity = _increaseLiquidity(msg.sender, msg.sender, tokenId, amount0, amount1, amount0Min, amount1Min);
     }
@@ -93,16 +96,20 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         uint256 amount0,
         uint256 amount1,
         uint256 amount0Min,
-        uint256 amount1Min
-    ) external payable returns (uint128 liquidity) {
+        uint256 amount1Min,
+        uint256 deadline
+    ) external payable ensure(deadline) returns (uint128 liquidity) {
         liquidity = _increaseLiquidity(msg.sender, msg.sender, tokenId, amount0, amount1, amount0Min, amount1Min);
     }
 
     /// @inheritdoc IPairPositionManager
-    function removeLiquidity(uint256 tokenId, uint128 liquidity, uint256 amount0Min, uint256 amount1Min)
-        external
-        returns (uint256 amount0, uint256 amount1)
-    {
+    function removeLiquidity(
+        uint256 tokenId,
+        uint128 liquidity,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        uint256 deadline
+    ) external ensure(deadline) returns (uint256 amount0, uint256 amount1) {
         _requireAuth(msg.sender, tokenId);
         PoolId poolId = poolIds[tokenId];
         if (PoolId.unwrap(poolId) == 0) {

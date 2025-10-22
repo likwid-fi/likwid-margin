@@ -79,7 +79,7 @@ contract LikwidHelperTest is Test {
         uint256 amount1ToAdd = 20e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
-        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
     }
 
     function testGetPoolStateInfo() public view {

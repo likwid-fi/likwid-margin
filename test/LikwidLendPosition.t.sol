@@ -84,12 +84,12 @@ contract LikwidLendPositionTest is Test {
         uint256 amount1ToAdd = 2000e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
-        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0);
+        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee, marginFee: 3000});
         vault.initialize(keyNative);
         token1.mint(address(this), amount1ToAdd);
-        pairPositionManager.addLiquidity{value: amount0ToAdd}(keyNative, amount0ToAdd, amount1ToAdd, 0, 0);
+        pairPositionManager.addLiquidity{value: amount0ToAdd}(keyNative, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
     }
 
     function testAddLendingForZero() public {
