@@ -506,16 +506,14 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         int128 amount1Delta;
         if (position.marginForOne) {
             amount1Delta = rewardAmount.toInt128();
-            delta.lendDelta = toBalanceDelta(lendLostAmount.toInt128(), releaseAmount.toInt128());
+            delta.lendDelta = toBalanceDelta(lendLostAmount.toInt128(), (releaseAmount + rewardAmount).toInt128());
             delta.mirrorDelta = toBalanceDelta(repayAmount.toInt128(), 0);
-            delta.pairDelta =
-                toBalanceDelta((repayAmount - lendLostAmount).toInt128(), -(releaseAmount - rewardAmount).toInt128());
+            delta.pairDelta = toBalanceDelta((repayAmount - lendLostAmount).toInt128(), -releaseAmount.toInt128());
         } else {
             amount0Delta = rewardAmount.toInt128();
-            delta.lendDelta = toBalanceDelta(releaseAmount.toInt128(), lendLostAmount.toInt128());
+            delta.lendDelta = toBalanceDelta((releaseAmount + rewardAmount).toInt128(), lendLostAmount.toInt128());
             delta.mirrorDelta = toBalanceDelta(0, repayAmount.toInt128());
-            delta.pairDelta =
-                toBalanceDelta(-(releaseAmount - rewardAmount).toInt128(), (repayAmount - lendLostAmount).toInt128());
+            delta.pairDelta = toBalanceDelta(-releaseAmount.toInt128(), (repayAmount - lendLostAmount).toInt128());
         }
         delta.action = MarginActions.LIQUIDATE_BURN;
         delta.marginForOne = position.marginForOne;

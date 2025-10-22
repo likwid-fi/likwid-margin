@@ -412,17 +412,33 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         skip(1000);
         bool liquidated = helper.checkMarginPositionLiquidate(tokenId);
         assertTrue(liquidated, "Position should be liquidatable");
-
+        MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
         // Liquidate
         address liquidator = makeAddr("liquidator");
         vm.startPrank(liquidator);
-
+        LikwidHelper.PoolStateInfo memory poolStateBefore = helper.getPoolStateInfo(key.toId());
         uint256 profit = marginPositionManager.liquidateBurn(tokenId);
         vm.stopPrank();
 
         assertTrue(profit > 0, "Liquidator should make a profit");
-
-        MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
+        LikwidHelper.PoolStateInfo memory poolStateAfter = helper.getPoolStateInfo(key.toId());
+        assertEq(
+            poolStateBefore.lendReserve0 - poolStateAfter.lendReserve0,
+            position.marginAmount + position.marginTotal,
+            "Pool lendReserve0 should decrease by position.marginAmount + position.marginTotal"
+        );
+        assertEq(
+            poolStateBefore.mirrorReserve1 + poolStateBefore.realReserve1
+                - (poolStateAfter.mirrorReserve1 + poolStateAfter.realReserve1),
+            position.debtAmount,
+            "Pool reserve1 should decrease by position.debtAmount"
+        );
+        assertLt(
+            poolStateAfter.pairReserve0 - poolStateBefore.pairReserve0,
+            position.marginAmount + position.marginTotal - profit,
+            "Pool pairReserve0 should increase by position.marginAmount + position.marginTotal- profit"
+        );
+        position = marginPositionManager.getPositionState(tokenId);
         assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after liquidation");
         assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after liquidation");
         LikwidChecker.checkPoolReserves(vault, key);
