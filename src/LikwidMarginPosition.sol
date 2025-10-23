@@ -633,14 +633,15 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
         position.update(borrowCumulativeLast, depositCumulativeLast, changeAmount, 0, 0, 0);
 
-        MarginLevels _marginLevels = marginLevels;
-        _checkMinLevel(
-            poolState.pairReserves,
-            borrowCumulativeLast,
-            depositCumulativeLast,
-            position,
-            _marginLevels.minBorrowLevel()
-        );
+        if (changeAmount < 0) {
+            _checkMinLevel(
+                poolState.pairReserves,
+                borrowCumulativeLast,
+                depositCumulativeLast,
+                position,
+                marginLevels.minBorrowLevel()
+            );
+        }
 
         int128 amount0Delta;
         int128 amount1Delta;
