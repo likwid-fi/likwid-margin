@@ -15,6 +15,7 @@ import {StateLibrary} from "../src/libraries/StateLibrary.sol";
 import {PairPosition} from "../src/libraries/PairPosition.sol";
 import {Reserves} from "../src/types/Reserves.sol";
 import {MarginState} from "../src/types/MarginState.sol";
+import {PoolState} from "../src/types/PoolState.sol";
 
 contract LikwidPairPositionTest is Test {
     using CurrencyLibrary for Currency;
@@ -111,6 +112,8 @@ contract LikwidPairPositionTest is Test {
         Reserves reserves = StateLibrary.getPairReserves(vault, id);
         assertEq(reserves.reserve0(), amount0ToAdd, "Vault internal reserve0 should match");
         assertEq(reserves.reserve1(), amount1ToAdd, "Vault internal reserve1 should match");
+        PoolState memory poolState = StateLibrary.getCurrentState(vault, key.toId());
+        assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
 
         PairPosition.State memory _positionState = pairPositionManager.getPositionState(tokenId);
         assertEq(_positionState.liquidity, liquidity, "positionState.liquidity == liquidity");
@@ -161,6 +164,8 @@ contract LikwidPairPositionTest is Test {
         Reserves reserves = StateLibrary.getPairReserves(vault, id);
         assertEq(reserves.reserve0(), amount0ToAdd, "Vault internal reserve0 should match");
         assertEq(reserves.reserve1(), amount1ToAdd, "Vault internal reserve1 should match");
+        PoolState memory poolState = StateLibrary.getCurrentState(vault, id);
+        assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
 
         PairPosition.State memory _positionState = pairPositionManager.getPositionState(tokenId);
         assertEq(_positionState.liquidity, liquidity, "positionState.liquidity == liquidity");
@@ -224,6 +229,8 @@ contract LikwidPairPositionTest is Test {
             amount1ToAdd - amount1Removed,
             "Vault internal reserve1 should be amount1ToAdd-amount1Removed"
         );
+        PoolState memory poolState = StateLibrary.getCurrentState(vault, key.toId());
+        assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
     }
 
     function testExactInputSwap() public {
@@ -267,7 +274,8 @@ contract LikwidPairPositionTest is Test {
             "Vault reserve0 should have increased by amountIn without protocol fee"
         );
         assertEq(reserves.reserve1(), amount1ToAdd - amountOut, "Vault reserve1 should have decreased by amountOut");
-
+        PoolState memory poolState = StateLibrary.getCurrentState(vault, key.toId());
+        assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
         uint256 protocolSwapFees0 = vault.protocolFeesAccrued(key.currency0);
         assertTrue(protocolSwapFees0 > 0, "protocolSwapFees0 should be accrued");
         assertEq(
@@ -318,6 +326,8 @@ contract LikwidPairPositionTest is Test {
             "Vault reserve0 should have increased by amountIn without protocol fee"
         );
         assertEq(reserves.reserve1(), amount1ToAdd - amountOut, "Vault reserve1 should have decreased by amountOut");
+        PoolState memory poolState = StateLibrary.getCurrentState(vault, poolId);
+        assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
     }
 
     function testExactOutputSwap() public {
@@ -362,6 +372,8 @@ contract LikwidPairPositionTest is Test {
             "Vault reserve0 should have increased by amountIn without protocol fee"
         );
         assertEq(reserves.reserve1(), amount1ToAdd - amountOut, "Vault reserve1 should have decreased by amountOut");
+        PoolState memory poolState = StateLibrary.getCurrentState(vault, key.toId());
+        assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
     }
 
     function test_RevertIf_RemoveLiquidityNotOwner() public {
@@ -489,6 +501,8 @@ contract LikwidPairPositionTest is Test {
         Reserves reserves = StateLibrary.getPairReserves(vault, key.toId());
         assertEq(reserves.reserve0(), initialAmount0 + increaseAmount0, "Vault reserve0 should be updated");
         assertEq(reserves.reserve1(), initialAmount1 + increaseAmount1, "Vault reserve1 should be updated");
+        PoolState memory poolState = StateLibrary.getCurrentState(vault, key.toId());
+        assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
 
         // Check user balances
         assertEq(token0.balanceOf(address(this)), 0, "User should have spent all token0");

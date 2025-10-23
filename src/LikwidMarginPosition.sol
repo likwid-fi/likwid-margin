@@ -213,11 +213,13 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
             borrowAmount = _executeAddCollateralAndBorrow(params, poolState, position, delta);
         }
         delta.swapFeeAmount = swapFeeAmount;
-        _checkMinLevel(poolState.pairReserves, borrowCumulativeLast, depositCumulativeLast, position, minLevel);
         bytes memory callbackData = abi.encode(sender, key, delta);
         bytes memory data = abi.encode(delta.action, callbackData);
-
         vault.unlock(data);
+
+        Reserves newPairReserves = StateLibrary.getPairReserves(vault, poolId);
+        _checkMinLevel(newPairReserves, borrowCumulativeLast, depositCumulativeLast, position, minLevel);
+
         emit Margin(
             key.toId(),
             sender,
@@ -361,13 +363,8 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         (uint256 releaseAmount, uint256 realRepayAmount) =
             position.update(borrowCumulativeLast, depositCumulativeLast, 0, 0, 0, repayAmount);
 
-        MarginLevels _marginLevels = marginLevels;
         _checkMinLevel(
-            poolState.pairReserves,
-            borrowCumulativeLast,
-            depositCumulativeLast,
-            position,
-            _marginLevels.liquidateLevel()
+            poolState.pairReserves, borrowCumulativeLast, depositCumulativeLast, position, marginLevels.liquidateLevel()
         );
 
         int128 amount0Delta;
@@ -426,13 +423,8 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         if (lostAmount > 0 || (closeAmountMin > 0 && closeAmount < closeAmountMin)) {
             InsufficientCloseReceived.selector.revertWith();
         }
-        MarginLevels _marginLevels = marginLevels;
         _checkMinLevel(
-            poolState.pairReserves,
-            borrowCumulativeLast,
-            depositCumulativeLast,
-            position,
-            _marginLevels.liquidateLevel()
+            poolState.pairReserves, borrowCumulativeLast, depositCumulativeLast, position, marginLevels.liquidateLevel()
         );
 
         int128 amount0Delta;
@@ -556,8 +548,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         (uint256 reserveBorrow, uint256 reserveMargin) =
             position.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
 
-        MarginLevels _marginLevels = marginLevels;
-        uint24 _liquidationRatio = _marginLevels.liquidationRatio();
+        uint24 _liquidationRatio = marginLevels.liquidationRatio();
         uint256 assetsAmount = marginAmount + marginTotal;
         repayAmount = Math.mulDiv(reserveBorrow, assetsAmount, reserveMargin);
         uint256 needPayAmount = repayAmount.mulDivMillion(_liquidationRatio);
