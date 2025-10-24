@@ -180,9 +180,11 @@ library MarginPosition {
                 PositionLiquidated.selector.revertWith();
             } else {
                 // releaseAmount == positionValue or repayAmount <= payedAmount
-                (uint256 costAmount,) = SwapMath.getAmountIn(pairReserves, lpFee, !self.marginForOne, repayAmount);
+                (uint256 costAmount, uint256 swapFees) =
+                    SwapMath.getAmountIn(pairReserves, lpFee, !self.marginForOne, repayAmount);
                 if (releaseAmount > costAmount) {
                     closeAmount = releaseAmount - costAmount;
+                    swapFeeAmount = swapFees;
                 } else if (repayAmount > payedAmount) {
                     lostAmount = repayAmount - payedAmount;
                 }

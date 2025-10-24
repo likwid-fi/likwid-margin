@@ -69,33 +69,10 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         }
     }
 
-    function _getPoolState(PoolId poolId) internal view returns (PoolState memory state) {
-        state = StateLibrary.getCurrentState(vault, poolId);
-    }
-
-    /// @dev Gets the last cumulative borrow and deposit values for a given position.
-    /// @param poolState The current state of the pool.
-    /// @param marginForOne Whether the margin is on token1.
-    /// @return borrowCumulativeLast The last cumulative borrow value.
-    /// @return depositCumulativeLast The last cumulative deposit value.
-    function _getPoolCumulativeValues(PoolState memory poolState, bool marginForOne)
-        private
-        pure
-        returns (uint256 borrowCumulativeLast, uint256 depositCumulativeLast)
-    {
-        if (marginForOne) {
-            borrowCumulativeLast = poolState.borrow0CumulativeLast;
-            depositCumulativeLast = poolState.deposit1CumulativeLast;
-        } else {
-            borrowCumulativeLast = poolState.borrow1CumulativeLast;
-            depositCumulativeLast = poolState.deposit0CumulativeLast;
-        }
-    }
-
     function getPositionState(uint256 tokenId) external view returns (MarginPosition.State memory position) {
         PoolId poolId = poolIds[tokenId];
-        position = positionInfos[tokenId];
         PoolState memory state = _getPoolState(poolId);
+        position = positionInfos[tokenId];
         (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
             _getPoolCumulativeValues(state, position.marginForOne);
 
@@ -332,6 +309,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
         int128 amount0Delta;
         int128 amount1Delta;
+
         int128 amount = -params.marginAmount.toInt128();
 
         if (position.marginForOne) {
@@ -355,7 +333,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         PoolKey memory key = poolKeys[poolId];
         PoolState memory poolState = _getPoolState(poolId);
         MarginPosition.State storage position = positionInfos[tokenId];
-        MarginBalanceDelta memory delta;
 
         (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
             _getPoolCumulativeValues(poolState, position.marginForOne);
@@ -369,6 +346,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
         int128 amount0Delta;
         int128 amount1Delta;
+        MarginBalanceDelta memory delta;
         if (position.marginForOne) {
             amount0Delta = -realRepayAmount.toInt128();
             amount1Delta = releaseAmount.toInt128();
@@ -408,10 +386,8 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     {
         _requireAuth(msg.sender, tokenId);
         PoolId poolId = poolIds[tokenId];
-        PoolKey memory key = poolKeys[poolId];
         PoolState memory poolState = _getPoolState(poolId);
         MarginPosition.State storage position = positionInfos[tokenId];
-        MarginBalanceDelta memory delta;
 
         (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
             _getPoolCumulativeValues(poolState, position.marginForOne);
@@ -429,6 +405,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
         int128 amount0Delta;
         int128 amount1Delta;
+        MarginBalanceDelta memory delta;
         if (position.marginForOne) {
             amount1Delta = closeAmount.toInt128();
             delta.lendDelta = toBalanceDelta(0, releaseAmount.toInt128());
@@ -445,6 +422,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         delta.marginForOne = position.marginForOne;
         delta.marginDelta = toBalanceDelta(amount0Delta, amount1Delta);
 
+        PoolKey memory key = poolKeys[poolId];
         bytes memory callbackData = abi.encode(msg.sender, key, delta);
         bytes memory data = abi.encode(delta.action, callbackData);
 
@@ -473,7 +451,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
             PositionNotLiquidated.selector.revertWith();
         }
         PoolKey memory key = poolKeys[poolId];
-        MarginBalanceDelta memory delta;
         MarginLevels _marginLevels = marginLevels;
         uint256 assetsAmount = marginAmount + marginTotal;
         profit = assetsAmount.mulDivMillion(_marginLevels.callerProfit());
@@ -491,11 +468,12 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
             uint24(PerLibrary.ONE_MILLION)
         );
         (uint256 lendLostAmount, uint256 debtDepositCumulativeLast) = _processLost(poolState, position, lostAmount);
-        delta.swapFeeAmount = swapFeeAmount;
-        delta.debtDepositCumulativeLast = debtDepositCumulativeLast;
 
         int128 amount0Delta;
         int128 amount1Delta;
+        MarginBalanceDelta memory delta;
+        delta.swapFeeAmount = swapFeeAmount;
+        delta.debtDepositCumulativeLast = debtDepositCumulativeLast;
         if (position.marginForOne) {
             amount1Delta = rewardAmount.toInt128();
             delta.lendDelta = toBalanceDelta(lendLostAmount.toInt128(), (releaseAmount + rewardAmount).toInt128());
@@ -523,8 +501,8 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
             marginAmount,
             marginTotal,
             debtAmount,
-            Reserves.unwrap(poolState.truncatedReserves),
-            Reserves.unwrap(poolState.pairReserves),
+            poolState.truncatedReserves,
+            poolState.pairReserves,
             releaseAmount,
             repayAmount,
             profit,
@@ -549,10 +527,9 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
             position.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
 
         uint24 _liquidationRatio = marginLevels.liquidationRatio();
-        uint256 assetsAmount = marginAmount + marginTotal;
-        repayAmount = Math.mulDiv(reserveBorrow, assetsAmount, reserveMargin);
+        profit = marginAmount + marginTotal;
+        repayAmount = Math.mulDiv(reserveBorrow, profit, reserveMargin);
         uint256 needPayAmount = repayAmount.mulDivMillion(_liquidationRatio);
-        profit = assetsAmount;
 
         (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
             _getPoolCumulativeValues(poolState, position.marginForOne);
@@ -601,8 +578,8 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
             marginAmount,
             marginTotal,
             debtAmount,
-            Reserves.unwrap(poolState.truncatedReserves),
-            Reserves.unwrap(poolState.pairReserves),
+            poolState.truncatedReserves,
+            poolState.pairReserves,
             releaseAmount,
             repayAmount,
             needPayAmount,
@@ -697,6 +674,29 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         }
 
         return abi.encode(callerProfitAmount + protocolProfitAmount);
+    }
+
+    function _getPoolState(PoolId poolId) internal view returns (PoolState memory state) {
+        state = StateLibrary.getCurrentState(vault, poolId);
+    }
+
+    /// @dev Gets the last cumulative borrow and deposit values for a given position.
+    /// @param poolState The current state of the pool.
+    /// @param marginForOne Whether the margin is on token1.
+    /// @return borrowCumulativeLast The last cumulative borrow value.
+    /// @return depositCumulativeLast The last cumulative deposit value.
+    function _getPoolCumulativeValues(PoolState memory poolState, bool marginForOne)
+        private
+        pure
+        returns (uint256 borrowCumulativeLast, uint256 depositCumulativeLast)
+    {
+        if (marginForOne) {
+            borrowCumulativeLast = poolState.borrow0CumulativeLast;
+            depositCumulativeLast = poolState.deposit1CumulativeLast;
+        } else {
+            borrowCumulativeLast = poolState.borrow1CumulativeLast;
+            depositCumulativeLast = poolState.deposit0CumulativeLast;
+        }
     }
 
     // ******************** OWNER CALL ********************

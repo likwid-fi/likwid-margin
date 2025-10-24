@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {PoolId} from "../types/PoolId.sol";
 import {PoolKey} from "../types/PoolKey.sol";
+import {Reserves} from "../types/Reserves.sol";
 import {MarginLevels} from "../types/MarginLevels.sol";
 import {IBasePositionManager} from "./IBasePositionManager.sol";
 import {MarginPosition} from "../libraries/MarginPosition.sol";
@@ -146,8 +147,8 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 marginAmount,
         uint256 marginTotal,
         uint256 debtAmount,
-        uint256 truncatedReserves,
-        uint256 pairReserves,
+        Reserves truncatedReserves,
+        Reserves pairReserves,
         uint256 releaseAmount,
         uint256 repayAmount,
         uint256 profitAmount,
@@ -174,8 +175,8 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 marginAmount,
         uint256 marginTotal,
         uint256 debtAmount,
-        uint256 truncatedReserves,
-        uint256 pairReserves,
+        Reserves truncatedReserves,
+        Reserves pairReserves,
         uint256 releaseAmount,
         uint256 repayAmount,
         uint256 needRepayAmount,
