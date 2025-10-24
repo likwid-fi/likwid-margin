@@ -224,12 +224,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         MarginPosition.State storage position,
         MarginBalanceDelta memory delta
     ) internal returns (uint256 borrowAmount, uint256 marginFeeAmount, uint256 swapFeeAmount) {
-        uint256 borrowMirrorReserves = poolState.mirrorReserves.reserve01(!position.marginForOne);
-        uint256 borrowRealReserves = poolState.realReserves.reserve01(!position.marginForOne);
-        if (Math.mulDiv(borrowMirrorReserves, 100, borrowRealReserves + borrowMirrorReserves) > 90) {
-            MirrorTooMuch.selector.revertWith();
-        }
-
         uint256 marginReserves = poolState.realReserves.reserve01(position.marginForOne);
         uint256 marginTotal = params.marginAmount * params.leverage;
         if (marginTotal > marginReserves) ReservesNotEnough.selector.revertWith();
@@ -250,6 +244,12 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         } else {
             borrowCumulativeLast = poolState.borrow1CumulativeLast;
             depositCumulativeLast = poolState.deposit0CumulativeLast;
+        }
+
+        uint256 borrowMirrorReserves = poolState.mirrorReserves.reserve01(!position.marginForOne) + borrowAmount;
+        uint256 borrowRealReserves = poolState.realReserves.reserve01(!position.marginForOne);
+        if (Math.mulDiv(borrowMirrorReserves, 100, borrowRealReserves + borrowMirrorReserves) > 90) {
+            MirrorTooMuch.selector.revertWith();
         }
 
         position.update(
