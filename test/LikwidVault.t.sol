@@ -17,9 +17,11 @@ import {MarginState} from "../src/types/MarginState.sol";
 import {Reserves} from "../src/types/Reserves.sol";
 import {StateLibrary} from "../src/libraries/StateLibrary.sol";
 import {SwapMath} from "../src/libraries/SwapMath.sol";
+import {ProtocolFeeLibrary} from "../src/libraries/ProtocolFeeLibrary.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 contract LikwidVaultTest is Test, IUnlockCallback {
+    using ProtocolFeeLibrary for uint24;
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolKey;
     using SwapMath for *;
@@ -540,6 +542,27 @@ contract LikwidVaultTest is Test, IUnlockCallback {
             "Vault token0 balance after withdraw"
         );
         _checkPoolReserves(key);
+    }
+
+    function testSetDefaultProtocolFee() public {
+        uint24 initialFee = vault.defaultProtocolFee();
+        uint8 newSwapFee = 50; // 25%
+        vault.setDefaultProtocolFee(FeeTypes.SWAP, newSwapFee);
+        initialFee = initialFee.setProtocolFee(FeeTypes.SWAP, newSwapFee);
+        uint24 updatedFee = vault.defaultProtocolFee();
+        assertEq(initialFee, updatedFee, "Default SWAP protocol fee should be updated correctly");
+        newSwapFee = 12;
+        vault.setDefaultProtocolFee(FeeTypes.MARGIN, newSwapFee);
+        updatedFee = vault.defaultProtocolFee();
+        assertNotEq(initialFee, updatedFee, "Default MARGIN protocol fee should not eq updated initialFee");
+        initialFee = initialFee.setProtocolFee(FeeTypes.MARGIN, newSwapFee);
+        assertEq(initialFee, updatedFee, "Default MARGIN protocol fee should be updated correctly");
+        newSwapFee = 13;
+        vault.setDefaultProtocolFee(FeeTypes.INTERESTS, newSwapFee);
+        updatedFee = vault.defaultProtocolFee();
+        assertNotEq(initialFee, updatedFee, "Default INTERESTS protocol fee should not eq updated initialFee");
+        initialFee = initialFee.setProtocolFee(FeeTypes.INTERESTS, newSwapFee);
+        assertEq(initialFee, updatedFee, "Default INTERESTS protocol fee should be updated correctly");
     }
 
     // =============================================================

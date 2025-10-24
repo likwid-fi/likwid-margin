@@ -42,6 +42,7 @@ abstract contract ProtocolFees is IProtocolFees, MarginBase {
     function setDefaultProtocolFee(FeeTypes feeType, uint8 newFee) external onlyOwner {
         uint24 newProtocolFee = defaultProtocolFee.setProtocolFee(feeType, newFee);
         if (!newProtocolFee.isValidProtocolFee()) ProtocolFeeTooLarge.selector.revertWith(newProtocolFee);
+        defaultProtocolFee = newProtocolFee;
         emit DefaultProtocolFeeUpdated(uint8(feeType), newFee);
     }
 
