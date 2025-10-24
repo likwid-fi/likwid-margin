@@ -285,6 +285,22 @@ contract LikwidPairPositionTest is Test {
         );
         uint256 protocolSwapFees1 = vault.protocolFeesAccrued(key.currency1);
         assertTrue(protocolSwapFees1 == 0, "protocolSwapFees1 should be zero");
+
+        address toUser = makeAddr("to");
+        token0.mint(address(this), amountIn);
+
+        params = IPairPositionManager.SwapInputParams({
+            poolId: poolId,
+            zeroForOne: zeroForOne,
+            to: toUser,
+            amountIn: amountIn,
+            amountOutMin: 0,
+            deadline: block.timestamp + 1
+        });
+
+        (,, amountOut) = pairPositionManager.exactInput(params);
+
+        assertEq(token1.balanceOf(toUser), amountOut, "toUser should have received amountOut of token1 from swap");
     }
 
     function testExactInputSwapNative() public {
@@ -296,9 +312,8 @@ contract LikwidPairPositionTest is Test {
 
         // 2. Arrange: Prepare for swap
         uint256 amountIn = 10e18;
-        token0.mint(address(this), amountIn); // Mint token0 to swap for token1
         PoolId poolId = keyNative.toId();
-        bool zeroForOne = true; // Swapping token0 for token1
+        bool zeroForOne = true; // Swapping native for token1
 
         IPairPositionManager.SwapInputParams memory params = IPairPositionManager.SwapInputParams({
             poolId: poolId,
@@ -328,6 +343,22 @@ contract LikwidPairPositionTest is Test {
         assertEq(reserves.reserve1(), amount1ToAdd - amountOut, "Vault reserve1 should have decreased by amountOut");
         PoolState memory poolState = StateLibrary.getCurrentState(vault, poolId);
         assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
+
+        zeroForOne = false; // Swapping token1 for native
+
+        address toUser = makeAddr("to");
+        params = IPairPositionManager.SwapInputParams({
+            poolId: poolId,
+            zeroForOne: zeroForOne,
+            to: toUser,
+            amountIn: amountOut,
+            amountOutMin: 0,
+            deadline: block.timestamp + 1
+        });
+
+        (,, amountOut) = pairPositionManager.exactInput(params);
+
+        assertEq(toUser.balance, amountOut, "toUser should have received amountOut of native from swap");
     }
 
     function testExactOutputSwap() public {
@@ -374,6 +405,22 @@ contract LikwidPairPositionTest is Test {
         assertEq(reserves.reserve1(), amount1ToAdd - amountOut, "Vault reserve1 should have decreased by amountOut");
         PoolState memory poolState = StateLibrary.getCurrentState(vault, key.toId());
         assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
+
+        address toUser = makeAddr("to");
+        token0.mint(address(this), amountIn);
+        amountOut = amountOut / 10;
+        params = params = IPairPositionManager.SwapOutputParams({
+            poolId: poolId,
+            zeroForOne: zeroForOne,
+            to: toUser,
+            amountInMax: 20e18,
+            amountOut: amountOut,
+            deadline: block.timestamp + 1
+        });
+
+        (,, amountIn) = pairPositionManager.exactOutput(params);
+
+        assertEq(token1.balanceOf(toUser), amountOut, "toUser should have received amountOut of token1 from swap");
     }
 
     function test_RevertIf_RemoveLiquidityNotOwner() public {

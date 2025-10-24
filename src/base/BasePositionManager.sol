@@ -67,6 +67,7 @@ abstract contract BasePositionManager is
 
     function _processDelta(
         address sender,
+        address recipient,
         PoolKey memory key,
         BalanceDelta delta,
         uint256 amount0Min,
@@ -85,7 +86,7 @@ abstract contract BasePositionManager is
             if ((amount0Min > 0 && amount0 < amount0Min) || (amount0Max > 0 && amount0 > amount0Max)) {
                 PriceSlippageTooHigh.selector.revertWith();
             }
-            key.currency0.take(vault, sender, amount0, false);
+            key.currency0.take(vault, recipient, amount0, false);
         }
 
         if (delta.amount1() < 0) {
@@ -99,7 +100,7 @@ abstract contract BasePositionManager is
             if ((amount1Min > 0 && amount1 < amount1Min) || (amount1Max > 0 && amount1 > amount1Max)) {
                 PriceSlippageTooHigh.selector.revertWith();
             }
-            key.currency1.take(vault, sender, amount1, false);
+            key.currency1.take(vault, recipient, amount1, false);
         }
 
         _clearNative(sender);

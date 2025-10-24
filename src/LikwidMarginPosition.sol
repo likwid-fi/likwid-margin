@@ -668,7 +668,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
         (BalanceDelta delta) = vault.marginBalance(key, params);
 
-        _processDelta(sender, key, delta, 0, 0, 0, 0);
+        _processDelta(sender, sender, key, delta, 0, 0, 0, 0);
 
         return "";
     }

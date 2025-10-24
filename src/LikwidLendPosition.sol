@@ -124,7 +124,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
 
         BalanceDelta delta = vault.lend(key, params);
 
-        (uint256 amount0, uint256 amount1) = _processDelta(sender, key, delta, 0, 0, 0, 0);
+        (uint256 amount0, uint256 amount1) = _processDelta(sender, sender, key, delta, 0, 0, 0, 0);
 
         return abi.encode(amount0, amount1);
     }

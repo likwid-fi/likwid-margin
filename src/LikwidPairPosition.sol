@@ -143,7 +143,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         (BalanceDelta delta, int128 finalLiquidityDelta) = vault.modifyLiquidity(key, params);
 
         (uint256 amount0, uint256 amount1) =
-            _processDelta(sender, key, delta, amount0Min, amount1Min, params.amount0, params.amount1);
+            _processDelta(sender, sender, key, delta, amount0Min, amount1Min, params.amount0, params.amount1);
 
         emit ModifyLiquidity(key.toId(), uint256(params.salt), sender, finalLiquidityDelta, amount0, amount1);
         return abi.encode(finalLiquidityDelta, amount0, amount1);
@@ -166,7 +166,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         });
         uint256 amount0Min = params.zeroForOne ? 0 : params.amountOutMin;
         uint256 amount1Min = params.zeroForOne ? params.amountOutMin : 0;
-        bytes memory callbackData = abi.encode(msg.sender, key, swapParams, amount0Min, amount1Min, 0, 0);
+        bytes memory callbackData = abi.encode(msg.sender, params.to, key, swapParams, amount0Min, amount1Min, 0, 0);
         bytes memory data = abi.encode(Actions.SWAP, callbackData);
 
         bytes memory result = vault.unlock(data);
@@ -193,7 +193,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         });
         uint256 amount0Max = params.zeroForOne ? params.amountInMax : 0;
         uint256 amount1Max = params.zeroForOne ? 0 : params.amountInMax;
-        bytes memory callbackData = abi.encode(msg.sender, key, swapParams, 0, 0, amount0Max, amount1Max);
+        bytes memory callbackData = abi.encode(msg.sender, params.to, key, swapParams, 0, 0, amount0Max, amount1Max);
         bytes memory data = abi.encode(Actions.SWAP, callbackData);
 
         bytes memory result = vault.unlock(data);
@@ -206,18 +206,19 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
     function handleSwap(bytes memory _data) internal returns (bytes memory) {
         (
             address sender,
+            address recipient,
             PoolKey memory key,
             IVault.SwapParams memory params,
             uint256 amount0Min,
             uint256 amount1Min,
             uint256 amount0Max,
             uint256 amount1Max
-        ) = abi.decode(_data, (address, PoolKey, IVault.SwapParams, uint256, uint256, uint256, uint256));
+        ) = abi.decode(_data, (address, address, PoolKey, IVault.SwapParams, uint256, uint256, uint256, uint256));
 
         (BalanceDelta delta, uint24 swapFee, uint256 feeAmount) = vault.swap(key, params);
 
         (uint256 amount0, uint256 amount1) =
-            _processDelta(sender, key, delta, amount0Min, amount1Min, amount0Max, amount1Max);
+            _processDelta(sender, recipient, key, delta, amount0Min, amount1Min, amount0Max, amount1Max);
 
         return abi.encode(swapFee, feeAmount, amount0, amount1);
     }
