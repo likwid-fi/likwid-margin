@@ -13,19 +13,14 @@ library PositionLibrary {
         // This assembly block is a gas-optimized version of:
         // positionKey = keccak256(abi.encodePacked(owner, salt));
         assembly ("memory-safe") {
-            let fmp := mload(0x40)
-            // Place owner and salt sequentially into memory
-            mstore(fmp, owner)
-            mstore(add(fmp, 0x20), salt)
+            // Use the scratch space (0x00-0x3f) to store the arguments to hash.
+            mstore(0x00, owner)
+            mstore(0x20, salt)
             // Hash the 20 bytes of owner and 32 bytes of salt.
             // An address is 20 bytes, but stored in a 32-byte word. It's right-aligned,
-            // so we skip the first 12 zero bytes.
+            // so we skip the first 12(0x0c) zero bytes.
             // The total length to hash is 20 (owner) + 32 (salt) = 52 bytes (0x34).
-            positionKey := keccak256(add(fmp, 0x0c), 0x34)
-
-            // now clean the memory we used
-            mstore(fmp, 0) // fmp held owner
-            mstore(add(fmp, 0x20), 0) // fmp held salt
+            positionKey := keccak256(0x0c, 0x34)
         }
     }
 
@@ -35,9 +30,6 @@ library PositionLibrary {
         returns (bytes32 positionKey)
     {
         assembly ("memory-safe") {
-            // Get a pointer to some free memory
-            let ptr := mload(0x40)
-
             // abi.encodePacked(owner, isForOne, salt) is 53 bytes:
             // | owner (20 bytes) | isForOne (1 byte) | salt (32 bytes) |
 
@@ -55,16 +47,12 @@ library PositionLibrary {
             // Shift the salt left by 88 bits to get the last 21 bytes at the start of the word.
             let word2 := shl(88, salt)
 
-            // Store the two constructed words in memory
-            mstore(ptr, word1)
-            mstore(add(ptr, 0x20), word2)
+            // Use the scratch space (0x00-0x3f) to store the arguments to hash.
+            mstore(0x00, word1)
+            mstore(0x20, word2)
 
             // Hash the 53 bytes of packed data
-            positionKey := keccak256(ptr, 53)
-
-            // Clean the memory that we used
-            mstore(ptr, 0)
-            mstore(add(ptr, 0x20), 0)
+            positionKey := keccak256(0x00, 0x35)
         }
     }
 }
