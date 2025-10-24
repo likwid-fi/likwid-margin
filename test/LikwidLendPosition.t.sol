@@ -247,6 +247,14 @@ contract LikwidLendPositionTest is Test {
         assertEq(positionAfter.lendAmount, amountOut, "lendAmount should be amountOut");
 
         LikwidChecker.checkPoolReserves(vault, key);
+
+        skip(1000);
+        LendPosition.State memory positionLast = lendPositionManager.getPositionState(tokenId);
+        assertLt(positionAfter.lendAmount, positionLast.lendAmount, "lendAmount should increase due to interest");
+
+        lendPositionManager.withdraw(tokenId, 0);
+        positionLast = lendPositionManager.getPositionState(tokenId);
+        assertEq(positionLast.lendAmount, 0, "lendAmount should be zero after withdraw all");
     }
 
     function testMirrorExactInputToken01() public {

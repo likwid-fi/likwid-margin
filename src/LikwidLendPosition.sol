@@ -9,6 +9,7 @@ import {PoolKey} from "./types/PoolKey.sol";
 import {PoolId} from "./types/PoolId.sol";
 import {Currency} from "./types/Currency.sol";
 import {BalanceDelta} from "./types/BalanceDelta.sol";
+import {PoolState} from "./types/PoolState.sol";
 import {IVault} from "./interfaces/IVault.sol";
 import {ILendPositionManager} from "./interfaces/ILendPositionManager.sol";
 import {LendPosition} from "./libraries/LendPosition.sol";
@@ -50,19 +51,9 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
 
     /// @inheritdoc ILendPositionManager
     function getPositionState(uint256 tokenId) external view returns (LendPosition.State memory position) {
-        bytes32 salt = bytes32(tokenId);
         PoolId poolId = poolIds[tokenId];
         bool lendForOne = lendDirections[tokenId];
-        (,, uint256 deposit0CumulativeLast, uint256 deposit1CumulativeLast) =
-            StateLibrary.getBorrowDepositCumulative(vault, poolId);
-        uint256 depositCumulativeLast = lendForOne ? deposit1CumulativeLast : deposit0CumulativeLast;
-        position = StateLibrary.getLendPositionState(vault, poolId, address(this), lendForOne, salt);
-        position.lendAmount = Math.mulDiv(
-            position.lendAmount,
-            depositCumulativeLast,
-            position.depositCumulativeLast == 0 ? depositCumulativeLast : position.depositCumulativeLast
-        ).toUint128();
-        position.depositCumulativeLast = depositCumulativeLast;
+        position = _getPositionState(tokenId, poolId, lendForOne);
     }
 
     /// @inheritdoc ILendPositionManager
@@ -106,6 +97,11 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         PoolId poolId = poolIds[tokenId];
         bool lendForOne = lendDirections[tokenId];
         PoolKey memory key = poolKeys[poolId];
+        // If amount is 0, withdraw the entire lend amount
+        if (amount == 0) {
+            LendPosition.State memory position = _getPositionState(tokenId, poolId, lendForOne);
+            amount = position.lendAmount;
+        }
 
         IVault.LendParams memory params =
             IVault.LendParams({lendForOne: lendForOne, lendAmount: amount.toInt128(), salt: bytes32(tokenId)});
@@ -263,5 +259,22 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         _clearNative(sender);
 
         return abi.encode(swapFee, feeAmount, amount0, amount1);
+    }
+
+    function _getPositionState(uint256 tokenId, PoolId poolId, bool lendForOne)
+        internal
+        view
+        returns (LendPosition.State memory position)
+    {
+        bytes32 salt = bytes32(tokenId);
+        PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
+        uint256 depositCumulativeLast = lendForOne ? state.deposit1CumulativeLast : state.deposit0CumulativeLast;
+        position = StateLibrary.getLendPositionState(vault, poolId, address(this), lendForOne, salt);
+        position.lendAmount = Math.mulDiv(
+            position.lendAmount,
+            depositCumulativeLast,
+            position.depositCumulativeLast == 0 ? depositCumulativeLast : position.depositCumulativeLast
+        ).toUint128();
+        position.depositCumulativeLast = depositCumulativeLast;
     }
 }
