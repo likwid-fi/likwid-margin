@@ -378,14 +378,16 @@ library Pool {
     /// @param self The pool state.
     /// @param marginState The current rate state.
     /// @return pairInterest0 The interest earned by the pair for token0.
+    /// @return protocolInterest0 The interest earned by the protocol for token0.
     /// @return pairInterest1 The interest earned by the pair for token1.
+    /// @return protocolInterest1 The interest earned by the protocol for token1.
     function updateInterests(State storage self, MarginState marginState, uint24 defaultProtocolFee)
         internal
-        returns (uint256 pairInterest0, uint256 pairInterest1)
+        returns (uint256 pairInterest0, uint256 protocolInterest0, uint256 pairInterest1, uint256 protocolInterest1)
     {
         Slot0 _slot0 = self.slot0;
         uint256 timeElapsed = _slot0.lastUpdated().getTimeElapsed();
-        if (timeElapsed == 0) return (0, 0);
+        if (timeElapsed == 0) return (0, 0, 0, 0);
 
         Reserves _realReserves = self.realReserves;
         Reserves _mirrorReserves = self.mirrorReserves;
@@ -424,6 +426,7 @@ library Pool {
             interestReserve0 = result0.newInterestReserve;
             self.deposit0CumulativeLast = result0.newDepositCumulativeLast;
             pairInterest0 = result0.pairInterest;
+            protocolInterest0 = result0.protocolInterest;
         }
 
         InterestMath.InterestUpdateResult memory result1 = InterestMath.updateInterestForOne(
@@ -446,6 +449,7 @@ library Pool {
             interestReserve1 = result1.newInterestReserve;
             self.deposit1CumulativeLast = result1.newDepositCumulativeLast;
             pairInterest1 = result1.pairInterest;
+            protocolInterest1 = result1.protocolInterest;
         }
 
         if (result0.changed || result1.changed) {

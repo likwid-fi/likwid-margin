@@ -334,12 +334,19 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     function _getAndUpdatePool(PoolKey memory key) internal override returns (Pool.State storage _pool) {
         PoolId id = key.toId();
         _pool = _pools[id];
-        (uint256 pairInterest0, uint256 pairInterest1) = _pool.updateInterests(marginState, defaultProtocolFee);
+        (uint256 pairInterest0, uint256 protocolInterest0, uint256 pairInterest1, uint256 protocolInterest1) =
+            _pool.updateInterests(marginState, defaultProtocolFee);
         if (pairInterest0 > 0) {
             emit Fees(id, key.currency0, address(this), uint8(FeeTypes.INTERESTS), pairInterest0);
         }
         if (pairInterest1 > 0) {
             emit Fees(id, key.currency1, address(this), uint8(FeeTypes.INTERESTS), pairInterest1);
+        }
+        if (protocolInterest0 > 0) {
+            _updateProtocolFees(key.currency0, protocolInterest0);
+        }
+        if (protocolInterest1 > 0) {
+            _updateProtocolFees(key.currency1, protocolInterest1);
         }
     }
 
