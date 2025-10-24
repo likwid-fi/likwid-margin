@@ -48,7 +48,7 @@ library Slot0Library {
 
     function marginFee(Slot0 _packed) internal pure returns (uint24 _marginFee) {
         assembly ("memory-safe") {
-            _marginFee := signextend(2, shr(MARGIN_FEE_OFFSET, _packed))
+            _marginFee := and(MASK_24_BITS, shr(MARGIN_FEE_OFFSET, _packed))
         }
     }
 

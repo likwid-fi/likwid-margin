@@ -41,5 +41,13 @@ contract Slot0Test is Test {
         uint24 marginFee = 15000; // 1.5%
         slot0 = slot0.setMarginFee(marginFee);
         assertEq(slot0.marginFee(), marginFee);
+
+        marginFee = 1500; // 0.15%
+        slot0 = slot0.setMarginFee(marginFee);
+        assertEq(slot0.marginFee(), marginFee);
+
+        marginFee = 0; // 0%
+        slot0 = slot0.setMarginFee(marginFee);
+        assertEq(slot0.marginFee(), marginFee);
     }
 }
