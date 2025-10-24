@@ -38,6 +38,8 @@ library Pool {
     using LendPosition for mapping(bytes32 => LendPosition.State);
     using ProtocolFeeLibrary for uint24;
 
+    error InvalidFee();
+
     /// @notice Thrown when trying to initialize an already initialized pool
     error PoolAlreadyInitialized();
 
@@ -91,6 +93,9 @@ library Pool {
     /// @param marginFee The initial margin fee for the pool
     function initialize(State storage self, uint24 lpFee, uint24 marginFee) internal {
         if (self.borrow0CumulativeLast != 0) PoolAlreadyInitialized.selector.revertWith();
+        if (lpFee >= PerLibrary.ONE_MILLION || marginFee >= PerLibrary.ONE_MILLION) {
+            InvalidFee.selector.revertWith();
+        }
 
         self.slot0 =
             Slot0.wrap(bytes32(0)).setLastUpdated(uint32(block.timestamp)).setLpFee(lpFee).setMarginFee(marginFee);
