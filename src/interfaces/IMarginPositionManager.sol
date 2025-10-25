@@ -21,6 +21,9 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @notice Thrown when the received amount is insufficient
     error InsufficientReceived();
 
+    /// @notice Thrown when the position is already liquidated
+    error PositionLiquidated();
+
     /// @notice Thrown when the position is not liquidated
     error PositionNotLiquidated();
 

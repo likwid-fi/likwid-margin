@@ -94,10 +94,9 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     {
         (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
             _getPoolCumulativeValues(state, position.marginForOne);
-        MarginLevels _marginLevels = marginLevels;
         // use truncatedReserves
         uint256 level = position.marginLevel(state.truncatedReserves, borrowCumulativeLast, depositCumulativeLast);
-        liquidated = level < _marginLevels.liquidateLevel();
+        liquidated = level < marginLevels.liquidateLevel();
         if (liquidated) {
             marginAmount = Math.mulDiv(position.marginAmount, depositCumulativeLast, position.depositCumulativeLast);
             marginTotal = Math.mulDiv(position.marginTotal, depositCumulativeLast, position.depositCumulativeLast);
@@ -391,9 +390,14 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         PoolId poolId = poolIds[tokenId];
         PoolState memory poolState = _getPoolState(poolId);
         MarginPosition.State storage position = positionInfos[tokenId];
-
         (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
             _getPoolCumulativeValues(poolState, position.marginForOne);
+
+        uint24 liquidateLevel = marginLevels.liquidateLevel();
+        uint256 level = position.marginLevel(poolState.truncatedReserves, borrowCumulativeLast, depositCumulativeLast);
+        if (level < liquidateLevel) {
+            PositionLiquidated.selector.revertWith();
+        }
 
         (uint256 releaseAmount, uint256 repayAmount, uint256 closeAmount, uint256 lostAmount, uint256 swapFeeAmount) =
         position.close(
@@ -402,9 +406,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         if (lostAmount > 0 || (closeAmountMin > 0 && closeAmount < closeAmountMin)) {
             InsufficientCloseReceived.selector.revertWith();
         }
-        _checkMinLevel(
-            poolState.pairReserves, borrowCumulativeLast, depositCumulativeLast, position, marginLevels.liquidateLevel()
-        );
+        _checkMinLevel(poolState.pairReserves, borrowCumulativeLast, depositCumulativeLast, position, liquidateLevel);
 
         int128 amount0Delta;
         int128 amount1Delta;
