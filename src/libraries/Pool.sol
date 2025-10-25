@@ -453,8 +453,9 @@ library Pool {
         }
 
         if (result0.changed || result1.changed) {
+            _pairReserves = toReserves(pairReserve0.toUint128(), pairReserve1.toUint128());
+            self.pairReserves = _pairReserves;
             self.mirrorReserves = toReserves(mirrorReserve0.toUint128(), mirrorReserve1.toUint128());
-            self.pairReserves = toReserves(pairReserve0.toUint128(), pairReserve1.toUint128());
             self.lendReserves = toReserves(lendReserve0.toUint128(), lendReserve1.toUint128());
         }
         Reserves _truncatedReserves = self.truncatedReserves;
