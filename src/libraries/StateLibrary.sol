@@ -335,12 +335,10 @@ library StateLibrary {
             state.mirrorReserves = toReserves(mirrorReserve0.toUint128(), mirrorReserve1.toUint128());
             state.pairReserves = toReserves(pairReserve0.toUint128(), pairReserve1.toUint128());
             state.lendReserves = toReserves(lendReserve0.toUint128(), lendReserve1.toUint128());
-            state.truncatedReserves = PriceMath.transferReserves(
-                _truncatedReserves, state.pairReserves, timeElapsed, state.marginState.maxPriceMovePerSecond()
-            );
-        } else {
-            state.truncatedReserves = state.pairReserves;
         }
+        state.truncatedReserves = PriceMath.transferReserves(
+            _truncatedReserves, state.pairReserves, timeElapsed, state.marginState.maxPriceMovePerSecond()
+        );
 
         state.interestReserves = toReserves(interestReserve0.toUint128(), interestReserve1.toUint128());
     }
