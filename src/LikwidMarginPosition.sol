@@ -305,6 +305,12 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
             depositCumulativeLast = poolState.deposit0CumulativeLast;
         }
 
+        uint256 borrowMirrorReserves = poolState.mirrorReserves.reserve01(!position.marginForOne) + borrowAmount;
+        borrowRealReserves -= borrowAmount;
+        if (Math.mulDiv(borrowMirrorReserves, 100, borrowRealReserves + borrowMirrorReserves) > 90) {
+            MirrorTooMuch.selector.revertWith();
+        }
+
         position.update(
             borrowCumulativeLast, depositCumulativeLast, params.marginAmount.toInt128(), 0, params.borrowAmount, 0
         );
