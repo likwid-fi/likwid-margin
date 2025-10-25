@@ -178,6 +178,9 @@ library Pool {
         self.updateReserves(deltaParams);
 
         self.positions.get(params.owner, params.salt).update(finalLiquidityDelta, delta);
+        if (totalSupply == INITIAL_LIQUIDITY) {
+            self.truncatedReserves = self.pairReserves;
+        }
     }
 
     struct SwapParams {
