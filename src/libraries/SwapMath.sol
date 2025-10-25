@@ -191,8 +191,7 @@ library SwapMath {
         bool zeroForOne,
         uint256 amountOut
     ) internal pure returns (uint256 amountIn, uint24 fee, uint256 feeAmount) {
-        (uint256 approxAmountIn,) = getAmountIn(pairReserves, lpFee, zeroForOne, amountOut);
-        uint256 degree = getPriceDegree(pairReserves, truncatedReserves, lpFee, zeroForOne, approxAmountIn, amountOut);
+        uint256 degree = getPriceDegree(pairReserves, truncatedReserves, lpFee, zeroForOne, 0, amountOut);
         fee = dynamicFee(lpFee, degree);
         (amountIn, feeAmount) = getAmountIn(pairReserves, fee, zeroForOne, amountOut);
     }
