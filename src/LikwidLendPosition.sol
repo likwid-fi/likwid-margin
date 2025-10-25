@@ -97,8 +97,8 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         PoolId poolId = poolIds[tokenId];
         bool lendForOne = lendDirections[tokenId];
         PoolKey memory key = poolKeys[poolId];
-        // If amount is 0, withdraw the entire lend amount
-        if (amount == 0) {
+        // If amount is type(uint256).max, withdraw the entire lend amount
+        if (amount == type(uint256).max) {
             LendPosition.State memory position = _getPositionState(tokenId, poolId, lendForOne);
             amount = position.lendAmount;
         }

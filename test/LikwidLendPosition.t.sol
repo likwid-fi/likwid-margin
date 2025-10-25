@@ -252,7 +252,7 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory positionLast = lendPositionManager.getPositionState(tokenId);
         assertLt(positionAfter.lendAmount, positionLast.lendAmount, "lendAmount should increase due to interest");
 
-        lendPositionManager.withdraw(tokenId, 0);
+        lendPositionManager.withdraw(tokenId, type(uint256).max);
         positionLast = lendPositionManager.getPositionState(tokenId);
         assertEq(positionLast.lendAmount, 0, "lendAmount should be zero after withdraw all");
     }

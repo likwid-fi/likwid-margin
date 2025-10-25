@@ -293,7 +293,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
             SwapMath.getAmountOut(poolState.pairReserves, poolState.lpFee, !position.marginForOne, params.marginAmount);
         borrowMaxAmount = Math.min(borrowMaxAmount, borrowRealReserves * 20 / 100);
         if (params.borrowAmount > borrowMaxAmount) BorrowTooMuch.selector.revertWith();
-        if (params.borrowAmount == 0) params.borrowAmount = borrowMaxAmount.toUint128();
+        if (params.borrowAmount == type(uint256).max) params.borrowAmount = borrowMaxAmount.toUint128();
         borrowAmount = params.borrowAmount;
         uint256 borrowCumulativeLast;
         uint256 depositCumulativeLast;
