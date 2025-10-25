@@ -189,6 +189,9 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
             minLevel = marginLevels.minBorrowLevel();
             borrowAmount = _executeAddCollateralAndBorrow(params, poolState, position, delta);
         }
+        if (params.borrowAmountMax > 0 && borrowAmount > params.borrowAmountMax) {
+            ExceedBorrowAmountMax.selector.revertWith();
+        }
         delta.swapFeeAmount = swapFeeAmount;
         bytes memory callbackData = abi.encode(sender, key, delta);
         bytes memory data = abi.encode(delta.action, callbackData);
