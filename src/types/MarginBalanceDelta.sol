@@ -11,7 +11,6 @@ struct MarginBalanceDelta {
     uint256 marginFeeAmount;
     uint256 swapFeeAmount;
     BalanceDelta marginDelta;
-    BalanceDelta realDelta;
     BalanceDelta mirrorDelta;
     BalanceDelta pairDelta;
     BalanceDelta lendDelta;
