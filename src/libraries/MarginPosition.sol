@@ -99,7 +99,7 @@ library MarginPosition {
                 releaseAmount = Math.mulDiv(positionValue, repayAmount.toUint128(), debtAmount);
                 realRepayAmount = repayAmount;
             }
-            debtAmount -= uint128(realRepayAmount);
+            debtAmount -= realRepayAmount;
             if (marginTotal > 0) {
                 uint256 marginAmountReleased = Math.mulDiv(releaseAmount, marginAmount, positionValue);
                 marginAmount = marginAmount - marginAmountReleased;
