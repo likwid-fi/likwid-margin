@@ -12,6 +12,7 @@ import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
 import {StateLibrary} from "../src/libraries/StateLibrary.sol";
+import {CurrentStateLibrary} from "../src/libraries/CurrentStateLibrary.sol";
 import {PairPosition} from "../src/libraries/PairPosition.sol";
 import {Reserves} from "../src/types/Reserves.sol";
 import {MarginState} from "../src/types/MarginState.sol";
@@ -112,7 +113,7 @@ contract LikwidPairPositionTest is Test {
         Reserves reserves = StateLibrary.getPairReserves(vault, id);
         assertEq(reserves.reserve0(), amount0ToAdd, "Vault internal reserve0 should match");
         assertEq(reserves.reserve1(), amount1ToAdd, "Vault internal reserve1 should match");
-        PoolState memory poolState = StateLibrary.getCurrentState(vault, key.toId());
+        PoolState memory poolState = CurrentStateLibrary.getState(vault, key.toId());
         assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
 
         PairPosition.State memory _positionState = pairPositionManager.getPositionState(tokenId);
@@ -164,7 +165,7 @@ contract LikwidPairPositionTest is Test {
         Reserves reserves = StateLibrary.getPairReserves(vault, id);
         assertEq(reserves.reserve0(), amount0ToAdd, "Vault internal reserve0 should match");
         assertEq(reserves.reserve1(), amount1ToAdd, "Vault internal reserve1 should match");
-        PoolState memory poolState = StateLibrary.getCurrentState(vault, id);
+        PoolState memory poolState = CurrentStateLibrary.getState(vault, id);
         assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
 
         PairPosition.State memory _positionState = pairPositionManager.getPositionState(tokenId);
@@ -229,7 +230,7 @@ contract LikwidPairPositionTest is Test {
             amount1ToAdd - amount1Removed,
             "Vault internal reserve1 should be amount1ToAdd-amount1Removed"
         );
-        PoolState memory poolState = StateLibrary.getCurrentState(vault, key.toId());
+        PoolState memory poolState = CurrentStateLibrary.getState(vault, key.toId());
         assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
     }
 
@@ -274,7 +275,7 @@ contract LikwidPairPositionTest is Test {
             "Vault reserve0 should have increased by amountIn without protocol fee"
         );
         assertEq(reserves.reserve1(), amount1ToAdd - amountOut, "Vault reserve1 should have decreased by amountOut");
-        PoolState memory poolState = StateLibrary.getCurrentState(vault, key.toId());
+        PoolState memory poolState = CurrentStateLibrary.getState(vault, key.toId());
         assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
         uint256 protocolSwapFees0 = vault.protocolFeesAccrued(key.currency0);
         assertTrue(protocolSwapFees0 > 0, "protocolSwapFees0 should be accrued");
@@ -341,7 +342,7 @@ contract LikwidPairPositionTest is Test {
             "Vault reserve0 should have increased by amountIn without protocol fee"
         );
         assertEq(reserves.reserve1(), amount1ToAdd - amountOut, "Vault reserve1 should have decreased by amountOut");
-        PoolState memory poolState = StateLibrary.getCurrentState(vault, poolId);
+        PoolState memory poolState = CurrentStateLibrary.getState(vault, poolId);
         assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
 
         zeroForOne = false; // Swapping token1 for native
@@ -403,7 +404,7 @@ contract LikwidPairPositionTest is Test {
             "Vault reserve0 should have increased by amountIn without protocol fee"
         );
         assertEq(reserves.reserve1(), amount1ToAdd - amountOut, "Vault reserve1 should have decreased by amountOut");
-        PoolState memory poolState = StateLibrary.getCurrentState(vault, key.toId());
+        PoolState memory poolState = CurrentStateLibrary.getState(vault, key.toId());
         assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
 
         address toUser = makeAddr("to");
@@ -548,7 +549,7 @@ contract LikwidPairPositionTest is Test {
         Reserves reserves = StateLibrary.getPairReserves(vault, key.toId());
         assertEq(reserves.reserve0(), initialAmount0 + increaseAmount0, "Vault reserve0 should be updated");
         assertEq(reserves.reserve1(), initialAmount1 + increaseAmount1, "Vault reserve1 should be updated");
-        PoolState memory poolState = StateLibrary.getCurrentState(vault, key.toId());
+        PoolState memory poolState = CurrentStateLibrary.getState(vault, key.toId());
         assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
 
         // Check user balances

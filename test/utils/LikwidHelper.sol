@@ -14,7 +14,7 @@ import {MarginState} from "../../src/types/MarginState.sol";
 import {StageMath} from "../../src/libraries/StageMath.sol";
 import {Math} from "../../src/libraries/Math.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
-import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
+import {CurrentStateLibrary} from "../../src/libraries/CurrentStateLibrary.sol";
 import {PerLibrary} from "../../src/libraries/PerLibrary.sol";
 import {SwapMath} from "../../src/libraries/SwapMath.sol";
 import {StageMath} from "../../src/libraries/StageMath.sol";
@@ -57,7 +57,7 @@ contract LikwidHelper is Owned {
     }
 
     function getPoolStateInfo(PoolId poolId) external view returns (PoolStateInfo memory stateInfo) {
-        PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
+        PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
         stateInfo.totalSupply = state.totalSupply;
         stateInfo.lastUpdated = state.lastUpdated;
         stateInfo.lpFee = state.lpFee;
@@ -93,7 +93,7 @@ contract LikwidHelper is Owned {
         view
         returns (uint256 amountOut, uint24 fee, uint256 feeAmount)
     {
-        PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
+        PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
         fee = state.lpFee;
         if (!dynamicFee) {
             (amountOut, feeAmount) = SwapMath.getAmountOut(state.pairReserves, fee, zeroForOne, amountIn);
@@ -108,7 +108,7 @@ contract LikwidHelper is Owned {
         view
         returns (uint256 amountIn, uint24 fee, uint256 feeAmount)
     {
-        PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
+        PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
         fee = state.lpFee;
         if (!dynamicFee) {
             (amountIn, feeAmount) = SwapMath.getAmountIn(state.pairReserves, fee, zeroForOne, amountOut);
@@ -134,7 +134,7 @@ contract LikwidHelper is Owned {
     }
 
     function getBorrowRate(PoolId poolId, bool marginForOne) external view returns (uint256) {
-        PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
+        PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
         return _getBorrowRate(state, marginForOne);
     }
 
@@ -143,7 +143,7 @@ contract LikwidHelper is Owned {
         view
         returns (uint24 _fee, uint24 _marginFee)
     {
-        PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
+        PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
         uint256 degree = SwapMath.getPriceDegree(
             state.pairReserves, state.truncatedReserves, state.lpFee, zeroForOne, amountIn, amountOut
         );
@@ -181,7 +181,7 @@ contract LikwidHelper is Owned {
         MarginPosition.State memory _position = manager.getPositionState(tokenId);
         IVault _vault = manager.vault();
         PoolId poolId = manager.poolIds(tokenId);
-        PoolState memory _state = StateLibrary.getCurrentState(_vault, poolId);
+        PoolState memory _state = CurrentStateLibrary.getState(_vault, poolId);
         maxAmount = _getMaxDecrease(manager, _state, _position);
     }
 
@@ -196,7 +196,7 @@ contract LikwidHelper is Owned {
         MarginPosition.State memory _position = manager.getPositionState(tokenId);
         IVault _vault = manager.vault();
         PoolId poolId = manager.poolIds(tokenId);
-        PoolState memory _state = StateLibrary.getCurrentState(_vault, poolId);
+        PoolState memory _state = CurrentStateLibrary.getState(_vault, poolId);
         (uint128 pairReserve0, uint128 pairReserve1) = _state.pairReserves.reserves();
         (uint256 reserveBorrow, uint256 reserveMargin) =
             _position.marginForOne ? (pairReserve0, pairReserve1) : (pairReserve1, pairReserve0);
@@ -206,7 +206,7 @@ contract LikwidHelper is Owned {
     }
 
     function getLendingAPR(PoolId poolId, bool borrowForOne, uint256 inputAmount) public view returns (uint256 apr) {
-        PoolState memory _state = StateLibrary.getCurrentState(vault, poolId);
+        PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
         (uint128 mirrorReserve0, uint128 mirrorReserve1) = _state.mirrorReserves.reserves();
         uint256 mirrorReserve = borrowForOne ? mirrorReserve1 : mirrorReserve0;
         uint256 borrowRate = _getBorrowRate(_state, !borrowForOne);
@@ -221,7 +221,7 @@ contract LikwidHelper is Owned {
     }
 
     function getBorrowAPR(PoolId poolId, bool borrowForOne) external view returns (uint256 rate) {
-        PoolState memory _state = StateLibrary.getCurrentState(vault, poolId);
+        PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
         (uint256 realReserve0, uint256 realReserve1) = _state.realReserves.reserves();
         (uint256 mirrorReserve0, uint256 mirrorReserve1) = _state.mirrorReserves.reserves();
         rate = borrowForOne
@@ -283,7 +283,7 @@ contract LikwidHelper is Owned {
         MarginPosition.State memory _position = manager.getPositionState(tokenId);
         IVault _vault = manager.vault();
         PoolId poolId = manager.poolIds(tokenId);
-        PoolState memory _state = StateLibrary.getCurrentState(_vault, poolId);
+        PoolState memory _state = CurrentStateLibrary.getState(_vault, poolId);
         uint256 level = _position.marginLevel(
             _state.truncatedReserves, _position.borrowCumulativeLast, _position.depositCumulativeLast
         );

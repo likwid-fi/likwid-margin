@@ -203,7 +203,7 @@ contract LikwidVaultTest is Test, IUnlockCallback {
     function testSwapExactInputToken0ForToken1() public {
         // 1. Setup
         (PoolKey memory key, uint256 initialLiquidity0, uint256 initialLiquidity1) = _setupStandardPool();
-        uint256 amountToSwap = 1e18;
+        uint256 amountToSwap = 0.1e18;
 
         Reserves _pairReserves = StateLibrary.getPairReserves(vault, key.toId());
         assertEq(_pairReserves.reserve0(), initialLiquidity0, "Initial reserve0 should match");
@@ -244,10 +244,58 @@ contract LikwidVaultTest is Test, IUnlockCallback {
         _checkPoolReserves(key);
     }
 
+    function testSwapExactInputToken0ForToken1_withDynamicFee() public {
+        // 1. Setup
+        (PoolKey memory key, uint256 initialLiquidity0, uint256 initialLiquidity1) = _setupStandardPool();
+
+        uint256 amountToSwap = 1e18;
+
+        Reserves _pairReserves = StateLibrary.getPairReserves(vault, key.toId());
+        assertEq(_pairReserves.reserve0(), initialLiquidity0, "Initial reserve0 should match");
+        assertEq(_pairReserves.reserve1(), initialLiquidity1, "Initial reserve1 should match");
+
+        // Mint tokens for swap
+        token0.mint(address(this), amountToSwap);
+
+        // 2. Action
+        bool zeroForOne = true; // token0 for token1
+        IVault.SwapParams memory swapParams = IVault.SwapParams({
+            zeroForOne: zeroForOne,
+            amountSpecified: -int256(amountToSwap),
+            useMirror: false,
+            salt: bytes32(0)
+        });
+
+        uint256 initialVaultBalance1 = token1.balanceOf(address(vault));
+
+        bytes memory innerParamsSwap = abi.encode(key, swapParams);
+        bytes memory dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
+
+        vault.unlock(dataSwap);
+
+        // 3. Assertions
+        uint256 finalVaultBalance1 = token1.balanceOf(address(vault));
+        uint256 actualAmountOut = initialVaultBalance1 - finalVaultBalance1;
+
+        assertEq(token0.balanceOf(address(this)), 0, "User token0 balance should be 0");
+        assertEq(token1.balanceOf(address(this)), actualAmountOut, "User token1 balance should be amount out");
+        assertEq(token0.balanceOf(address(vault)), initialLiquidity0 + amountToSwap, "Vault token0 balance");
+        assertEq(token1.balanceOf(address(vault)), initialLiquidity1 - actualAmountOut, "Vault token1 balance");
+
+        assertGt(
+            vault.protocolFeesAccrued(currency0),
+            amountToSwap * 3 / 10000,
+            "Protocol fee for token0 should be greater than 0.03%"
+        );
+        assertEq(vault.protocolFeesAccrued(currency1), 0, "Protocol fee for token1 should be 0");
+        _checkPoolReserves(key);
+    }
+
     function testSwapExactInputNativeForToken1() public {
         // 1. Setup
         (PoolKey memory key, uint256 initialLiquidity0, uint256 initialLiquidity1) = _setupStandardPoolNative();
-        uint256 amountToSwap = 1e18;
+        skip(1000);
+        uint256 amountToSwap = 0.1e18;
 
         Reserves _pairReserves = StateLibrary.getPairReserves(vault, key.toId());
         assertEq(_pairReserves.reserve0(), initialLiquidity0, "Initial reserve0 should match");

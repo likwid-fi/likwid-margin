@@ -12,7 +12,7 @@ import {Currency, CurrencyLibrary} from "../../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../../src/types/PoolId.sol";
 import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
-import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
+import {CurrentStateLibrary} from "../../src/libraries/CurrentStateLibrary.sol";
 import {StageMath} from "../../src/libraries/StageMath.sol";
 import {LendPosition} from "../../src/libraries/LendPosition.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
@@ -169,8 +169,18 @@ contract StateLibraryTest is Test, IUnlockCallback {
         assertTrue(positionState.depositCumulativeLast != 0, "depositCumulativeLast should be set");
     }
 
+    function testGetSlot0() public view {
+        (uint128 totalSupply, uint32 lastUpdated, uint24 protocolFee, uint24 lpFee, uint24 marginFee) =
+            StateLibrary.getSlot0(vault, poolId);
+        assertEq(protocolFee, vault.defaultProtocolFee(), "defaultProtocolFee should match protocolFee");
+        assertEq(lpFee, 3000, "lpFee should be 3000");
+        assertEq(marginFee, 3000, "marginFee should be 3000");
+        assertEq(lastUpdated, 1, "lastUpdated should be 1");
+        assertEq(totalSupply, initialLiquidity + 1000, "totalSupply should match initialLiquidity+1000");
+    }
+
     function testGetCurrentState() public view {
-        PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
+        PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
         uint24 protocolFee = vault.defaultProtocolFee();
         assertEq(protocolFee, state.protocolFee, "defaultProtocolFee should match state.protocolFee");
     }

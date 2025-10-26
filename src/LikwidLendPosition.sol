@@ -14,6 +14,7 @@ import {IVault} from "./interfaces/IVault.sol";
 import {ILendPositionManager} from "./interfaces/ILendPositionManager.sol";
 import {LendPosition} from "./libraries/LendPosition.sol";
 import {StateLibrary} from "./libraries/StateLibrary.sol";
+import {CurrentStateLibrary} from "./libraries/CurrentStateLibrary.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
 import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
@@ -267,7 +268,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         returns (LendPosition.State memory position)
     {
         bytes32 salt = bytes32(tokenId);
-        PoolState memory state = StateLibrary.getCurrentState(vault, poolId);
+        PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
         uint256 depositCumulativeLast = lendForOne ? state.deposit1CumulativeLast : state.deposit0CumulativeLast;
         position = StateLibrary.getLendPositionState(vault, poolId, address(this), lendForOne, salt);
         position.lendAmount = Math.mulDiv(

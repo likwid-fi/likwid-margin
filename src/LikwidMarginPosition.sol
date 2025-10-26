@@ -16,6 +16,7 @@ import {PerLibrary} from "./libraries/PerLibrary.sol";
 import {PositionLibrary} from "./libraries/PositionLibrary.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
 import {StateLibrary} from "./libraries/StateLibrary.sol";
+import {CurrentStateLibrary} from "./libraries/CurrentStateLibrary.sol";
 import {TimeLibrary} from "./libraries/TimeLibrary.sol";
 import {SwapMath} from "./libraries/SwapMath.sol";
 import {MarginActions} from "./types/MarginActions.sol";
@@ -688,7 +689,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     }
 
     function _getPoolState(PoolId poolId) internal view returns (PoolState memory state) {
-        state = StateLibrary.getCurrentState(vault, poolId);
+        state = CurrentStateLibrary.getState(vault, poolId);
     }
 
     /// @dev Gets the last cumulative borrow and deposit values for a given position.
