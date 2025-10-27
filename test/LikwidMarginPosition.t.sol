@@ -483,8 +483,9 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         LikwidChecker.checkPoolReserves(vault, key);
     }
 
-    function testAddMargin_NoLeverage() public {
-        uint256 marginAmount = 0.1e18;
+    function testFuzz_AddMargin_NoLeverage(uint256 marginAmount) public {
+        marginAmount = bound(marginAmount, 0.0001 ether, 1 ether);
+
         token0.mint(address(this), marginAmount);
 
         IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
@@ -500,6 +501,27 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
         assertTrue(tokenId > 0);
         assertEq(borrowAmount, 1000);
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testFuzz_AddMargin_MaxBorrowAmount(uint256 marginAmount) public {
+        marginAmount = bound(marginAmount, 0.0001 ether, 1 ether);
+
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 0, // No leverage, just add collateral and borrow
+            marginAmount: uint128(marginAmount),
+            borrowAmount: uint256(type(uint256).max), // borrow max
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
+        assertTrue(tokenId > 0);
+        assertGt(borrowAmount, 1000);
         LikwidChecker.checkPoolReserves(vault, key);
     }
 

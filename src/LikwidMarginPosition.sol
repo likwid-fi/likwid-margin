@@ -187,7 +187,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
                 _executeAddLeverage(params, poolState, position, delta);
         } else {
             minLevel = marginLevels.minBorrowLevel();
-            borrowAmount = _executeAddCollateralAndBorrow(params, poolState, position, delta);
+            borrowAmount = _executeAddCollateralAndBorrow(params, poolState, position, delta, minLevel);
         }
         if (params.borrowAmountMax > 0 && borrowAmount > params.borrowAmountMax) {
             ExceedBorrowAmountMax.selector.revertWith();
@@ -287,14 +287,18 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         IMarginPositionManager.MarginParams memory params,
         PoolState memory poolState,
         MarginPosition.State storage position,
-        MarginBalanceDelta memory delta
+        MarginBalanceDelta memory delta,
+        uint256 minBorrowLevel
     ) internal returns (uint256 borrowAmount) {
-        uint256 borrowRealReserves = poolState.realReserves.reserve01(!position.marginForOne);
         (uint256 borrowMaxAmount,) =
             SwapMath.getAmountOut(poolState.pairReserves, poolState.lpFee, !position.marginForOne, params.marginAmount);
+        if (minBorrowLevel > PerLibrary.ONE_MILLION) {
+            borrowMaxAmount = Math.mulDiv(borrowMaxAmount, PerLibrary.ONE_MILLION, minBorrowLevel);
+        }
+        uint256 borrowRealReserves = poolState.realReserves.reserve01(!position.marginForOne);
         borrowMaxAmount = Math.min(borrowMaxAmount, borrowRealReserves * 20 / 100);
-        if (params.borrowAmount > borrowMaxAmount) BorrowTooMuch.selector.revertWith();
         if (params.borrowAmount == type(uint256).max) params.borrowAmount = borrowMaxAmount.toUint128();
+        if (params.borrowAmount > borrowMaxAmount) BorrowTooMuch.selector.revertWith();
         borrowAmount = params.borrowAmount;
         uint256 borrowCumulativeLast;
         uint256 depositCumulativeLast;
