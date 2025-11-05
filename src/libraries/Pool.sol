@@ -426,7 +426,6 @@ library Pool {
             mirrorReserve0 = result0.newMirrorReserve;
             pairReserve0 = result0.newPairReserve;
             lendReserve0 = result0.newLendReserve;
-            interestReserve0 = result0.newInterestReserve;
             self.deposit0CumulativeLast = result0.newDepositCumulativeLast;
             pairInterest0 = result0.pairInterest;
             protocolInterest0 = result0.protocolInterest;
@@ -449,7 +448,6 @@ library Pool {
             mirrorReserve1 = result1.newMirrorReserve;
             pairReserve1 = result1.newPairReserve;
             lendReserve1 = result1.newLendReserve;
-            interestReserve1 = result1.newInterestReserve;
             self.deposit1CumulativeLast = result1.newDepositCumulativeLast;
             pairInterest1 = result1.pairInterest;
             protocolInterest1 = result1.protocolInterest;
@@ -474,7 +472,11 @@ library Pool {
         if (borrow1CumulativeBefore < borrow1CumulativeLast) {
             self.borrow1CumulativeLast = borrow1CumulativeLast;
         }
-        self.interestReserves = toReserves(interestReserve0.toUint128(), interestReserve1.toUint128());
+        if (interestReserve0 != result0.newInterestReserve || interestReserve1 != result1.newInterestReserve) {
+            self.interestReserves =
+                toReserves(result0.newInterestReserve.toUint128(), result1.newInterestReserve.toUint128());
+        }
+
         self.slot0 = self.slot0.setLastUpdated(uint32(block.timestamp));
     }
 
