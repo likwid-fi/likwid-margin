@@ -65,9 +65,9 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         (MarginActions action, bytes memory params) = abi.decode(data, (MarginActions, bytes));
 
         if (action == MarginActions.LIQUIDATE_BURN) {
-            return handleLiquidateBurn(params);
+            return _handleLiquidateBurn(params);
         } else {
-            return handleMargin(params);
+            return _handleMargin(params);
         }
     }
 
@@ -680,7 +680,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         );
     }
 
-    function handleMargin(bytes memory _data) internal returns (bytes memory) {
+    function _handleMargin(bytes memory _data) internal returns (bytes memory) {
         (address sender, PoolKey memory key, MarginBalanceDelta memory params) =
             abi.decode(_data, (address, PoolKey, MarginBalanceDelta));
 
@@ -691,7 +691,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         return "";
     }
 
-    function handleLiquidateBurn(bytes memory _data) internal returns (bytes memory) {
+    function _handleLiquidateBurn(bytes memory _data) internal returns (bytes memory) {
         (
             address sender,
             PoolKey memory key,

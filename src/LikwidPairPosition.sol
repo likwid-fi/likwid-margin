@@ -32,9 +32,9 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         (Actions action, bytes memory params) = abi.decode(data, (Actions, bytes));
 
         if (action == Actions.MODIFY_LIQUIDITY) {
-            return handleModifyLiquidity(params);
+            return _handleModifyLiquidity(params);
         } else if (action == Actions.SWAP) {
-            return handleSwap(params);
+            return _handleSwap(params);
         } else {
             InvalidCallback.selector.revertWith();
         }
@@ -131,7 +131,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         (, amount0, amount1) = abi.decode(result, (int128, uint256, uint256));
     }
 
-    function handleModifyLiquidity(bytes memory _data) internal returns (bytes memory) {
+    function _handleModifyLiquidity(bytes memory _data) internal returns (bytes memory) {
         (
             address sender,
             PoolKey memory key,
@@ -203,7 +203,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         amountIn = params.zeroForOne ? amount0 : amount1;
     }
 
-    function handleSwap(bytes memory _data) internal returns (bytes memory) {
+    function _handleSwap(bytes memory _data) internal returns (bytes memory) {
         (
             address sender,
             address recipient,

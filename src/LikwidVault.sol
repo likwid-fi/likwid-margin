@@ -284,7 +284,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     }
 
     /// @notice Settles a user's balance for a specific currency.
-    /// @dev Internal function to handle the logic of settling a user's balance.
+    /// @dev Internal function to _handle the logic of settling a user's balance.
     /// @param recipient The address of the user to settle the balance for.
     /// @return paid The amount paid to the user.
     function _settle(address recipient) internal returns (uint256 paid) {

@@ -40,11 +40,11 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         (Actions action, bytes memory params) = abi.decode(data, (Actions, bytes));
 
         if (action == Actions.DEPOSIT) {
-            return handleLend(params);
+            return _handleLend(params);
         } else if (action == Actions.WITHDRAW) {
-            return handleLend(params);
+            return _handleLend(params);
         } else if (action == Actions.SWAP) {
-            return handleSwap(params);
+            return _handleSwap(params);
         } else {
             InvalidCallback.selector.revertWith();
         }
@@ -115,7 +115,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         emit Withdraw(poolId, currency, msg.sender, tokenId, msg.sender, amount);
     }
 
-    function handleLend(bytes memory _data) internal returns (bytes memory) {
+    function _handleLend(bytes memory _data) internal returns (bytes memory) {
         (address sender, PoolKey memory key, IVault.LendParams memory params) =
             abi.decode(_data, (address, PoolKey, IVault.LendParams));
 
@@ -190,7 +190,7 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
         amountIn = params.zeroForOne ? amount0 : amount1;
     }
 
-    function handleSwap(bytes memory _data) internal returns (bytes memory) {
+    function _handleSwap(bytes memory _data) internal returns (bytes memory) {
         (
             address sender,
             PoolKey memory key,
