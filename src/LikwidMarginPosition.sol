@@ -222,7 +222,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
         emit Margin(
             key.toId(),
-            sender,
+            tokenOwner,
             params.tokenId,
             position.marginAmount,
             position.marginTotal,
