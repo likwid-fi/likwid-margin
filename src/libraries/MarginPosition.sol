@@ -43,7 +43,6 @@ library MarginPosition {
         if (self.debtAmount == 0 || !pairReserves.bothPositive()) {
             level = type(uint256).max;
         } else {
-            uint256 marginAmount;
             uint256 marginTotal;
             uint256 positionValue;
             uint256 debtAmount;
@@ -51,13 +50,18 @@ library MarginPosition {
             (uint128 reserve0, uint128 reserve1) = pairReserves.reserves();
             (uint256 reserveBorrow, uint256 reserveMargin) =
                 self.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
-            if (self.depositCumulativeLast != 0) {
-                marginAmount = Math.mulDiv(self.marginAmount, depositCumulativeLast, self.depositCumulativeLast);
+            if (self.depositCumulativeLast != 0 && depositCumulativeLast != 0) {
+                uint256 marginAmount = Math.mulDiv(self.marginAmount, depositCumulativeLast, self.depositCumulativeLast);
                 marginTotal = Math.mulDiv(self.marginTotal, depositCumulativeLast, self.depositCumulativeLast);
                 positionValue = marginAmount + marginTotal;
+            } else {
+                marginTotal = self.marginTotal;
+                positionValue = self.marginAmount + marginTotal;
             }
-            if (self.borrowCumulativeLast != 0) {
+            if (self.borrowCumulativeLast != 0 && borrowCumulativeLast != 0) {
                 debtAmount = Math.mulDivRoundingUp(self.debtAmount, borrowCumulativeLast, self.borrowCumulativeLast);
+            } else {
+                debtAmount = self.debtAmount;
             }
             if (marginTotal > 0) {
                 repayAmount = Math.mulDiv(reserveBorrow, positionValue, reserveMargin);
@@ -68,6 +72,10 @@ library MarginPosition {
             }
             level = Math.mulDiv(repayAmount, PerLibrary.ONE_MILLION, debtAmount);
         }
+    }
+
+    function marginLevel(State memory self, Reserves pairReserves) internal pure returns (uint256 level) {
+        level = marginLevel(self, pairReserves, 0, 0);
     }
 
     function update(

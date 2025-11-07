@@ -609,7 +609,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
     }
 
     function testModify_DecreaseCollateral() public {
-        uint256 marginAmount = 0.2e18;
+        uint256 marginAmount = 0.2 ether;
         token0.mint(address(this), marginAmount);
 
         IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
@@ -625,7 +625,42 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
         MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
 
-        int128 modifyAmount = -0.05e18;
+        int128 modifyAmount = -0.01 ether;
+        marginPositionManager.modify(tokenId, modifyAmount);
+
+        MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
+
+        assertEq(
+            int256(uint256(positionAfter.marginAmount)),
+            int256(uint256(positionBefore.marginAmount)) + modifyAmount,
+            "position.marginAmount should be decreased"
+        );
+        LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testModify_DecreaseCollateral_InvalidLevel() public {
+        uint256 marginAmount = 0.2 ether;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
+        MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
+
+        int128 modifyAmount = -0.05 ether;
+        vm.expectRevert(IMarginPositionManager.InvalidLevel.selector);
+        marginPositionManager.modify(tokenId, modifyAmount);
+
+        skip(1000);
+        modifyAmount = -0.01 ether;
         marginPositionManager.modify(tokenId, modifyAmount);
 
         MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
@@ -902,7 +937,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
     }
 
     function testModifyNative_DecreaseCollateral() public {
-        uint256 marginAmount = 0.2e18;
+        uint256 marginAmount = 0.2 ether;
 
         IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
             marginForOne: false, // margin with native, borrow token1
@@ -917,7 +952,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         (uint256 tokenId,,) = marginPositionManager.addMargin{value: marginAmount}(keyNative, params);
         MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
 
-        int128 modifyAmount = -0.05e18;
+        int128 modifyAmount = -0.01 ether;
 
         uint256 balanceBefore = address(this).balance;
         marginPositionManager.modify(tokenId, modifyAmount);

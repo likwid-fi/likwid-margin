@@ -118,6 +118,29 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         }
     }
 
+    function _checkMinLevelAfterUnlock(
+        Reserves pairReserves,
+        Reserves truncatedReserves,
+        MarginPosition.State memory position,
+        uint256 minLevel
+    ) internal pure {
+        uint256 pairLevel = position.marginLevel(pairReserves);
+        uint256 truncatedLevel = position.marginLevel(truncatedReserves);
+        uint256 level = Math.min(pairLevel, truncatedLevel);
+        if (level < minLevel) {
+            InvalidLevel.selector.revertWith();
+        }
+    }
+
+    function _checkMinLevelAfterUnlock(PoolId poolId, MarginPosition.State memory position, uint256 minLevel)
+        internal
+        view
+    {
+        Reserves pairReserves = StateLibrary.getPairReserves(vault, poolId);
+        Reserves truncatedReserves = StateLibrary.getTruncatedReserves(vault, poolId);
+        _checkMinLevelAfterUnlock(pairReserves, truncatedReserves, position, minLevel);
+    }
+
     function _processLost(PoolState memory state, MarginPosition.State memory position, uint256 lostAmount)
         internal
         pure
@@ -174,9 +197,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         PoolKey memory key = poolKeys[poolId];
         MarginPosition.State storage position = positionInfos[params.tokenId];
 
-        (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
-            _getPoolCumulativeValues(poolState, position.marginForOne);
-
         MarginBalanceDelta memory delta;
         delta.action = MarginActions.MARGIN;
         delta.marginForOne = position.marginForOne;
@@ -197,8 +217,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         bytes memory data = abi.encode(delta.action, callbackData);
         vault.unlock(data);
 
-        Reserves newPairReserves = StateLibrary.getPairReserves(vault, poolId);
-        _checkMinLevel(newPairReserves, borrowCumulativeLast, depositCumulativeLast, position, minLevel);
+        _checkMinLevelAfterUnlock(poolId, position, minLevel);
 
         emit Margin(
             key.toId(),
@@ -353,10 +372,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         (uint256 releaseAmount, uint256 realRepayAmount) =
             position.update(borrowCumulativeLast, depositCumulativeLast, 0, 0, 0, repayAmount);
 
-        _checkMinLevel(
-            poolState.pairReserves, borrowCumulativeLast, depositCumulativeLast, position, marginLevels.liquidateLevel()
-        );
-
         int128 amount0Delta;
         int128 amount1Delta;
         MarginBalanceDelta memory delta;
@@ -379,6 +394,10 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         bytes memory data = abi.encode(delta.action, callbackData);
 
         vault.unlock(data);
+        // pairReserves does not change after repay
+        _checkMinLevelAfterUnlock(
+            poolState.pairReserves, poolState.truncatedReserves, position, marginLevels.liquidateLevel()
+        );
 
         emit Repay(
             key.toId(),
@@ -405,10 +424,9 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
             _getPoolCumulativeValues(poolState, position.marginForOne);
 
         uint24 liquidateLevel = marginLevels.liquidateLevel();
-        uint256 level = position.marginLevel(poolState.truncatedReserves, borrowCumulativeLast, depositCumulativeLast);
-        if (level < liquidateLevel) {
-            PositionLiquidated.selector.revertWith();
-        }
+        _checkMinLevel(
+            poolState.truncatedReserves, borrowCumulativeLast, depositCumulativeLast, position, liquidateLevel
+        );
 
         (uint256 releaseAmount, uint256 repayAmount, uint256 closeAmount, uint256 lostAmount, uint256 swapFeeAmount) =
         position.close(
@@ -417,7 +435,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         if (lostAmount > 0 || (closeAmountMin > 0 && closeAmount < closeAmountMin)) {
             InsufficientCloseReceived.selector.revertWith();
         }
-        _checkMinLevel(poolState.pairReserves, borrowCumulativeLast, depositCumulativeLast, position, liquidateLevel);
 
         int128 amount0Delta;
         int128 amount1Delta;
@@ -443,6 +460,11 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         bytes memory data = abi.encode(delta.action, callbackData);
 
         vault.unlock(data);
+
+        Reserves newPairReserves = StateLibrary.getPairReserves(vault, poolId);
+        Reserves newTruncatedReserves = StateLibrary.getTruncatedReserves(vault, poolId);
+        _checkMinLevelAfterUnlock(newPairReserves, newTruncatedReserves, position, liquidateLevel);
+
         emit Close(
             key.toId(),
             msg.sender,
@@ -617,16 +639,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
         position.update(borrowCumulativeLast, depositCumulativeLast, changeAmount, 0, 0, 0);
 
-        if (changeAmount < 0) {
-            _checkMinLevel(
-                poolState.pairReserves,
-                borrowCumulativeLast,
-                depositCumulativeLast,
-                position,
-                marginLevels.minBorrowLevel()
-            );
-        }
-
         int128 amount0Delta;
         int128 amount1Delta;
         if (position.marginForOne) {
@@ -644,6 +656,13 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         bytes memory data = abi.encode(delta.action, callbackData);
 
         vault.unlock(data);
+
+        if (changeAmount < 0) {
+            _checkMinLevelAfterUnlock(
+                poolState.pairReserves, poolState.truncatedReserves, position, marginLevels.minBorrowLevel()
+            );
+        }
+
         emit Modify(
             key.toId(),
             msg.sender,

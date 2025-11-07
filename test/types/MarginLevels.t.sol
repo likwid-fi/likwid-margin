@@ -19,7 +19,7 @@ contract MarginLevelsTest is Test {
         marginLevels = marginLevels.setProtocolProfit(5000);
     }
 
-    function test_Getters() public {
+    function test_Getters() public view {
         assertEq(marginLevels.minMarginLevel(), 1170000);
         assertEq(marginLevels.minBorrowLevel(), 1400000);
         assertEq(marginLevels.liquidateLevel(), 1100000);
