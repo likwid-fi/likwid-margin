@@ -186,7 +186,7 @@ library MarginPosition {
             }
             positionValue -= rewardAmount;
             releaseAmount = Math.mulDiv(positionValue, closeMillionth, PerLibrary.ONE_MILLION);
-            repayAmount = Math.mulDiv(debtAmount, closeMillionth, PerLibrary.ONE_MILLION);
+            repayAmount = Math.mulDivRoundingUp(debtAmount, closeMillionth, PerLibrary.ONE_MILLION);
             uint256 payedAmount;
             (payedAmount, swapFeeAmount) = SwapMath.getAmountOut(pairReserves, lpFee, !self.marginForOne, releaseAmount);
             if (releaseAmount < positionValue && repayAmount > payedAmount) {

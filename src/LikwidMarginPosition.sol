@@ -574,7 +574,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
         uint24 _liquidationRatio = marginLevels.liquidationRatio();
         profit = marginAmount + marginTotal;
-        repayAmount = Math.mulDiv(reserveBorrow, profit, reserveMargin);
+        repayAmount = Math.mulDivRoundingUp(reserveBorrow, profit, reserveMargin);
         uint256 needPayAmount = repayAmount.mulDivMillion(_liquidationRatio);
 
         (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
