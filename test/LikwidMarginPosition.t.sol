@@ -1061,6 +1061,64 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         marginPositionManager.addMargin(key, params);
     }
 
+    function testAddMargin_Fail_ChangeMarginAction_Borrow2Margin() public {
+        uint256 marginAmount = 0.1 ether;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 0, // No leverage
+            marginAmount: uint128(marginAmount),
+            borrowAmount: marginAmount,
+            borrowAmountMax: marginAmount,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
+
+        IMarginPositionManager.MarginParams memory marginParams = IMarginPositionManager.MarginParams({
+            tokenId: tokenId,
+            leverage: 1,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: marginAmount,
+            borrowAmountMax: marginAmount,
+            deadline: block.timestamp
+        });
+
+        vm.expectRevert(MarginPosition.ChangeMarginAction.selector);
+        marginPositionManager.margin(marginParams);
+    }
+
+    function testAddMargin_Fail_ChangeMarginAction_Margin2Borrow() public {
+        uint256 marginAmount = 0.1 ether;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
+
+        IMarginPositionManager.MarginParams memory marginParams = IMarginPositionManager.MarginParams({
+            tokenId: tokenId,
+            leverage: 0,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: marginAmount,
+            borrowAmountMax: marginAmount,
+            deadline: block.timestamp
+        });
+
+        vm.expectRevert(MarginPosition.ChangeMarginAction.selector);
+        marginPositionManager.margin(marginParams);
+    }
+
     function testClose_Fail_InsufficientCloseReceived() public {
         uint256 marginAmount = 0.1e18;
         token0.mint(address(this), marginAmount);
