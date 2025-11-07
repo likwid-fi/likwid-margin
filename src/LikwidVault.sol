@@ -211,7 +211,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
 
         if (params.swapFeeAmount > 0) {
             uint8 feeType = isMargin ? uint8(FeeTypes.MARGIN_SWAP) : uint8(FeeTypes.MARGIN_CLOSE_SWAP);
-            emit Fees(id, marginCurrency, msg.sender, feeType, params.swapFeeAmount);
+            emit Fees(id, swapCurrency, msg.sender, feeType, params.swapFeeAmount);
         }
         if (swapFeesToProtocol > 0) {
             _updateProtocolFees(swapCurrency, swapFeesToProtocol);
