@@ -368,7 +368,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         token1.approve(address(vault), 100e18);
         token1.approve(address(marginPositionManager), 100e18);
 
-        (uint256 profit,) = marginPositionManager.liquidateCall(tokenId);
+        (uint256 profit,) = marginPositionManager.liquidateCall(tokenId, 0);
         vm.stopPrank();
 
         assertTrue(profit > 0, "Liquidator should make a profit");
@@ -419,7 +419,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         address liquidator = makeAddr("liquidator");
         vm.startPrank(liquidator);
         LikwidHelper.PoolStateInfo memory poolStateBefore = helper.getPoolStateInfo(key.toId());
-        uint256 profit = marginPositionManager.liquidateBurn(tokenId);
+        uint256 profit = marginPositionManager.liquidateBurn(tokenId, 0);
         vm.stopPrank();
 
         assertTrue(profit > 0, "Liquidator should make a profit");
@@ -715,10 +715,10 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertFalse(liquidated, "Position should not be liquidatable");
 
         vm.expectRevert(bytes4(keccak256("PositionNotLiquidated()")));
-        marginPositionManager.liquidateCall(tokenId);
+        marginPositionManager.liquidateCall(tokenId, 0);
 
         vm.expectRevert(bytes4(keccak256("PositionNotLiquidated()")));
-        marginPositionManager.liquidateBurn(tokenId);
+        marginPositionManager.liquidateBurn(tokenId, 0);
         LikwidChecker.checkPoolReserves(vault, key);
     }
 
@@ -988,9 +988,10 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         marginPositionManager.addMargin(keyLowFee, params);
     }
 
-    function testAddMargin_Fail_ExpiredDeadline() public {
-        uint256 marginAmount = 0.1e18;
+    function testAddMargin_Success_DeadlineIsZero() public {
+        uint256 marginAmount = 0.01 ether;
         token0.mint(address(this), marginAmount);
+        skip(10);
 
         IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
             marginForOne: false,
@@ -999,7 +1000,25 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             borrowAmount: 0,
             borrowAmountMax: 0,
             recipient: address(this),
-            deadline: block.timestamp - 1
+            deadline: 0
+        });
+
+        marginPositionManager.addMargin(key, params);
+    }
+
+    function testAddMargin_Fail_ExpiredDeadline() public {
+        uint256 marginAmount = 0.01 ether;
+        token0.mint(address(this), marginAmount);
+        skip(10);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: 1
         });
 
         vm.expectRevert(bytes("EXPIRED"));

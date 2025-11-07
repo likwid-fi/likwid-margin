@@ -34,7 +34,7 @@ abstract contract BasePositionManager is IBasePositionManager, ImmutableState, I
     {}
 
     modifier ensure(uint256 deadline) {
-        require(deadline >= block.timestamp, "EXPIRED");
+        require(deadline == 0 || deadline >= block.timestamp, "EXPIRED");
         _;
     }
 

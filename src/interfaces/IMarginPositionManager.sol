@@ -260,14 +260,19 @@ interface IMarginPositionManager is IBasePositionManager {
 
     /// @notice Liquidates a position by burning the position token.
     /// @param tokenId The ID of the position to liquidate.
+    /// @param deadline The deadline for the liquidation.
     /// @return profit The profit from the liquidation.
-    function liquidateBurn(uint256 tokenId) external returns (uint256 profit);
+    function liquidateBurn(uint256 tokenId, uint256 deadline) external returns (uint256 profit);
 
     /// @notice Liquidates a position by making a call.
     /// @param tokenId The ID of the position to liquidate.
+    /// @param deadline The deadline for the liquidation.
     /// @return profit The profit from the liquidation.
     /// @return repayAmount The amount repaid.
-    function liquidateCall(uint256 tokenId) external payable returns (uint256 profit, uint256 repayAmount);
+    function liquidateCall(uint256 tokenId, uint256 deadline)
+        external
+        payable
+        returns (uint256 profit, uint256 repayAmount);
 
     /// @notice Modify the margin position
     /// @param tokenId The id of position
