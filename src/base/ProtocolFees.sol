@@ -66,6 +66,7 @@ abstract contract ProtocolFees is IProtocolFees, MarginBase {
             // prevent transfer between the sync and settle balanceOfs (native settle uses msg.value)
             ProtocolFeeCurrencySynced.selector.revertWith();
         }
+        if (recipient == address(0)) InvalidRecipient.selector.revertWith();
 
         amountCollected = (amount == 0) ? protocolFeesAccrued[currency] : amount;
         protocolFeesAccrued[currency] -= amountCollected;

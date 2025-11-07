@@ -17,6 +17,9 @@ interface IProtocolFees {
     /// @notice Thrown when collectProtocolFees is attempted on a token that is synced.
     error ProtocolFeeCurrencySynced();
 
+    /// @notice Thrown when the recipient address is invalid (e.g., zero address).
+    error InvalidRecipient();
+
     /// @notice Emitted when the protocol fee controller address is updated in setProtocolFeeController.
     event ProtocolFeeControllerUpdated(address indexed protocolFeeController);
 
