@@ -481,6 +481,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
     /// @inheritdoc IMarginPositionManager
     function liquidateBurn(uint256 tokenId, uint256 deadline) external ensure(deadline) returns (uint256 profit) {
+        _requireOwned(tokenId);
         PoolId poolId = poolIds[tokenId];
         PoolState memory poolState = _getPoolState(poolId);
         MarginPosition.State storage position = positionInfos[tokenId];
@@ -556,6 +557,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         ensure(deadline)
         returns (uint256 profit, uint256 repayAmount)
     {
+        _requireOwned(tokenId);
         PoolId poolId = poolIds[tokenId];
         PoolState memory poolState = _getPoolState(poolId);
         MarginPosition.State storage position = positionInfos[tokenId];
