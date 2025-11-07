@@ -43,6 +43,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     using MarginPosition for MarginPosition.State;
 
     uint8 constant MAX_LEVERAGE = 5; // 5x
+    uint8 constant MAX_MIRROR_RATIO = 80; // 80%
 
     mapping(uint256 tokenId => MarginPosition.State positionInfo) private positionInfos;
     MarginLevels public marginLevels;
@@ -270,7 +271,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
         uint256 borrowMirrorReserves = poolState.mirrorReserves.reserve01(!position.marginForOne) + borrowAmount;
         uint256 borrowRealReserves = poolState.realReserves.reserve01(!position.marginForOne);
-        if (Math.mulDiv(borrowMirrorReserves, 100, borrowRealReserves + borrowMirrorReserves) > 90) {
+        if (Math.mulDiv(borrowMirrorReserves, 100, borrowRealReserves + borrowMirrorReserves) > MAX_MIRROR_RATIO) {
             MirrorTooMuch.selector.revertWith();
         }
 
@@ -331,7 +332,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
         uint256 borrowMirrorReserves = poolState.mirrorReserves.reserve01(!position.marginForOne) + borrowAmount;
         borrowRealReserves -= borrowAmount;
-        if (Math.mulDiv(borrowMirrorReserves, 100, borrowRealReserves + borrowMirrorReserves) > 90) {
+        if (Math.mulDiv(borrowMirrorReserves, 100, borrowRealReserves + borrowMirrorReserves) > MAX_MIRROR_RATIO) {
             MirrorTooMuch.selector.revertWith();
         }
 

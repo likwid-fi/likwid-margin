@@ -32,8 +32,8 @@ abstract contract MarginBase is IMarginBase, Owned {
 
     uint24 private constant MAX_PRICE_MOVE_PER_SECOND = 3000; // 0.3%/second
     uint24 private constant RATE_BASE = 50000;
-    uint24 private constant USE_MIDDLE_LEVEL = 400000;
-    uint24 private constant USE_HIGH_LEVEL = 800000;
+    uint24 private constant USE_MIDDLE_LEVEL = 300000; // 30%
+    uint24 private constant USE_HIGH_LEVEL = 700000; // 70%
     uint24 private constant M_LOW = 10;
     uint24 private constant M_MIDDLE = 100;
     uint24 private constant M_HIGH = 10000;
