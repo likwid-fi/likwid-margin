@@ -19,7 +19,8 @@ library MarginLevelsLibrary {
         uint24 _liquidateLevel = liquidateLevel(_packed);
         uint24 one = 10 ** 6;
         valid = _liquidateLevel >= one && minMarginLevel(_packed) > _liquidateLevel
-            && minBorrowLevel(_packed) > _liquidateLevel && liquidationRatio(_packed) <= one;
+            && minBorrowLevel(_packed) > _liquidateLevel && liquidationRatio(_packed) <= one
+            && callerProfit(_packed) + protocolProfit(_packed) <= one;
     }
 
     // #### GETTERS ####
