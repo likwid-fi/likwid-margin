@@ -25,6 +25,8 @@ library MarginPosition {
 
     error PositionLiquidated();
 
+    error ReservesNotPositive();
+
     struct State {
         bool marginForOne;
         uint128 marginAmount;
@@ -40,9 +42,12 @@ library MarginPosition {
         uint256 borrowCumulativeLast,
         uint256 depositCumulativeLast
     ) internal pure returns (uint256 level) {
-        if (self.debtAmount == 0 || !pairReserves.bothPositive()) {
+        if (self.debtAmount == 0) {
             level = type(uint256).max;
         } else {
+            if (!pairReserves.bothPositive()) {
+                ReservesNotPositive.selector.revertWith();
+            }
             uint256 marginTotal;
             uint256 positionValue;
             uint256 debtAmount;
