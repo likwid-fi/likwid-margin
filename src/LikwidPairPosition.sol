@@ -50,14 +50,15 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
     /// @inheritdoc IPairPositionManager
     function addLiquidity(
         PoolKey memory key,
+        address recipient,
         uint256 amount0,
         uint256 amount1,
         uint256 amount0Min,
         uint256 amount1Min,
         uint256 deadline
     ) external payable ensure(deadline) returns (uint256 tokenId, uint128 liquidity) {
-        tokenId = _mintPosition(key, msg.sender);
-        liquidity = _increaseLiquidity(msg.sender, msg.sender, tokenId, amount0, amount1, amount0Min, amount1Min);
+        tokenId = _mintPosition(key, recipient);
+        liquidity = _increaseLiquidity(msg.sender, recipient, tokenId, amount0, amount1, amount0Min, amount1Min);
     }
 
     function _increaseLiquidity(

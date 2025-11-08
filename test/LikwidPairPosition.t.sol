@@ -89,7 +89,7 @@ contract LikwidPairPositionTest is Test {
 
         // 2. Act
         (uint256 tokenId, uint128 liquidity) =
-            pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+            pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         // 3. Assert
         // Check NFT ownership and position data
@@ -142,8 +142,9 @@ contract LikwidPairPositionTest is Test {
         assertEq(token1.balanceOf(address(this)), amount1ToAdd, "Initial user balance of token1 should be correct");
 
         // 2. Act
-        (uint256 tokenId, uint128 liquidity) =
-            pairPositionManager.addLiquidity{value: amount0ToAdd}(keyNative, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        (uint256 tokenId, uint128 liquidity) = pairPositionManager.addLiquidity{value: amount0ToAdd}(
+            keyNative, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000
+        );
 
         // 3. Assert
         // Check NFT ownership and position data
@@ -191,7 +192,7 @@ contract LikwidPairPositionTest is Test {
         token1.mint(address(this), amount1ToAdd);
 
         (uint256 tokenId, uint128 liquidityAdded) =
-            pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+            pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         assertEq(token0.balanceOf(address(this)), 0, "User token0 balance should be 0 after adding liquidity");
         assertEq(token1.balanceOf(address(this)), 0, "User token1 balance should be 0 after adding liquidity");
@@ -240,7 +241,7 @@ contract LikwidPairPositionTest is Test {
         uint256 amount1ToAdd = 100e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
-        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         // 2. Arrange: Prepare for swap
         uint256 amountIn = 10e18;
@@ -309,7 +310,9 @@ contract LikwidPairPositionTest is Test {
         uint256 amount0ToAdd = 100e18;
         uint256 amount1ToAdd = 100e18;
         token1.mint(address(this), amount1ToAdd);
-        pairPositionManager.addLiquidity{value: amount0ToAdd}(keyNative, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        pairPositionManager.addLiquidity{value: amount0ToAdd}(
+            keyNative, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000
+        );
 
         // 2. Arrange: Prepare for swap
         uint256 amountIn = 10e18;
@@ -368,7 +371,7 @@ contract LikwidPairPositionTest is Test {
         uint256 amount1ToAdd = 100e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
-        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         // 2. Arrange: Prepare for swap
         uint256 amountOut = 10e18;
@@ -431,7 +434,7 @@ contract LikwidPairPositionTest is Test {
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
         (uint256 tokenId, uint128 liquidityAdded) =
-            pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+            pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         // 2. Act & Assert: Expect revert when another user tries to remove liquidity
         vm.prank(address(0xDEADBEEF));
@@ -445,7 +448,8 @@ contract LikwidPairPositionTest is Test {
         uint256 amount1ToAdd = 10e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
-        (uint256 tokenId,) = pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        (uint256 tokenId,) =
+            pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         // 2. Act & Assert: Expect revert when another user tries to increase liquidity
         vm.prank(address(0xDEADBEEF));
@@ -462,7 +466,7 @@ contract LikwidPairPositionTest is Test {
         token1.mint(address(this), amount1ToAdd);
 
         (uint256 tokenId, uint128 liquidityAdded) =
-            pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+            pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         assertEq(token0.balanceOf(address(this)), 0, "User token0 balance should be 0 after adding liquidity");
         assertEq(token1.balanceOf(address(this)), 0, "User token1 balance should be 0 after adding liquidity");
@@ -499,7 +503,7 @@ contract LikwidPairPositionTest is Test {
         uint256 amount1ToAdd = 100e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
-        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         uint256 amountIn = 10e18;
         token0.mint(address(this), amountIn);
@@ -526,7 +530,7 @@ contract LikwidPairPositionTest is Test {
         token0.mint(address(this), initialAmount0);
         token1.mint(address(this), initialAmount1);
         (uint256 tokenId, uint128 initialLiquidity) =
-            pairPositionManager.addLiquidity(key, initialAmount0, initialAmount1, 0, 0, 10000);
+            pairPositionManager.addLiquidity(key, address(this), initialAmount0, initialAmount1, 0, 0, 10000);
 
         // 2. Arrange: Prepare for increasing liquidity
         uint256 increaseAmount0 = 5e18;
@@ -574,7 +578,8 @@ contract LikwidPairPositionTest is Test {
         uint256 amount1ToAdd = 10e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
-        (, uint128 liquidityAdded) = pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        (, uint128 liquidityAdded) =
+            pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         // 2. Act & Assert: Expect revert when removing liquidity with an invalid tokenId
         uint256 invalidTokenId = 999;
@@ -588,7 +593,7 @@ contract LikwidPairPositionTest is Test {
         uint256 amount1ToAdd = 10e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
-        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         // 2. Act & Assert: Expect revert when increasing liquidity with an invalid tokenId
         uint256 invalidTokenId = 999;
@@ -602,7 +607,7 @@ contract LikwidPairPositionTest is Test {
         uint256 amount1ToAdd = 100e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
-        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         // 2. Arrange: Prepare for swap
         uint256 amountIn = 10e18;
@@ -629,7 +634,7 @@ contract LikwidPairPositionTest is Test {
         uint256 amount1ToAdd = 100e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
-        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         // 2. Arrange: Prepare for swap
         uint256 amountOut = 10e18;
@@ -659,7 +664,7 @@ contract LikwidPairPositionTest is Test {
 
         // 2. Act & Assert
         vm.expectRevert(bytes4(keccak256("PriceSlippageTooHigh()")));
-        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, amount0ToAdd + 1, 0, 10000);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, amount0ToAdd + 1, 0, 10000);
     }
 
     function test_RevertIf_RemoveLiquidityWithTooHighAmountMin() public {
@@ -669,7 +674,7 @@ contract LikwidPairPositionTest is Test {
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
         (uint256 tokenId, uint128 liquidity) =
-            pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+            pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         // 2. Act & Assert
         vm.expectRevert(bytes4(keccak256("PriceSlippageTooHigh()")));
@@ -682,7 +687,8 @@ contract LikwidPairPositionTest is Test {
         uint256 amount1ToAdd = 10e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
-        (uint256 tokenId,) = pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        (uint256 tokenId,) =
+            pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         // 2. Arrange: Prepare for increasing liquidity
         uint256 increaseAmount0 = 5e18;

@@ -89,10 +89,12 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         uint256 amount1ToAdd = 20e18;
         token0.mint(address(this), amount0ToAdd);
         token1.mint(address(this), amount1ToAdd);
-        pairPositionManager.addLiquidity(key, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         token1.mint(address(this), amount1ToAdd);
-        pairPositionManager.addLiquidity{value: amount0ToAdd}(keyNative, amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        pairPositionManager.addLiquidity{value: amount0ToAdd}(
+            keyNative, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000
+        );
     }
 
     function unlockCallback(bytes calldata data) external returns (bytes memory) {

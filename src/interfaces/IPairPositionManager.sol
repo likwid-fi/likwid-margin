@@ -23,6 +23,7 @@ interface IPairPositionManager is IERC721 {
 
     /// @notice Creates a new liquidity position and adds liquidity to it.
     /// @param key The pool key of the position to create.
+    /// @param recipient The address that will receive the position NFT.
     /// @param amount0 The amount of token0 to add.
     /// @param amount1 The amount of token1 to add.
     /// @param amount0Min The minimum amount of token0 to deposit.
@@ -32,6 +33,7 @@ interface IPairPositionManager is IERC721 {
     /// @return liquidity The amount of liquidity minted for the position.
     function addLiquidity(
         PoolKey memory key,
+        address recipient,
         uint256 amount0,
         uint256 amount1,
         uint256 amount0Min,
