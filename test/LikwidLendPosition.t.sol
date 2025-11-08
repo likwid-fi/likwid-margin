@@ -98,7 +98,7 @@ contract LikwidLendPositionTest is Test {
         uint256 amount = 1e18;
         token0.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
 
         assertTrue(tokenId > 0);
 
@@ -111,9 +111,9 @@ contract LikwidLendPositionTest is Test {
         uint256 amount = 1e18;
         token0.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
 
-        lendPositionManager.deposit(tokenId, amount);
+        lendPositionManager.deposit(tokenId, amount, 0);
 
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
         assertTrue(position.lendAmount > 0);
@@ -124,11 +124,11 @@ contract LikwidLendPositionTest is Test {
         uint256 amount = 1e18;
         token0.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
 
         LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
 
-        lendPositionManager.withdraw(tokenId, amount / 2);
+        lendPositionManager.withdraw(tokenId, amount / 2, 0);
 
         LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
         console.log("positionAfter.lendAmount:", positionAfter.lendAmount);
@@ -140,20 +140,20 @@ contract LikwidLendPositionTest is Test {
         vm.startPrank(liquidator);
         token0.mint(liquidator, amount);
         token0.approve(address(lendPositionManager), amount);
-        uint256 tokenId02 = lendPositionManager.addLending(key, false, liquidator, amount);
+        uint256 tokenId02 = lendPositionManager.addLending(key, false, liquidator, amount, 0);
         assertNotEq(tokenId, tokenId02);
         LendPosition.State memory position02 = lendPositionManager.getPositionState(tokenId02);
         assertTrue(position02.lendAmount == amount);
         vm.stopPrank();
         vm.expectRevert(LendPosition.WithdrawOverflow.selector);
-        lendPositionManager.withdraw(tokenId, amount);
+        lendPositionManager.withdraw(tokenId, amount, 0);
     }
 
     function testGetPositionStateForZero() public {
         uint256 amount = 1e18;
         token0.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
 
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
 
@@ -182,7 +182,7 @@ contract LikwidLendPositionTest is Test {
         uint256 amountIn = 0.1e18;
         token1.mint(address(this), amountIn);
 
-        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
 
         LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
         assertEq(positionBefore.lendAmount, 0, "lendAmount should be zero");
@@ -227,7 +227,7 @@ contract LikwidLendPositionTest is Test {
         uint256 amountOut = 1e18;
         token1.mint(address(this), amountOut * 10);
 
-        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
 
         LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
         assertEq(positionBefore.lendAmount, 0, "positionBefore.lendAmount should be zero");
@@ -254,7 +254,7 @@ contract LikwidLendPositionTest is Test {
         LendPosition.State memory positionLast = lendPositionManager.getPositionState(tokenId);
         assertLt(positionAfter.lendAmount, positionLast.lendAmount, "lendAmount should increase due to interest");
 
-        lendPositionManager.withdraw(tokenId, type(uint256).max);
+        lendPositionManager.withdraw(tokenId, type(uint256).max, 0);
         positionLast = lendPositionManager.getPositionState(tokenId);
         assertEq(positionLast.lendAmount, 0, "lendAmount should be zero after withdraw all");
     }
@@ -281,7 +281,7 @@ contract LikwidLendPositionTest is Test {
         uint256 amountIn = 0.1e18;
         token0.mint(address(this), amountIn);
 
-        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), 0);
+        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), 0, 0);
 
         LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
         assertEq(positionBefore.lendAmount, 0, "lendAmount should be zero");
@@ -328,7 +328,7 @@ contract LikwidLendPositionTest is Test {
         uint256 amountOut = 1e18;
         token0.mint(address(this), amountOut * 10);
 
-        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), 0);
+        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), 0, 0);
 
         LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
         assertEq(positionBefore.lendAmount, 0, "positionBefore.lendAmount should be zero");
@@ -357,7 +357,7 @@ contract LikwidLendPositionTest is Test {
         uint256 amount = 1e18;
         token1.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), amount, 0);
 
         assertTrue(tokenId > 0);
 
@@ -372,9 +372,9 @@ contract LikwidLendPositionTest is Test {
         uint256 amount = 1e18;
         token1.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), 0);
+        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), 0, 0);
 
-        lendPositionManager.deposit(tokenId, amount);
+        lendPositionManager.deposit(tokenId, amount, 0);
 
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
         assertTrue(position.lendAmount > 0);
@@ -387,11 +387,11 @@ contract LikwidLendPositionTest is Test {
         uint256 amount = 1e18;
         token1.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), amount, 0);
 
         LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
 
-        lendPositionManager.withdraw(tokenId, amount / 2);
+        lendPositionManager.withdraw(tokenId, amount / 2, 0);
 
         LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
         console.log("positionAfter.lendAmount:", positionAfter.lendAmount);
@@ -403,13 +403,13 @@ contract LikwidLendPositionTest is Test {
         vm.startPrank(liquidator);
         token1.mint(liquidator, amount);
         token1.approve(address(lendPositionManager), amount);
-        uint256 tokenId02 = lendPositionManager.addLending(key, true, liquidator, amount);
+        uint256 tokenId02 = lendPositionManager.addLending(key, true, liquidator, amount, 0);
         assertNotEq(tokenId, tokenId02);
         LendPosition.State memory position02 = lendPositionManager.getPositionState(tokenId02);
         assertTrue(position02.lendAmount == amount);
         vm.stopPrank();
         vm.expectRevert(LendPosition.WithdrawOverflow.selector);
-        lendPositionManager.withdraw(tokenId, amount);
+        lendPositionManager.withdraw(tokenId, amount, 0);
 
         LikwidChecker.checkPoolReserves(vault, key);
     }
@@ -418,7 +418,7 @@ contract LikwidLendPositionTest is Test {
         uint256 amount = 1e18;
         token1.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(key, true, address(this), amount, 0);
 
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
 
@@ -427,7 +427,7 @@ contract LikwidLendPositionTest is Test {
 
     function testAddLendingForNative() public {
         uint256 amount = 1e18;
-        uint256 tokenId = lendPositionManager.addLending{value: amount}(keyNative, false, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending{value: amount}(keyNative, false, address(this), amount, 0);
 
         assertTrue(tokenId > 0);
 
@@ -442,7 +442,7 @@ contract LikwidLendPositionTest is Test {
         uint256 amount = 1e18;
         token1.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(keyNative, true, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(keyNative, true, address(this), amount, 0);
 
         assertTrue(tokenId > 0);
 
@@ -456,9 +456,9 @@ contract LikwidLendPositionTest is Test {
     function testDepositForNative() public {
         uint256 amount = 1e18;
 
-        uint256 tokenId = lendPositionManager.addLending(keyNative, false, address(this), 0);
+        uint256 tokenId = lendPositionManager.addLending(keyNative, false, address(this), 0, 0);
 
-        lendPositionManager.deposit{value: amount}(tokenId, amount);
+        lendPositionManager.deposit{value: amount}(tokenId, amount, 0);
 
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
         assertTrue(position.lendAmount > 0);
@@ -471,9 +471,9 @@ contract LikwidLendPositionTest is Test {
         uint256 amount = 1e18;
         token1.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(keyNative, true, address(this), 0);
+        uint256 tokenId = lendPositionManager.addLending(keyNative, true, address(this), 0, 0);
 
-        lendPositionManager.deposit(tokenId, amount);
+        lendPositionManager.deposit(tokenId, amount, 0);
 
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
         assertTrue(position.lendAmount > 0);
@@ -485,17 +485,17 @@ contract LikwidLendPositionTest is Test {
     function testWithdrawForNative() public {
         uint256 amount = 1e18;
 
-        uint256 tokenId = lendPositionManager.addLending{value: amount}(keyNative, false, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending{value: amount}(keyNative, false, address(this), amount, 0);
 
-        lendPositionManager.withdraw(tokenId, amount / 2);
+        lendPositionManager.withdraw(tokenId, amount / 2, 0);
 
         vm.expectRevert(ReservesLibrary.NotEnoughReserves.selector);
-        lendPositionManager.withdraw(tokenId, amount);
+        lendPositionManager.withdraw(tokenId, amount, 0);
 
-        lendPositionManager.addLending{value: amount}(keyNative, false, address(this), amount);
+        lendPositionManager.addLending{value: amount}(keyNative, false, address(this), amount, 0);
 
         vm.expectRevert(LendPosition.WithdrawOverflow.selector);
-        lendPositionManager.withdraw(tokenId, amount);
+        lendPositionManager.withdraw(tokenId, amount, 0);
 
         LikwidChecker.checkPoolReserves(vault, key);
     }
@@ -504,11 +504,11 @@ contract LikwidLendPositionTest is Test {
         uint256 amount = 1e18;
         token1.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(keyNative, true, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(keyNative, true, address(this), amount, 0);
 
         LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
 
-        lendPositionManager.withdraw(tokenId, amount / 2);
+        lendPositionManager.withdraw(tokenId, amount / 2, 0);
 
         LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
         console.log("positionAfter.lendAmount:", positionAfter.lendAmount);
@@ -520,20 +520,20 @@ contract LikwidLendPositionTest is Test {
         vm.startPrank(liquidator);
         token1.mint(liquidator, amount);
         token1.approve(address(lendPositionManager), amount);
-        uint256 tokenId02 = lendPositionManager.addLending(keyNative, true, liquidator, amount);
+        uint256 tokenId02 = lendPositionManager.addLending(keyNative, true, liquidator, amount, 0);
         assertNotEq(tokenId, tokenId02);
         LendPosition.State memory position02 = lendPositionManager.getPositionState(tokenId02);
         assertTrue(position02.lendAmount == amount);
         vm.stopPrank();
         vm.expectRevert(LendPosition.WithdrawOverflow.selector);
-        lendPositionManager.withdraw(tokenId, amount);
+        lendPositionManager.withdraw(tokenId, amount, 0);
 
         LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testGetPositionStateForNative() public {
         uint256 amount = 1e18;
-        uint256 tokenId = lendPositionManager.addLending{value: amount}(keyNative, false, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending{value: amount}(keyNative, false, address(this), amount, 0);
 
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
 
@@ -546,7 +546,7 @@ contract LikwidLendPositionTest is Test {
         uint256 amount = 1e18;
         token1.mint(address(this), amount);
 
-        uint256 tokenId = lendPositionManager.addLending(keyNative, true, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(keyNative, true, address(this), amount, 0);
 
         LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
 
@@ -558,7 +558,7 @@ contract LikwidLendPositionTest is Test {
     function testRevertIf_UnauthorizedAccess() public {
         uint256 amount = 1e18;
         token0.mint(address(this), amount);
-        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount);
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
 
         address unauthorizedUser = makeAddr("unauthorizedUser");
         vm.startPrank(unauthorizedUser);
@@ -566,10 +566,10 @@ contract LikwidLendPositionTest is Test {
         bytes4 expectedError = IBasePositionManager.NotOwner.selector;
 
         vm.expectRevert(expectedError);
-        lendPositionManager.deposit(tokenId, amount);
+        lendPositionManager.deposit(tokenId, amount, 0);
 
         vm.expectRevert(expectedError);
-        lendPositionManager.withdraw(tokenId, amount);
+        lendPositionManager.withdraw(tokenId, amount, 0);
 
         ILendPositionManager.SwapInputParams memory swapParams = ILendPositionManager.SwapInputParams({
             zeroForOne: false,

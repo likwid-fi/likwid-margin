@@ -58,9 +58,10 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
     }
 
     /// @inheritdoc ILendPositionManager
-    function addLending(PoolKey memory key, bool lendForOne, address recipient, uint256 amount)
+    function addLending(PoolKey memory key, bool lendForOne, address recipient, uint256 amount, uint256 deadline)
         external
         payable
+        ensure(deadline)
         returns (uint256 tokenId)
     {
         tokenId = _mintPosition(key, recipient);
@@ -88,12 +89,12 @@ contract LikwidLendPosition is ILendPositionManager, BasePositionManager {
     }
 
     /// @inheritdoc ILendPositionManager
-    function deposit(uint256 tokenId, uint256 amount) external payable {
+    function deposit(uint256 tokenId, uint256 amount, uint256 deadline) external payable ensure(deadline) {
         _deposit(msg.sender, msg.sender, tokenId, amount);
     }
 
     /// @inheritdoc ILendPositionManager
-    function withdraw(uint256 tokenId, uint256 amount) external {
+    function withdraw(uint256 tokenId, uint256 amount, uint256 deadline) external ensure(deadline) {
         _requireAuth(msg.sender, tokenId);
         PoolId poolId = poolIds[tokenId];
         bool lendForOne = lendDirections[tokenId];

@@ -38,8 +38,9 @@ interface ILendPositionManager is IERC721 {
     /// @param lendForOne The direction of lend.
     /// @param recipient The recipient of the position.
     /// @param amount The amount to lend.
+    /// @param deadline The deadline by which the transaction must be included to be valid.
     /// @return tokenId The ID of the new position.
-    function addLending(PoolKey memory key, bool lendForOne, address recipient, uint256 amount)
+    function addLending(PoolKey memory key, bool lendForOne, address recipient, uint256 amount, uint256 deadline)
         external
         payable
         returns (uint256 tokenId);
@@ -47,12 +48,14 @@ interface ILendPositionManager is IERC721 {
     /// @notice Deposits more funds into an existing lending position.
     /// @param tokenId The ID of the position to deposit into.
     /// @param amount The amount to deposit.
-    function deposit(uint256 tokenId, uint256 amount) external payable;
+    /// @param deadline The deadline by which the transaction must be included to be valid.
+    function deposit(uint256 tokenId, uint256 amount, uint256 deadline) external payable;
 
     /// @notice Withdraws funds from an existing lending position.
     /// @param tokenId The ID of the position to withdraw from.
     /// @param amount The amount to withdraw.
-    function withdraw(uint256 tokenId, uint256 amount) external;
+    /// @param deadline The deadline by which the transaction must be included to be valid.
+    function withdraw(uint256 tokenId, uint256 amount, uint256 deadline) external;
 
     struct SwapInputParams {
         bool zeroForOne;
