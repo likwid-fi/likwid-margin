@@ -133,15 +133,6 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         }
     }
 
-    function _checkMinLevelAfterUnlock(PoolId poolId, MarginPosition.State memory position, uint256 minLevel)
-        internal
-        view
-    {
-        Reserves pairReserves = StateLibrary.getPairReserves(vault, poolId);
-        Reserves truncatedReserves = StateLibrary.getTruncatedReserves(vault, poolId);
-        _checkMinLevelAfterUnlock(pairReserves, truncatedReserves, position, minLevel);
-    }
-
     function _processLost(PoolState memory state, MarginPosition.State memory position, uint256 lostAmount)
         internal
         pure
@@ -218,7 +209,9 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         bytes memory data = abi.encode(delta.action, callbackData);
         vault.unlock(data);
 
-        _checkMinLevelAfterUnlock(poolId, position, minLevel);
+        Reserves newPairReserves = StateLibrary.getPairReserves(vault, poolId);
+        Reserves newTruncatedReserves = StateLibrary.getTruncatedReserves(vault, poolId);
+        _checkMinLevelAfterUnlock(newPairReserves, newTruncatedReserves, position, minLevel);
 
         emit Margin(
             key.toId(),
