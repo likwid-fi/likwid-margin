@@ -383,7 +383,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
     }
 
     function testLiquidateBurn() public {
-        uint256 marginAmount = 0.1e18;
+        uint256 marginAmount = 0.1 ether;
         token0.mint(address(this), marginAmount);
 
         IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
@@ -400,7 +400,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         skip(1000);
         // Manipulate price to make position liquidatable
         // Swap a large amount of token0 for token1 to drive the price of token0 down
-        uint256 swapAmount = 5e18;
+        uint256 swapAmount = 5 ether;
         token0.mint(address(this), swapAmount);
 
         // Perform swap on the vault
@@ -446,7 +446,26 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after liquidation");
         assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after liquidation");
         assertEq(position.marginTotal, 0, "position.marginTotal should be 0 after liquidation");
+
+        swapAmount = token1.balanceOf(address(this));
+        swapParams = IVault.SwapParams({
+            zeroForOne: false,
+            amountSpecified: -int256(swapAmount),
+            useMirror: false,
+            salt: bytes32(0)
+        });
+        innerParamsSwap = abi.encode(key, swapParams);
+        dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
+        vault.unlock(dataSwap);
+        assertEq(token1.balanceOf(address(this)), 0, "All token1 should be swapped out");
+
         LikwidChecker.checkPoolReserves(vault, key);
+    }
+
+    function testLiquidateBurn_Batch() public {
+        for (uint256 i = 0; i < 2; i++) {
+            testLiquidateBurn();
+        }
     }
 
     function testAddMargin_MarginForOneTrue() public {

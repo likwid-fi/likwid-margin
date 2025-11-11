@@ -41,6 +41,8 @@ enum ReservesType {
 library ReservesLibrary {
     using SafeCast for *;
 
+    Reserves public constant ZERO_RESERVES = Reserves.wrap(0);
+
     struct UpdateParam {
         ReservesType _type;
         BalanceDelta delta;

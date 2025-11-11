@@ -178,7 +178,8 @@ library Pool {
         self.updateReserves(deltaParams);
 
         self.positions.get(params.owner, params.salt).update(finalLiquidityDelta, delta);
-        if (totalSupply == INITIAL_LIQUIDITY) {
+        // Initialize truncated reserves if not set
+        if (self.truncatedReserves == ReservesLibrary.ZERO_RESERVES) {
             self.truncatedReserves = self.pairReserves;
         }
     }

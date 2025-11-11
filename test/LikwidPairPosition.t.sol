@@ -115,6 +115,7 @@ contract LikwidPairPositionTest is Test {
         assertEq(reserves.reserve1(), amount1ToAdd, "Vault internal reserve1 should match");
         PoolState memory poolState = CurrentStateLibrary.getState(vault, key.toId());
         assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
+        assertTrue(poolState.truncatedReserves == reserves, "poolState.truncatedReserves should match reserves");
 
         PairPosition.State memory _positionState = pairPositionManager.getPositionState(tokenId);
         assertEq(_positionState.liquidity, liquidity, "positionState.liquidity == liquidity");
