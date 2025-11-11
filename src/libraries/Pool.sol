@@ -393,6 +393,8 @@ library Pool {
         uint256 timeElapsed = _slot0.lastUpdated().getTimeElapsed();
         if (timeElapsed == 0) return (0, 0, 0, 0);
 
+        uint24 protocolFee = _slot0.protocolFee(defaultProtocolFee);
+
         Reserves _realReserves = self.realReserves;
         Reserves _mirrorReserves = self.mirrorReserves;
         Reserves _interestReserves = self.interestReserves;
@@ -419,7 +421,7 @@ library Pool {
                 pairReserve: pairReserve0,
                 lendReserve: lendReserve0,
                 depositCumulativeLast: self.deposit0CumulativeLast,
-                protocolFee: _slot0.protocolFee(defaultProtocolFee)
+                protocolFee: protocolFee
             })
         );
 
@@ -441,7 +443,7 @@ library Pool {
                 pairReserve: pairReserve1,
                 lendReserve: lendReserve1,
                 depositCumulativeLast: self.deposit1CumulativeLast,
-                protocolFee: _slot0.protocolFee(defaultProtocolFee)
+                protocolFee: protocolFee
             })
         );
 
@@ -462,10 +464,7 @@ library Pool {
         }
         Reserves _truncatedReserves = self.truncatedReserves;
         self.truncatedReserves = PriceMath.transferReserves(
-            _truncatedReserves,
-            _pairReserves,
-            _slot0.lastUpdated().getTimeElapsed(),
-            marginState.maxPriceMovePerSecond()
+            _truncatedReserves, _pairReserves, timeElapsed, marginState.maxPriceMovePerSecond()
         );
         if (borrow0CumulativeBefore < borrow0CumulativeLast) {
             self.borrow0CumulativeLast = borrow0CumulativeLast;

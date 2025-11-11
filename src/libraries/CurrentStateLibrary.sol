@@ -92,8 +92,8 @@ library CurrentStateLibrary {
             mirrorReserve0 = result0.newMirrorReserve;
             pairReserve0 = result0.newPairReserve;
             lendReserve0 = result0.newLendReserve;
-            interestReserve0 = result0.newInterestReserve;
         }
+        interestReserve0 = result0.newInterestReserve;
         state.deposit0CumulativeLast = result0.newDepositCumulativeLast;
         state.borrow0CumulativeLast = borrow0CumulativeLast;
 
@@ -113,8 +113,8 @@ library CurrentStateLibrary {
             mirrorReserve1 = result1.newMirrorReserve;
             pairReserve1 = result1.newPairReserve;
             lendReserve1 = result1.newLendReserve;
-            interestReserve1 = result1.newInterestReserve;
         }
+        interestReserve1 = result1.newInterestReserve;
         state.borrow1CumulativeLast = borrow1CumulativeLast;
         state.deposit1CumulativeLast = result1.newDepositCumulativeLast;
 
