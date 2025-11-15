@@ -118,24 +118,28 @@ contract LikwidHelper is Owned {
         }
     }
 
-    function _getBorrowRate(PoolState memory state, bool marginForOne) internal pure returns (uint256) {
+    function _getBorrowRate(PoolState memory state, uint256 inputAmount, bool marginForOne)
+        internal
+        pure
+        returns (uint256)
+    {
         (uint128 realReserve0, uint128 realReserve1) = state.realReserves.reserves();
         (uint128 mirrorReserve0, uint128 mirrorReserve1) = state.mirrorReserves.reserves();
         uint256 borrowReserve;
         uint256 mirrorReserve;
         if (marginForOne) {
             mirrorReserve = mirrorReserve0;
-            borrowReserve = mirrorReserve0 + realReserve0;
+            borrowReserve = mirrorReserve0 + realReserve0 + inputAmount;
         } else {
             mirrorReserve = mirrorReserve1;
-            borrowReserve = mirrorReserve1 + realReserve1;
+            borrowReserve = mirrorReserve1 + realReserve1 + inputAmount;
         }
         return InterestMath.getBorrowRateByReserves(state.marginState, borrowReserve, mirrorReserve);
     }
 
     function getBorrowRate(PoolId poolId, bool marginForOne) external view returns (uint256) {
         PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
-        return _getBorrowRate(state, marginForOne);
+        return _getBorrowRate(state, 0, marginForOne);
     }
 
     function getPoolFees(PoolId poolId, bool zeroForOne, uint256 amountIn, uint256 amountOut)
@@ -209,7 +213,7 @@ contract LikwidHelper is Owned {
         PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
         (uint128 mirrorReserve0, uint128 mirrorReserve1) = _state.mirrorReserves.reserves();
         uint256 mirrorReserve = borrowForOne ? mirrorReserve1 : mirrorReserve0;
-        uint256 borrowRate = _getBorrowRate(_state, !borrowForOne);
+        uint256 borrowRate = _getBorrowRate(_state, inputAmount, !borrowForOne);
         (uint256 reserve0, uint256 reserve1) = _state.pairReserves.reserves();
         (uint256 lendReserve0, uint256 lendReserve1) = _state.lendReserves.reserves();
         uint256 flowReserve = borrowForOne ? reserve1 : reserve0;

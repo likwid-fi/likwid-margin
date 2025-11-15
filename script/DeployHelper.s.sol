@@ -22,7 +22,7 @@ contract DeployHelperScript is Script {
         address sender = msg.sender;
         console.log("sender:", sender);
 
-        IVault vault = IVault(0xC2107542bF154290934f3639452A3dd0C6077DcB);
+        IVault vault = IVault(0x0373b133bCb5bc9211CA6b3F027B4D8f4079C635);
         console.log("vault:", address(vault));
 
         helper = new LikwidHelper(owner, vault);
