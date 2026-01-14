@@ -561,7 +561,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         }
         PoolKey memory key = poolKeys[poolId];
         MarginBalanceDelta memory delta;
-        (uint128 reserve0, uint128 reserve1) = poolState.pairReserves.reserves();
+        (uint128 reserve0, uint128 reserve1) = poolState.truncatedReserves.reserves();
         (uint256 reserveBorrow, uint256 reserveMargin) =
             position.marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
 
