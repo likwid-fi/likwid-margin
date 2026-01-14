@@ -424,7 +424,13 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
         (uint256 releaseAmount, uint256 repayAmount, uint256 closeAmount, uint256 lostAmount, uint256 swapFeeAmount) =
         position.close(
-            poolState.pairReserves, poolState.lpFee, borrowCumulativeLast, depositCumulativeLast, 0, closeMillionth
+            poolState.pairReserves,
+            poolState.truncatedReserves,
+            poolState.lpFee,
+            borrowCumulativeLast,
+            depositCumulativeLast,
+            0,
+            closeMillionth
         );
         if (lostAmount > 0 || (closeAmountMin > 0 && closeAmount < closeAmountMin)) {
             InsufficientCloseReceived.selector.revertWith();
@@ -494,6 +500,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         uint256 rewardAmount = profit + protocolProfitAmount;
         (uint256 releaseAmount, uint256 repayAmount,, uint256 lostAmount, uint256 swapFeeAmount) = position.close(
             poolState.pairReserves,
+            poolState.truncatedReserves,
             poolState.lpFee,
             borrowCumulativeLast,
             depositCumulativeLast,

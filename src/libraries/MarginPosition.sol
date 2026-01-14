@@ -158,6 +158,7 @@ library MarginPosition {
     function close(
         State storage self,
         Reserves pairReserves,
+        Reserves truncatedReserves,
         uint24 lpFee,
         uint256 borrowCumulativeLast,
         uint256 depositCumulativeLast,
@@ -193,13 +194,14 @@ library MarginPosition {
             releaseAmount = Math.mulDiv(positionValue, closeMillionth, PerLibrary.ONE_MILLION);
             repayAmount = Math.mulDivRoundingUp(debtAmount, closeMillionth, PerLibrary.ONE_MILLION);
             uint256 payedAmount;
-            (payedAmount, swapFeeAmount) = SwapMath.getAmountOut(pairReserves, lpFee, !self.marginForOne, releaseAmount);
+            (payedAmount,, swapFeeAmount) =
+                SwapMath.getAmountOut(pairReserves, truncatedReserves, lpFee, !self.marginForOne, releaseAmount);
             if (releaseAmount < positionValue && repayAmount > payedAmount) {
                 PositionLiquidated.selector.revertWith();
             } else {
                 // releaseAmount == positionValue or repayAmount <= payedAmount
-                (uint256 costAmount, uint256 swapFees) =
-                    SwapMath.getAmountIn(pairReserves, lpFee, !self.marginForOne, repayAmount);
+                (uint256 costAmount,, uint256 swapFees) =
+                    SwapMath.getAmountIn(pairReserves, truncatedReserves, lpFee, !self.marginForOne, repayAmount);
                 if (releaseAmount > costAmount) {
                     closeAmount = releaseAmount - costAmount;
                     swapFeeAmount = swapFees;
