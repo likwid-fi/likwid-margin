@@ -183,9 +183,8 @@ contract LikwidHelper is Owned {
     function getMaxDecrease(uint256 tokenId) external view returns (uint256 maxAmount) {
         IMarginPositionManager manager = IMarginPositionManager(vault.marginController());
         MarginPosition.State memory _position = manager.getPositionState(tokenId);
-        IVault _vault = manager.vault();
         PoolId poolId = manager.poolIds(tokenId);
-        PoolState memory _state = CurrentStateLibrary.getState(_vault, poolId);
+        PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
         maxAmount = _getMaxDecrease(manager, _state, _position);
     }
 
@@ -198,9 +197,8 @@ contract LikwidHelper is Owned {
     function getLiquidateRepayAmount(uint256 tokenId) external view returns (uint256 repayAmount) {
         IMarginPositionManager manager = IMarginPositionManager(vault.marginController());
         MarginPosition.State memory _position = manager.getPositionState(tokenId);
-        IVault _vault = manager.vault();
         PoolId poolId = manager.poolIds(tokenId);
-        PoolState memory _state = CurrentStateLibrary.getState(_vault, poolId);
+        PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
         (uint128 pairReserve0, uint128 pairReserve1) = _state.pairReserves.reserves();
         (uint256 reserveBorrow, uint256 reserveMargin) =
             _position.marginForOne ? (pairReserve0, pairReserve1) : (pairReserve1, pairReserve0);
@@ -285,9 +283,8 @@ contract LikwidHelper is Owned {
     function checkMarginPositionLiquidate(uint256 tokenId) external view returns (bool liquidated) {
         IMarginPositionManager manager = IMarginPositionManager(vault.marginController());
         MarginPosition.State memory _position = manager.getPositionState(tokenId);
-        IVault _vault = manager.vault();
         PoolId poolId = manager.poolIds(tokenId);
-        PoolState memory _state = CurrentStateLibrary.getState(_vault, poolId);
+        PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
         uint256 level = _position.marginLevel(
             _state.truncatedReserves, _position.borrowCumulativeLast, _position.depositCumulativeLast
         );

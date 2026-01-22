@@ -5,6 +5,7 @@ import {PoolId} from "../types/PoolId.sol";
 import {IVault} from "../interfaces/IVault.sol";
 import {Slot0, Slot0Library} from "../types/Slot0.sol";
 import {Reserves, ReservesLibrary} from "../types/Reserves.sol";
+import {InsuranceFunds} from "../types/InsuranceFunds.sol";
 import {PairPosition} from "./PairPosition.sol";
 import {LendPosition} from "./LendPosition.sol";
 import {PositionLibrary} from "./PositionLibrary.sol";
@@ -42,8 +43,11 @@ library StateLibrary {
     uint256 internal constant TRUNCATED_RESERVES_OFFSET = 8;
     uint256 internal constant LEND_RESERVES_OFFSET = 9;
     uint256 internal constant INTEREST_RESERVES_OFFSET = 10;
-    uint256 internal constant POSITIONS_OFFSET = 11;
-    uint256 internal constant LEND_POSITIONS_OFFSET = 12;
+    uint256 internal constant PROTOCOL_INTEREST_RESERVES_OFFSET = 11;
+    uint256 internal constant INSURANCE_FUND_UPPER_LIMIT_OFFSET = 12;
+    uint256 internal constant INSURANCE_FUNDS_OFFSET = 13;
+    uint256 internal constant POSITIONS_OFFSET = 14;
+    uint256 internal constant LEND_POSITIONS_OFFSET = 15;
 
     /**
      * @notice Get the unpacked Slot0 of the pool.
@@ -55,11 +59,19 @@ library StateLibrary {
      * @return protocolFee The protocol fee of the pool.
      * @return lpFee The swap fee of the pool.
      * @return marginFee The margin fee of the pool.
+     * @return insuranceFundPercentage The insurance fund percentage of the pool.
      */
     function getSlot0(IVault vault, PoolId poolId)
         internal
         view
-        returns (uint128 totalSupply, uint32 lastUpdated, uint24 protocolFee, uint24 lpFee, uint24 marginFee)
+        returns (
+            uint128 totalSupply,
+            uint32 lastUpdated,
+            uint24 protocolFee,
+            uint24 lpFee,
+            uint24 marginFee,
+            uint8 insuranceFundPercentage
+        )
     {
         bytes32 stateSlot = _getPoolStateSlot(poolId);
 
@@ -72,6 +84,7 @@ library StateLibrary {
         uint256 value = uint256(vault.extsload(DEFAULT_PROTOCOL_FEE_SLOT));
         uint24 defaultProtocolFee = uint24(value >> 160);
         protocolFee = slot0.protocolFee(defaultProtocolFee);
+        insuranceFundPercentage = slot0.insuranceFundPercentage();
     }
 
     /**
@@ -169,6 +182,39 @@ library StateLibrary {
     function getInterestReserves(IVault vault, PoolId poolId) internal view returns (Reserves) {
         bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + INTEREST_RESERVES_OFFSET);
         return Reserves.wrap(uint256(vault.extsload(slot)));
+    }
+
+    /**
+     * @notice Retrieves the protocol interest reserves of a pool.
+     * @param vault The vault contract.
+     * @param poolId The ID of the pool.
+     * @return The packed protocol interest reserves of the pool.
+     */
+    function getProtocolInterestReserves(IVault vault, PoolId poolId) internal view returns (Reserves) {
+        bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + PROTOCOL_INTEREST_RESERVES_OFFSET);
+        return Reserves.wrap(uint256(vault.extsload(slot)));
+    }
+
+    /**
+     * @notice Retrieves the insurance fund upper limit of a pool.
+     * @param vault The vault contract.
+     * @param poolId The ID of the pool.
+     * @return The packed insurance fund upper limit of the pool.
+     */
+    function getInsuranceFundUpperLimit(IVault vault, PoolId poolId) internal view returns (Reserves) {
+        bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + INSURANCE_FUND_UPPER_LIMIT_OFFSET);
+        return Reserves.wrap(uint256(vault.extsload(slot)));
+    }
+
+    /**
+     * @notice Retrieves the insurance funds of a pool.
+     * @param vault The vault contract.
+     * @param poolId The ID of the pool.
+     * @return The packed insurance funds of the pool.
+     */
+    function getInsuranceFunds(IVault vault, PoolId poolId) internal view returns (InsuranceFunds) {
+        bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + INSURANCE_FUNDS_OFFSET);
+        return InsuranceFunds.wrap(uint256(vault.extsload(slot)).toInt256());
     }
 
     function getLastStageTimestamp(IVault vault, PoolId poolId) internal view returns (uint256) {

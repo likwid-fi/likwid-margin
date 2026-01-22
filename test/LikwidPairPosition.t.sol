@@ -15,6 +15,7 @@ import {StateLibrary} from "../src/libraries/StateLibrary.sol";
 import {CurrentStateLibrary} from "../src/libraries/CurrentStateLibrary.sol";
 import {PairPosition} from "../src/libraries/PairPosition.sol";
 import {Reserves} from "../src/types/Reserves.sol";
+import {InsuranceFunds} from "../src/types/InsuranceFunds.sol";
 import {MarginState} from "../src/types/MarginState.sol";
 import {PoolState} from "../src/types/PoolState.sol";
 
@@ -97,7 +98,7 @@ contract LikwidPairPositionTest is Test {
         assertEq(pairPositionManager.ownerOf(tokenId), address(this), "Owner of new token should be the caller");
         (Currency c0, Currency c1, uint24 storedFee, uint24 marginFee) =
             pairPositionManager.poolKeys(pairPositionManager.poolIds(tokenId));
-        PoolKey memory storedKey = PoolKey(c0, c1, storedFee, marginFee);
+        PoolKey memory storedKey = PoolKey({currency0: c0, currency1: c1, fee: storedFee, marginFee: marginFee});
         assertEq(PoolId.unwrap(storedKey.toId()), PoolId.unwrap(id), "Stored PoolKey should be correct");
         assertTrue(liquidity > 0, "Liquidity should be greater than zero");
 
@@ -153,7 +154,7 @@ contract LikwidPairPositionTest is Test {
         assertEq(pairPositionManager.ownerOf(tokenId), address(this), "Owner of new token should be the caller");
         (Currency c0, Currency c1, uint24 storedFee, uint24 marginFee) =
             pairPositionManager.poolKeys(pairPositionManager.poolIds(tokenId));
-        PoolKey memory storedKey = PoolKey(c0, c1, storedFee, marginFee);
+        PoolKey memory storedKey = PoolKey({currency0: c0, currency1: c1, fee: storedFee, marginFee: marginFee});
         assertEq(PoolId.unwrap(storedKey.toId()), PoolId.unwrap(id), "Stored PoolKey should be correct");
         assertTrue(liquidity > 0, "Liquidity should be greater than zero");
 
@@ -700,5 +701,86 @@ contract LikwidPairPositionTest is Test {
         // 3. Act & Assert
         vm.expectRevert(bytes4(keccak256("PriceSlippageTooHigh()")));
         pairPositionManager.increaseLiquidity(tokenId, increaseAmount0, increaseAmount1, increaseAmount0 + 1, 0, 10000);
+    }
+
+    function testDonateCurrency0() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 100e18;
+        uint256 amount1ToAdd = 100e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+
+        // 2. Arrange: Prepare donation
+        uint256 donationAmount = 10e18;
+        token0.mint(address(this), donationAmount);
+
+        // 3. Act
+        token0.approve(address(vault), donationAmount);
+        pairPositionManager.donate(key.toId(), donationAmount, 0, 10000);
+
+        // 4. Assert
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, key.toId());
+        assertEq(
+            uint128(insuranceFunds.amount0()),
+            donationAmount,
+            "Insurance funds for currency0 should reflect the donation"
+        );
+    }
+
+    function testDonateCurrency1() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 100e18;
+        uint256 amount1ToAdd = 100e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+
+        // 2. Arrange: Prepare donation
+        uint256 donationAmount = 10e18;
+        token1.mint(address(this), donationAmount);
+
+        // 3. Act
+        token1.approve(address(vault), donationAmount);
+        pairPositionManager.donate(key.toId(), 0, donationAmount, 10000);
+        // 4. Assert
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, key.toId());
+        assertEq(
+            uint128(insuranceFunds.amount1()),
+            donationAmount,
+            "Insurance funds for currency1 should reflect the donation"
+        );
+    }
+
+    function testDonateCurrencyAll() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 100e18;
+        uint256 amount1ToAdd = 100e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+
+        // 2. Arrange: Prepare donation
+        uint256 donationAmount0 = 10e18;
+        uint256 donationAmount1 = 11e18;
+        token0.mint(address(this), donationAmount0);
+        token1.mint(address(this), donationAmount1);
+
+        // 3. Act
+        token0.approve(address(vault), donationAmount0);
+        token1.approve(address(vault), donationAmount1);
+        pairPositionManager.donate(key.toId(), donationAmount0, donationAmount1, 10000);
+        // 4. Assert
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, key.toId());
+        assertEq(
+            uint128(insuranceFunds.amount0()),
+            donationAmount0,
+            "Insurance funds for currency0 should reflect the donation"
+        );
+        assertEq(
+            uint128(insuranceFunds.amount1()),
+            donationAmount1,
+            "Insurance funds for currency1 should reflect the donation"
+        );
     }
 }

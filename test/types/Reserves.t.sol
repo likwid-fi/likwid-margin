@@ -1,12 +1,17 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 import {Test} from "forge-std/Test.sol";
 import {Reserves, ReservesLibrary, toReserves} from "../../src/types/Reserves.sol";
 import {BalanceDelta, toBalanceDelta} from "../../src/types/BalanceDelta.sol";
 import {FixedPoint96} from "../../src/libraries/FixedPoint96.sol";
+import {SafeCast} from "src/libraries/SafeCast.sol";
 
 contract ReservesWrapper {
+    function add(Reserves a, Reserves b) external pure returns (Reserves) {
+        return a + b;
+    }
+
     function applyDelta(Reserves r, BalanceDelta delta) public pure returns (Reserves) {
         return r.applyDelta(delta);
     }
@@ -17,10 +22,57 @@ contract ReservesWrapper {
 }
 
 contract ReservesTest is Test {
-    ReservesWrapper wrapper;
+    using ReservesLibrary for Reserves;
+
+    ReservesWrapper internal wrapper;
 
     function setUp() public {
         wrapper = new ReservesWrapper();
+    }
+
+    function testAdd() public pure {
+        Reserves reserves1 = toReserves(100, 200);
+        Reserves reserves2 = toReserves(50, 75);
+        Reserves sum = reserves1 + reserves2;
+        (uint128 r0, uint128 r1) = sum.reserves();
+        assertEq(uint256(r0), 150);
+        assertEq(uint256(r1), 275);
+    }
+
+    function testAddWithOneZero() public pure {
+        Reserves reserves1 = toReserves(100, 200);
+        Reserves reserves2 = toReserves(0, 0);
+        Reserves sum = reserves1 + reserves2;
+        (uint128 r0, uint128 r1) = sum.reserves();
+        assertEq(uint256(r0), 100);
+        assertEq(uint256(r1), 200);
+    }
+
+    function testAddOverflowReserve0() public {
+        uint128 max = type(uint128).max;
+        Reserves reserves1 = toReserves(max, 1);
+        Reserves reserves2 = toReserves(1, 1);
+        vm.expectRevert(SafeCast.SafeCastOverflow.selector);
+        wrapper.add(reserves1, reserves2);
+    }
+
+    function testAddOverflowReserve1() public {
+        uint128 max = type(uint128).max;
+        Reserves reserves1 = toReserves(1, max);
+        Reserves reserves2 = toReserves(1, 1);
+        vm.expectRevert(SafeCast.SafeCastOverflow.selector);
+        wrapper.add(reserves1, reserves2);
+    }
+
+    function testAddWithLargeNumbers() public pure {
+        uint128 largeNum1 = 2 ** 120;
+        uint128 largeNum2 = 2 ** 121;
+        Reserves reserves1 = toReserves(largeNum1, largeNum2);
+        Reserves reserves2 = toReserves(largeNum2, largeNum1);
+        Reserves sum = reserves1 + reserves2;
+        (uint128 r0, uint128 r1) = sum.reserves();
+        assertEq(uint256(r0), uint256(largeNum1) + uint256(largeNum2));
+        assertEq(uint256(r1), uint256(largeNum1) + uint256(largeNum2));
     }
 
     function testToReserves() public pure {

@@ -25,7 +25,8 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
 
     enum Actions {
         MODIFY_LIQUIDITY,
-        SWAP
+        SWAP,
+        DONATE
     }
 
     function _unlockCallback(bytes calldata data) internal override returns (bytes memory) {
@@ -35,6 +36,8 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
             return _handleModifyLiquidity(params);
         } else if (action == Actions.SWAP) {
             return _handleSwap(params);
+        } else if (action == Actions.DONATE) {
+            return _handleDonate(params);
         } else {
             InvalidCallback.selector.revertWith();
         }
@@ -78,10 +81,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         PoolKey memory key = poolKeys[poolId];
 
         IVault.ModifyLiquidityParams memory params = IVault.ModifyLiquidityParams({
-            amount0: amount0,
-            amount1: amount1,
-            liquidityDelta: 0,
-            salt: bytes32(tokenId)
+            amount0: amount0, amount1: amount1, liquidityDelta: 0, salt: bytes32(tokenId)
         });
 
         bytes memory callbackData = abi.encode(sender, key, params, amount0Min, amount1Min);
@@ -119,10 +119,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         PoolKey memory key = poolKeys[poolId];
 
         IVault.ModifyLiquidityParams memory params = IVault.ModifyLiquidityParams({
-            amount0: 0,
-            amount1: 0,
-            liquidityDelta: -int128(liquidity),
-            salt: bytes32(tokenId)
+            amount0: 0, amount1: 0, liquidityDelta: -int128(liquidity), salt: bytes32(tokenId)
         });
 
         bytes memory callbackData = abi.encode(msg.sender, key, params, amount0Min, amount1Min);
@@ -160,10 +157,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         PoolKey memory key = poolKeys[params.poolId];
         int256 amountSpecified = -int256(params.amountIn);
         IVault.SwapParams memory swapParams = IVault.SwapParams({
-            zeroForOne: params.zeroForOne,
-            amountSpecified: amountSpecified,
-            useMirror: false,
-            salt: bytes32(0)
+            zeroForOne: params.zeroForOne, amountSpecified: amountSpecified, useMirror: false, salt: bytes32(0)
         });
         uint256 amount0Min = params.zeroForOne ? 0 : params.amountOutMin;
         uint256 amount1Min = params.zeroForOne ? params.amountOutMin : 0;
@@ -187,10 +181,7 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         PoolKey memory key = poolKeys[params.poolId];
         int256 amountSpecified = int256(params.amountOut);
         IVault.SwapParams memory swapParams = IVault.SwapParams({
-            zeroForOne: params.zeroForOne,
-            amountSpecified: amountSpecified,
-            useMirror: false,
-            salt: bytes32(0)
+            zeroForOne: params.zeroForOne, amountSpecified: amountSpecified, useMirror: false, salt: bytes32(0)
         });
         uint256 amount0Max = params.zeroForOne ? params.amountInMax : 0;
         uint256 amount1Max = params.zeroForOne ? 0 : params.amountInMax;
@@ -222,5 +213,28 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
             _processDelta(sender, recipient, key, delta, amount0Min, amount1Min, amount0Max, amount1Max);
 
         return abi.encode(swapFee, feeAmount, amount0, amount1);
+    }
+
+    function donate(PoolId poolId, uint256 amount0, uint256 amount1, uint256 deadline) external ensure(deadline) {
+        PoolKey memory key = poolKeys[poolId];
+        bytes memory callbackData = abi.encode(msg.sender, key, amount0, amount1);
+        bytes memory data = abi.encode(Actions.DONATE, callbackData);
+        vault.unlock(data);
+    }
+
+    function _handleDonate(bytes memory _data) internal returns (bytes memory) {
+        (address sender, PoolKey memory key, uint256 amount0, uint256 amount1) =
+            abi.decode(_data, (address, PoolKey, uint256, uint256));
+
+        (BalanceDelta delta) = vault.donate(key, amount0, amount1);
+
+        if (delta.amount0() < 0) {
+            key.currency0.settle(vault, sender, amount0, false);
+        }
+        if (delta.amount1() < 0) {
+            key.currency1.settle(vault, sender, amount1, false);
+        }
+
+        return abi.encode(amount0, amount1);
     }
 }

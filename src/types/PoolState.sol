@@ -21,4 +21,5 @@ struct PoolState {
     Reserves truncatedReserves;
     Reserves lendReserves;
     Reserves interestReserves;
+    Reserves protocolInterestReserves;
 }

@@ -38,8 +38,12 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
 
     /// @notice This will revert if the contract is locked
     modifier onlyWhenUnlocked() {
-        if (!unlocked) VaultLocked.selector.revertWith();
+        _onlyWhenUnlocked();
         _;
+    }
+
+    function _onlyWhenUnlocked() internal view {
+        if (!unlocked) VaultLocked.selector.revertWith();
     }
 
     constructor(address initialOwner) ProtocolFees(initialOwner) {
@@ -62,9 +66,8 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
     /// @inheritdoc IVault
     function initialize(PoolKey memory key) external noDelegateCall {
         if (key.currency0 >= key.currency1) {
-            CurrenciesOutOfOrderOrEqual.selector.revertWith(
-                Currency.unwrap(key.currency0), Currency.unwrap(key.currency1)
-            );
+            CurrenciesOutOfOrderOrEqual.selector
+                .revertWith(Currency.unwrap(key.currency0), Currency.unwrap(key.currency1));
         }
 
         PoolId id = key.toId();
@@ -157,6 +160,23 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         emit Swap(id, msg.sender, swapDelta.amount0(), swapDelta.amount1(), swapFee);
     }
 
+    function donate(PoolKey memory key, uint256 amount0, uint256 amount1)
+        external
+        onlyWhenUnlocked
+        noDelegateCall
+        returns (BalanceDelta delta)
+    {
+        PoolId poolId = key.toId();
+        Pool.State storage pool = _getAndUpdatePool(key);
+        pool.checkPoolInitialized();
+
+        delta = pool.donate(amount0, amount1);
+
+        _appendPoolBalanceDelta(key, msg.sender, delta);
+
+        emit Donate(poolId, msg.sender, amount0, amount1);
+    }
+
     /// @inheritdoc IVault
     function lend(PoolKey memory key, IVault.LendParams memory params)
         external
@@ -171,10 +191,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         uint256 depositCumulativeLast;
         (lendDelta, depositCumulativeLast) = pool.lend(
             Pool.LendParams({
-                sender: msg.sender,
-                lendForOne: params.lendForOne,
-                lendAmount: params.lendAmount,
-                salt: params.salt
+                sender: msg.sender, lendForOne: params.lendForOne, lendAmount: params.lendAmount, salt: params.salt
             })
         );
 
@@ -195,7 +212,10 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
 
         uint256 marginFeesToProtocol;
         uint256 swapFeesToProtocol;
-        (marginDelta, marginFeesToProtocol, swapFeesToProtocol) = pool.margin(params, defaultProtocolFee);
+        uint256 protocolInterest0;
+        uint256 protocolInterest1;
+        (marginDelta, marginFeesToProtocol, swapFeesToProtocol, protocolInterest0, protocolInterest1) =
+            pool.margin(params, defaultProtocolFee);
 
         bool isMargin = params.action == MarginActions.MARGIN;
         (Currency marginCurrency, Currency borrowCurrency) =
@@ -215,6 +235,13 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         }
         if (swapFeesToProtocol > 0) {
             _updateProtocolFees(swapCurrency, swapFeesToProtocol);
+        }
+
+        if (protocolInterest0 > 0) {
+            _updateProtocolFees(key.currency0, protocolInterest0);
+        }
+        if (protocolInterest1 > 0) {
+            _updateProtocolFees(key.currency1, protocolInterest1);
         }
 
         _appendPoolBalanceDelta(key, msg.sender, marginDelta);
@@ -331,19 +358,12 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         PoolId id = key.toId();
         _pool = _pools[id];
         _pool.checkPoolInitialized();
-        (uint256 pairInterest0, uint256 protocolInterest0, uint256 pairInterest1, uint256 protocolInterest1) =
-            _pool.updateInterests(marginState, defaultProtocolFee);
+        (uint256 pairInterest0, uint256 pairInterest1) = _pool.updateInterests(marginState, defaultProtocolFee);
         if (pairInterest0 > 0) {
             emit Fees(id, key.currency0, address(this), uint8(FeeTypes.INTERESTS), pairInterest0);
         }
         if (pairInterest1 > 0) {
             emit Fees(id, key.currency1, address(this), uint8(FeeTypes.INTERESTS), pairInterest1);
-        }
-        if (protocolInterest0 > 0) {
-            _updateProtocolFees(key.currency0, protocolInterest0);
-        }
-        if (protocolInterest1 > 0) {
-            _updateProtocolFees(key.currency1, protocolInterest1);
         }
     }
 

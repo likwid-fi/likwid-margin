@@ -34,14 +34,22 @@ abstract contract BasePositionManager is IBasePositionManager, ImmutableState, I
     {}
 
     modifier ensure(uint256 deadline) {
-        require(deadline == 0 || deadline >= block.timestamp, "EXPIRED");
+        _ensure(deadline);
         _;
+    }
+
+    function _ensure(uint256 deadline) internal view {
+        require(deadline == 0 || deadline >= block.timestamp, "EXPIRED");
     }
 
     /// @notice Only allow calls from the LikwidVault contract
     modifier onlyVault() {
-        if (msg.sender != address(vault)) revert NotVault();
+        _onlyVault();
         _;
+    }
+
+    function _onlyVault() internal view {
+        if (msg.sender != address(vault)) revert NotVault();
     }
 
     function _requireAuth(address spender, uint256 tokenId) internal view {
@@ -101,12 +109,8 @@ abstract contract BasePositionManager is IBasePositionManager, ImmutableState, I
             poolKeys[poolId] = key;
         } else {
             PoolKey memory existingKey = poolKeys[poolId];
-            if (
-                !(
-                    existingKey.currency0 == key.currency0 && existingKey.currency1 == key.currency1
-                        && existingKey.fee == key.fee
-                )
-            ) {
+            if (!(existingKey.currency0 == key.currency0 && existingKey.currency1 == key.currency1
+                        && existingKey.fee == key.fee)) {
                 MismatchedPoolKey.selector.revertWith();
             }
         }

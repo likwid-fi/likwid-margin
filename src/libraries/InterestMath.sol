@@ -65,6 +65,7 @@ library InterestMath {
         uint256 interestReserve;
         uint256 pairReserve;
         uint256 lendReserve;
+        uint256 protocolInterestReserve;
         uint256 depositCumulativeLast;
         uint24 protocolFee;
     }
@@ -74,8 +75,8 @@ library InterestMath {
         uint256 newPairReserve;
         uint256 newLendReserve;
         uint256 newInterestReserve;
+        uint256 newProtocolInterestReserve;
         uint256 newDepositCumulativeLast;
-        uint256 protocolInterest;
         uint256 pairInterest;
         bool changed;
     }
@@ -89,37 +90,51 @@ library InterestMath {
         result.newPairReserve = params.pairReserve;
         result.newLendReserve = params.lendReserve;
         result.newInterestReserve = params.interestReserve;
+        result.newProtocolInterestReserve = params.protocolInterestReserve;
         result.newDepositCumulativeLast = params.depositCumulativeLast;
+        uint256 totalMirrorReserveX96 = (params.mirrorReserve + params.protocolInterestReserve) * FixedPoint96.Q96;
 
-        if (params.mirrorReserve > 0 && params.borrowCumulativeLast > params.borrowCumulativeBefore) {
-            uint256 allInterest = Math.mulDiv(
-                params.mirrorReserve * FixedPoint96.Q96, params.borrowCumulativeLast, params.borrowCumulativeBefore
-            ) - params.mirrorReserve * FixedPoint96.Q96 + params.interestReserve;
+        if (totalMirrorReserveX96 > 0 && params.borrowCumulativeLast > params.borrowCumulativeBefore) {
+            uint256 allInterestX96 = Math.mulDiv(
+                totalMirrorReserveX96, params.borrowCumulativeLast, params.borrowCumulativeBefore
+            ) - totalMirrorReserveX96 + params.interestReserve;
+            uint256 poolPartInterestX96 = Math.mulDiv(
+                allInterestX96, params.mirrorReserve, params.mirrorReserve + params.protocolInterestReserve
+            );
+            uint256 protocolPartInterestX96 = allInterestX96 - poolPartInterestX96;
+            (uint256 protocolInterestX96,) =
+                ProtocolFeeLibrary.splitFee(params.protocolFee, FeeTypes.INTERESTS, poolPartInterestX96);
 
-            (uint256 protocolInterest,) =
-                ProtocolFeeLibrary.splitFee(params.protocolFee, FeeTypes.INTERESTS, allInterest);
+            if (protocolInterestX96 == 0 || protocolInterestX96 > FixedPoint96.Q96) {
+                uint256 grossAmount = allInterestX96 / FixedPoint96.Q96;
+                if (grossAmount == 0) {
+                    result.newInterestReserve = allInterestX96;
+                    return result;
+                }
+                uint256 remainder = allInterestX96 - grossAmount * FixedPoint96.Q96;
+                // Update protocol interest reserve
+                uint256 protocolInterest = (protocolInterestX96 + protocolPartInterestX96) / FixedPoint96.Q96;
+                result.newProtocolInterestReserve += protocolInterest;
+                // Subtract protocol interest from all interest
+                grossAmount -= protocolInterest;
 
-            if (protocolInterest == 0 || protocolInterest > FixedPoint96.Q96) {
-                uint256 allInterestNoQ96 = allInterest / FixedPoint96.Q96;
-                result.protocolInterest = protocolInterest / FixedPoint96.Q96;
-                allInterestNoQ96 -= result.protocolInterest;
                 result.pairInterest =
-                    Math.mulDiv(allInterestNoQ96, params.pairReserve, params.pairReserve + params.lendReserve);
+                    Math.mulDiv(grossAmount, params.pairReserve, params.pairReserve + params.lendReserve);
 
-                if (allInterestNoQ96 > result.pairInterest) {
-                    uint256 lendingInterest = allInterestNoQ96 - result.pairInterest;
+                if (grossAmount > result.pairInterest) {
+                    uint256 lendingInterest = grossAmount - result.pairInterest;
                     result.newDepositCumulativeLast = Math.mulDiv(
                         params.depositCumulativeLast, params.lendReserve + lendingInterest, params.lendReserve
                     );
                     result.newLendReserve += lendingInterest;
                 }
 
-                result.newMirrorReserve += allInterestNoQ96;
+                result.newMirrorReserve += grossAmount;
                 result.newPairReserve += result.pairInterest;
                 result.changed = true;
-                result.newInterestReserve = 0;
+                result.newInterestReserve = remainder;
             } else {
-                result.newInterestReserve = allInterest;
+                result.newInterestReserve = allInterestX96;
             }
         }
     }

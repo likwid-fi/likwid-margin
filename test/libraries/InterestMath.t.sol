@@ -7,20 +7,14 @@ import {InterestMath} from "../../src/libraries/InterestMath.sol";
 import {MarginState, MarginStateLibrary} from "../../src/types/MarginState.sol";
 import {Reserves, toReserves} from "../../src/types/Reserves.sol";
 
-
 contract InterestMathTest is Test {
     using MarginStateLibrary for MarginState;
 
     MarginState internal marginState;
 
     function setUp() public {
-        marginState = marginState
-            .setRateBase(20000)
-            .setUseMiddleLevel(700000)
-            .setUseHighLevel(900000)
-            .setMLow(500)
-            .setMMiddle(5000)
-            .setMHigh(50000);
+        marginState = marginState.setRateBase(20000).setUseMiddleLevel(700000).setUseHighLevel(900000).setMLow(500)
+            .setMMiddle(5000).setMHigh(50000);
     }
 
     function test_getBorrowRateByReserves() public view {
@@ -39,12 +33,7 @@ contract InterestMathTest is Test {
         Reserves mirrorReserve = toReserves(uint128(100e18), uint128(200e18));
 
         (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = InterestMath.getBorrowRateCumulativeLast(
-            timeElapsed,
-            rate0CumulativeBefore,
-            rate1CumulativeBefore,
-            marginState,
-            realReserves,
-            mirrorReserve
+            timeElapsed, rate0CumulativeBefore, rate1CumulativeBefore, marginState, realReserves, mirrorReserve
         );
 
         assertTrue(rate0CumulativeLast > rate0CumulativeBefore);
@@ -59,6 +48,7 @@ contract InterestMathTest is Test {
             interestReserve: 0,
             pairReserve: 500e18,
             lendReserve: 500e18,
+            protocolInterestReserve: 0,
             depositCumulativeLast: 1e18,
             protocolFee: 0
         });

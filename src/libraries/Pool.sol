@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "../types/BalanceDelta.sol";
+import {InsuranceFunds, toInsuranceFunds} from "../types/InsuranceFunds.sol";
 import {FeeTypes} from "../types/FeeTypes.sol";
 import {MarginActions} from "../types/MarginActions.sol";
 import {MarginState} from "../types/MarginState.sol";
@@ -54,6 +55,7 @@ library Pool {
     error InconsistentReserves();
 
     uint128 internal constant INITIAL_LIQUIDITY = 1000;
+    uint8 internal constant DEFAULT_INSURANCE_FUND_PERCENTAGE = 30; // 30%
 
     struct State {
         Slot0 slot0;
@@ -71,6 +73,10 @@ library Pool {
         Reserves truncatedReserves;
         Reserves lendReserves;
         Reserves interestReserves;
+        /// @notice The reserves allocated for protocol interest
+        Reserves protocolInterestReserves;
+        Reserves insuranceFundUpperLimit;
+        InsuranceFunds insuranceFunds;
         /// @notice The positions in the pool, mapped by a hash of the owner's address and a salt.
         mapping(bytes32 positionKey => PairPosition.State) positions;
         mapping(bytes32 positionKey => LendPosition.State) lendPositions;
@@ -97,8 +103,8 @@ library Pool {
             InvalidFee.selector.revertWith();
         }
 
-        self.slot0 =
-            Slot0.wrap(bytes32(0)).setLastUpdated(uint32(block.timestamp)).setLpFee(lpFee).setMarginFee(marginFee);
+        self.slot0 = Slot0.wrap(bytes32(0)).setLastUpdated(uint32(block.timestamp)).setLpFee(lpFee)
+            .setMarginFee(marginFee).setInsuranceFundPercentage(DEFAULT_INSURANCE_FUND_PERCENTAGE);
         self.borrow0CumulativeLast = FixedPoint96.Q96;
         self.borrow1CumulativeLast = FixedPoint96.Q96;
         self.deposit0CumulativeLast = FixedPoint96.Q96;
@@ -111,6 +117,14 @@ library Pool {
     function setProtocolFee(State storage self, uint24 protocolFee) internal {
         self.checkPoolInitialized();
         self.slot0 = self.slot0.setProtocolFee(protocolFee);
+    }
+
+    /// @notice Sets the insurance fund percentage for the pool
+    /// @param self The pool state
+    /// @param insuranceFundPercentage The new insurance fund percentage
+    function setInsuranceFundPercentage(State storage self, uint8 insuranceFundPercentage) internal {
+        self.checkPoolInitialized();
+        self.slot0 = self.slot0.setInsuranceFundPercentage(insuranceFundPercentage);
     }
 
     /// @notice Adds or removes liquidity from the pool
@@ -271,10 +285,20 @@ library Pool {
             } else {
                 depositCumulativeLast = self.deposit0CumulativeLast;
             }
-            self.lendPositions.get(params.sender, params.zeroForOne, params.salt).update(
-                params.zeroForOne, depositCumulativeLast, lendDelta
-            );
+            self.lendPositions.get(params.sender, params.zeroForOne, params.salt)
+                .update(params.zeroForOne, depositCumulativeLast, lendDelta);
         }
+        self.updateReserves(deltaParams);
+    }
+
+    function donate(State storage self, uint256 amount0, uint256 amount1) internal returns (BalanceDelta delta) {
+        if (amount0 == 0 && amount1 == 0) {
+            return BalanceDelta.wrap(0);
+        }
+        self.insuranceFunds = self.insuranceFunds + toInsuranceFunds(amount0.toInt128(), amount1.toInt128());
+        delta = toBalanceDelta(-amount0.toInt128(), -amount1.toInt128());
+        ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](1);
+        deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, delta);
         self.updateReserves(deltaParams);
     }
 
@@ -313,14 +337,19 @@ library Pool {
         deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.LEND, lendDelta);
         self.updateReserves(deltaParams);
 
-        self.lendPositions.get(params.sender, params.lendForOne, params.salt).update(
-            params.lendForOne, depositCumulativeLast, lendDelta
-        );
+        self.lendPositions.get(params.sender, params.lendForOne, params.salt)
+            .update(params.lendForOne, depositCumulativeLast, lendDelta);
     }
 
     function margin(State storage self, MarginBalanceDelta memory params, uint24 defaultProtocolFee)
         internal
-        returns (BalanceDelta marginDelta, uint256 marginToProtocol, uint256 swapToProtocol)
+        returns (
+            BalanceDelta marginDelta,
+            uint256 marginToProtocol,
+            uint256 swapToProtocol,
+            uint256 protocolInterest0,
+            uint256 protocolInterest1
+        )
     {
         if (
             (params.action != MarginActions.CLOSE && params.action != MarginActions.LIQUIDATE_BURN)
@@ -329,6 +358,7 @@ library Pool {
             InsufficientAmount.selector.revertWith();
         }
         Slot0 _slot0 = self.slot0;
+        marginDelta = params.marginDelta;
         bool isMargin = params.action == MarginActions.MARGIN;
         if (isMargin) {
             (marginToProtocol, params.marginFeeAmount) = ProtocolFeeLibrary.splitFee(
@@ -337,14 +367,7 @@ library Pool {
         }
         (swapToProtocol, params.swapFeeAmount) =
             ProtocolFeeLibrary.splitFee(_slot0.protocolFee(defaultProtocolFee), FeeTypes.SWAP, params.swapFeeAmount);
-        marginDelta = params.marginDelta;
-        if (params.debtDepositCumulativeLast > 0) {
-            if (params.marginForOne) {
-                self.deposit0CumulativeLast = params.debtDepositCumulativeLast;
-            } else {
-                self.deposit1CumulativeLast = params.debtDepositCumulativeLast;
-            }
-        }
+
         BalanceDelta protocolDelta;
         int128 amount0Delta;
         int128 amount1Delta;
@@ -369,7 +392,8 @@ library Pool {
         deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, params.pairDelta + protocolDelta);
         deltaParams[2] = ReservesLibrary.UpdateParam(ReservesType.LEND, params.lendDelta);
         deltaParams[3] = ReservesLibrary.UpdateParam(ReservesType.MIRROR, params.mirrorDelta);
-        self.updateReserves(deltaParams);
+        (protocolInterest0, protocolInterest1) =
+            self.updateReserves(deltaParams, InsuranceFunds.wrap(BalanceDelta.unwrap(params.fundsDelta)));
     }
 
     /// @notice Reverts if the given pool has not been initialized
@@ -382,22 +406,21 @@ library Pool {
     /// @param self The pool state.
     /// @param marginState The current rate state.
     /// @return pairInterest0 The interest earned by the pair for token0.
-    /// @return protocolInterest0 The interest earned by the protocol for token0.
     /// @return pairInterest1 The interest earned by the pair for token1.
-    /// @return protocolInterest1 The interest earned by the protocol for token1.
     function updateInterests(State storage self, MarginState marginState, uint24 defaultProtocolFee)
         internal
-        returns (uint256 pairInterest0, uint256 protocolInterest0, uint256 pairInterest1, uint256 protocolInterest1)
+        returns (uint256 pairInterest0, uint256 pairInterest1)
     {
         Slot0 _slot0 = self.slot0;
         uint256 timeElapsed = _slot0.lastUpdated().getTimeElapsed();
-        if (timeElapsed == 0) return (0, 0, 0, 0);
+        if (timeElapsed == 0) return (0, 0);
 
         uint24 protocolFee = _slot0.protocolFee(defaultProtocolFee);
 
         Reserves _realReserves = self.realReserves;
         Reserves _mirrorReserves = self.mirrorReserves;
         Reserves _interestReserves = self.interestReserves;
+        Reserves _protocolInterestReserves = self.protocolInterestReserves;
         Reserves _pairReserves = self.pairReserves;
         Reserves _lendReserves = self.lendReserves;
 
@@ -411,6 +434,7 @@ library Pool {
         (uint256 lendReserve0, uint256 lendReserve1) = _lendReserves.reserves();
         (uint256 mirrorReserve0, uint256 mirrorReserve1) = _mirrorReserves.reserves();
         (uint256 interestReserve0, uint256 interestReserve1) = _interestReserves.reserves();
+        (uint256 protocolInterestReserve0, uint256 protocolInterestReserve1) = _protocolInterestReserves.reserves();
 
         InterestMath.InterestUpdateResult memory result0 = InterestMath.updateInterestForOne(
             InterestMath.InterestUpdateParams({
@@ -420,6 +444,7 @@ library Pool {
                 interestReserve: interestReserve0,
                 pairReserve: pairReserve0,
                 lendReserve: lendReserve0,
+                protocolInterestReserve: protocolInterestReserve0,
                 depositCumulativeLast: self.deposit0CumulativeLast,
                 protocolFee: protocolFee
             })
@@ -430,8 +455,8 @@ library Pool {
             pairReserve0 = result0.newPairReserve;
             lendReserve0 = result0.newLendReserve;
             self.deposit0CumulativeLast = result0.newDepositCumulativeLast;
+            protocolInterestReserve0 = result0.newProtocolInterestReserve;
             pairInterest0 = result0.pairInterest;
-            protocolInterest0 = result0.protocolInterest;
         }
 
         InterestMath.InterestUpdateResult memory result1 = InterestMath.updateInterestForOne(
@@ -442,6 +467,7 @@ library Pool {
                 interestReserve: interestReserve1,
                 pairReserve: pairReserve1,
                 lendReserve: lendReserve1,
+                protocolInterestReserve: protocolInterestReserve1,
                 depositCumulativeLast: self.deposit1CumulativeLast,
                 protocolFee: protocolFee
             })
@@ -452,8 +478,8 @@ library Pool {
             pairReserve1 = result1.newPairReserve;
             lendReserve1 = result1.newLendReserve;
             self.deposit1CumulativeLast = result1.newDepositCumulativeLast;
+            protocolInterestReserve1 = result1.newProtocolInterestReserve;
             pairInterest1 = result1.pairInterest;
-            protocolInterest1 = result1.protocolInterest;
         }
 
         if (result0.changed || result1.changed) {
@@ -461,6 +487,8 @@ library Pool {
             self.pairReserves = _pairReserves;
             self.mirrorReserves = toReserves(mirrorReserve0.toUint128(), mirrorReserve1.toUint128());
             self.lendReserves = toReserves(lendReserve0.toUint128(), lendReserve1.toUint128());
+            self.protocolInterestReserves =
+                toReserves(protocolInterestReserve0.toUint128(), protocolInterestReserve1.toUint128());
         }
         Reserves _truncatedReserves = self.truncatedReserves;
         self.truncatedReserves = PriceMath.transferReserves(
@@ -483,22 +511,82 @@ library Pool {
     /// @notice Updates the reserves of the pool.
     /// @param self The pool state.
     /// @param params An array of parameters for updating the reserves.
-    function updateReserves(State storage self, ReservesLibrary.UpdateParam[] memory params) internal {
-        if (params.length == 0) return;
+    /// @param fundsDelta The input change in insurance funds.
+    function updateReserves(State storage self, ReservesLibrary.UpdateParam[] memory params, InsuranceFunds fundsDelta)
+        internal
+        returns (uint256 protocolInterest0, uint256 protocolInterest1)
+    {
+        if (params.length == 0) return (protocolInterest0, protocolInterest1);
         Reserves _realReserves = self.realReserves;
         Reserves _mirrorReserves = self.mirrorReserves;
         Reserves _pairReserves = self.pairReserves;
         Reserves _lendReserves = self.lendReserves;
-        BalanceDelta _overflowDelta;
-        BalanceDelta _realOddDelta;
+        Reserves _protocolInterestReserves = self.protocolInterestReserves;
+        BalanceDelta _realOddDelta = BalanceDelta.wrap(0);
         for (uint256 i = 0; i < params.length; i++) {
             ReservesType _type = params[i]._type;
             BalanceDelta delta = params[i].delta;
             if (_type == ReservesType.REAL) {
                 _realReserves = _realReserves.applyDelta(delta);
             } else if (_type == ReservesType.MIRROR) {
-                (_mirrorReserves, _overflowDelta) = _mirrorReserves.applyDelta(delta, true);
-                _realOddDelta = _realOddDelta + _overflowDelta;
+                int128 d0 = delta.amount0();
+                int128 d1 = delta.amount1();
+
+                (uint128 mirror0, uint128 mirror1) = _mirrorReserves.reserves();
+                (uint128 pInterest0, uint128 pInterest1) = _protocolInterestReserves.reserves();
+
+                if (d0 > 0) {
+                    uint256 amount = uint256(uint128(d0));
+                    uint256 total = uint256(mirror0) + pInterest0;
+                    if (total > 0) {
+                        if (amount <= total) {
+                            uint256 mirrorPart = Math.mulDiv(amount, mirror0, total);
+                            uint256 pInterestPart = amount - mirrorPart;
+                            _realOddDelta = _realOddDelta + toBalanceDelta(pInterestPart.toInt128(), 0);
+                            mirror0 -= mirrorPart.toUint128();
+                            pInterest0 -= pInterestPart.toUint128();
+                            protocolInterest0 += pInterestPart;
+                        } else {
+                            _realOddDelta = _realOddDelta + toBalanceDelta(pInterest0.toInt128(), 0);
+                            fundsDelta = fundsDelta + toInsuranceFunds((amount - total).toInt128(), 0);
+                            protocolInterest0 += pInterest0;
+                            mirror0 = 0;
+                            pInterest0 = 0;
+                        }
+                    } else {
+                        _realOddDelta = _realOddDelta + toBalanceDelta(d0, 0);
+                    }
+                } else if (d0 < 0) {
+                    mirror0 += uint128(-d0);
+                }
+
+                if (d1 > 0) {
+                    uint256 amount = uint256(uint128(d1));
+                    uint256 total = uint256(mirror1) + pInterest1;
+                    if (total > 0) {
+                        if (amount <= total) {
+                            uint256 mirrorPart = Math.mulDiv(amount, mirror1, total);
+                            uint256 pInterestPart = amount - mirrorPart;
+                            _realOddDelta = _realOddDelta + toBalanceDelta(0, pInterestPart.toInt128());
+                            mirror1 -= mirrorPart.toUint128();
+                            pInterest1 -= pInterestPart.toUint128();
+                            protocolInterest1 += pInterestPart;
+                        } else {
+                            _realOddDelta = _realOddDelta + toBalanceDelta(0, pInterest1.toInt128());
+                            fundsDelta = fundsDelta + toInsuranceFunds(0, (amount - total).toInt128());
+                            protocolInterest1 += pInterest1;
+                            mirror1 = 0;
+                            pInterest1 = 0;
+                        }
+                    } else {
+                        _realOddDelta = _realOddDelta + toBalanceDelta(0, d1);
+                    }
+                } else if (d1 < 0) {
+                    mirror1 += uint128(-d1);
+                }
+
+                _mirrorReserves = toReserves(mirror0, mirror1);
+                _protocolInterestReserves = toReserves(pInterest0, pInterest1);
             } else if (_type == ReservesType.PAIR) {
                 _pairReserves = _pairReserves.applyDelta(delta);
             } else if (_type == ReservesType.LEND) {
@@ -506,29 +594,109 @@ library Pool {
             }
         }
         _realReserves = _realReserves.applyDelta(_realOddDelta);
-        _checkReservesConsistent(_realReserves, _mirrorReserves, _pairReserves, _lendReserves);
+        Reserves _insuranceFundUpperLimit = self.insuranceFundUpperLimit;
+
+        self._updateReservesConsistent(
+            _realReserves, _mirrorReserves, _pairReserves, _lendReserves, _insuranceFundUpperLimit, fundsDelta
+        );
+
+        self.protocolInterestReserves = _protocolInterestReserves;
+    }
+
+    function updateReserves(State storage self, ReservesLibrary.UpdateParam[] memory params)
+        internal
+        returns (uint256 protocolInterest0, uint256 protocolInterest1)
+    {
+        return self.updateReserves(params, InsuranceFunds.wrap(0));
+    }
+
+    function _distributeExcessFunds(
+        int128 currentFund,
+        int128 fundDelta,
+        uint256 limit,
+        uint128 pairReserve,
+        uint128 lendReserve
+    ) private pure returns (int128 newFund, uint128 pairAdd, uint128 lendAdd) {
+        newFund = currentFund + fundDelta;
+        if (fundDelta > 0 && newFund > 0) {
+            uint128 newFundU = uint128(newFund);
+            if (newFundU > limit) {
+                uint256 excess = newFundU - limit;
+                uint128 fundDeltaU = uint128(fundDelta);
+                if (excess > fundDeltaU) {
+                    excess = fundDeltaU;
+                }
+
+                uint256 totalReserve = uint256(pairReserve) + uint256(lendReserve);
+                if (totalReserve > 0) {
+                    uint256 pairAddAmount = Math.mulDiv(excess, pairReserve, totalReserve);
+                    pairAdd = pairAddAmount.toUint128();
+                    lendAdd = (excess - pairAddAmount).toUint128();
+                }
+                newFund = (newFundU - excess).toInt128();
+            }
+        }
+    }
+
+    function _updateReservesConsistent(
+        State storage self,
+        Reserves _realReserves,
+        Reserves _mirrorReserves,
+        Reserves _pairReserves,
+        Reserves _lendReserves,
+        Reserves _insuranceFundUpperLimit,
+        InsuranceFunds fundsDelta
+    ) internal {
+        InsuranceFunds _insuranceFunds = self.insuranceFunds;
+        uint8 insuranceFundPercentage = self.slot0.insuranceFundPercentage();
+        Reserves reserves0 = _realReserves + _mirrorReserves;
+        (uint256 r0, uint256 r1) = reserves0.reserves();
+        (uint256 limit0, uint256 limit1) = _insuranceFundUpperLimit.reserves();
+        uint256 newInsuranceFundLimit0 = Math.mulDiv(r0, insuranceFundPercentage, 100);
+        uint256 newInsuranceFundLimit1 = Math.mulDiv(r1, insuranceFundPercentage, 100);
+        if (limit0 < newInsuranceFundLimit0) {
+            limit0 = newInsuranceFundLimit0;
+        }
+        if (limit1 < newInsuranceFundLimit1) {
+            limit1 = newInsuranceFundLimit1;
+        }
+        _insuranceFundUpperLimit = toReserves(limit0.toUint128(), limit1.toUint128());
+
+        (int128 insuranceFund0, int128 insuranceFund1) = _insuranceFunds.unpack();
+        (int128 fundsDelta0, int128 fundsDelta1) = fundsDelta.unpack();
+
+        (uint128 pairR0, uint128 pairR1) = _pairReserves.reserves();
+        (uint128 lendR0, uint128 lendR1) = _lendReserves.reserves();
+
+        uint128 pairAdd0;
+        uint128 lendAdd0;
+        (insuranceFund0, pairAdd0, lendAdd0) =
+            _distributeExcessFunds(insuranceFund0, fundsDelta0, limit0, pairR0, lendR0);
+
+        uint128 pairAdd1;
+        uint128 lendAdd1;
+        (insuranceFund1, pairAdd1, lendAdd1) =
+            _distributeExcessFunds(insuranceFund1, fundsDelta1, limit1, pairR1, lendR1);
+
+        if (pairAdd0 > 0 || pairAdd1 > 0) {
+            _pairReserves = _pairReserves + toReserves(pairAdd0, pairAdd1);
+        }
+        if (lendAdd0 > 0 || lendAdd1 > 0) {
+            _lendReserves = _lendReserves + toReserves(lendAdd0, lendAdd1);
+        }
+
+        _insuranceFunds = toInsuranceFunds(insuranceFund0, insuranceFund1);
+        Reserves reserves1 = (_pairReserves + _lendReserves).applyFunds(_insuranceFunds);
+        if (reserves0 != reserves1) {
+            InconsistentReserves.selector.revertWith();
+        }
+
         self.realReserves = _realReserves;
         self.mirrorReserves = _mirrorReserves;
         self.pairReserves = _pairReserves;
         self.lendReserves = _lendReserves;
-    }
 
-    function _checkReservesConsistent(
-        Reserves _realReserves,
-        Reserves _mirrorReserves,
-        Reserves _pairReserves,
-        Reserves _lendReserves
-    ) internal pure {
-        (uint256 realReserve0, uint256 realReserve1) = _realReserves.reserves();
-        (uint256 mirrorReserve0, uint256 mirrorReserve1) = _mirrorReserves.reserves();
-        (uint256 pairReserve0, uint256 pairReserve1) = _pairReserves.reserves();
-        (uint256 lendReserve0, uint256 lendReserve1) = _lendReserves.reserves();
-        uint256 part01 = realReserve0 + mirrorReserve0;
-        uint256 part02 = pairReserve0 + lendReserve0;
-        uint256 part11 = realReserve1 + mirrorReserve1;
-        uint256 part12 = pairReserve1 + lendReserve1;
-        if (part01 != part02 || part11 != part12) {
-            InconsistentReserves.selector.revertWith();
-        }
+        self.insuranceFundUpperLimit = _insuranceFundUpperLimit;
+        self.insuranceFunds = _insuranceFunds;
     }
 }

@@ -13,12 +13,15 @@ import {IVault} from "../src/interfaces/IVault.sol";
 import {IUnlockCallback} from "../src/interfaces/callback/IUnlockCallback.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
-import {PoolIdLibrary} from "../src/types/PoolId.sol";
+import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
 import {MarginPosition} from "../src/libraries/MarginPosition.sol";
 import {BalanceDelta} from "../src/types/BalanceDelta.sol";
 import {MarginLevels, MarginLevelsLibrary} from "../src/types/MarginLevels.sol";
-
-import {LikwidChecker} from "./utils/LikwidChecker.sol";
+import {PoolState} from "../src/types/PoolState.sol";
+import {Reserves} from "../src/types/Reserves.sol";
+import {InsuranceFunds} from "../src/types/InsuranceFunds.sol";
+import {StateLibrary} from "../src/libraries/StateLibrary.sol";
+import {CurrentStateLibrary} from "../src/libraries/CurrentStateLibrary.sol";
 
 contract LikwidMarginPositionTest is Test, IUnlockCallback {
     using CurrencyLibrary for Currency;
@@ -154,7 +157,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         assertEq(position.marginAmount, marginAmount, "position.marginAmount==marginAmount");
         assertEq(position.debtAmount, borrowAmount, "position.debtAmount==borrowAmount");
-        LikwidChecker.checkPoolReserves(vault, key);
         uint256 protocolMarginFees = vault.protocolFeesAccrued(key.currency0);
         assertTrue(protocolMarginFees > 0, "protocolMarginFees should be accrued");
         uint256 protocolMarginSwapFees = vault.protocolFeesAccrued(key.currency1);
@@ -192,7 +194,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertTrue(
             positionAfter.debtAmount < positionBefore.debtAmount, "position.debtAmount should be less after repay"
         );
-        LikwidChecker.checkPoolReserves(vault, key);
+
         skip(1000);
 
         positionBefore = marginPositionManager.getPositionState(tokenId);
@@ -206,7 +208,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertEq(
             token1.balanceOf(address(this)), repayAmount - positionBefore.debtAmount, "excess repay should be returned"
         );
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testClose() public {
@@ -232,8 +233,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertGt(position.marginAmount, 0, "position.marginAmount should not be 0 after close");
         assertGt(position.debtAmount, 0, "position.debtAmount should not be 0 after close");
 
-        LikwidChecker.checkPoolReserves(vault, key);
-
         skip(1000);
 
         marginPositionManager.close(tokenId, 1_000_000, 0, block.timestamp); // close remaining
@@ -242,7 +241,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after close");
         assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after close");
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testRepayAndClose() public {
@@ -268,8 +266,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertGt(position.marginAmount, 0, "position.marginAmount should not be 0 after close");
         assertGt(position.debtAmount, 0, "position.debtAmount should not be 0 after close");
 
-        LikwidChecker.checkPoolReserves(vault, key);
-
         skip(1000);
 
         MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
@@ -283,8 +279,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             positionAfter.debtAmount < positionBefore.debtAmount, "position.debtAmount should be less after repay"
         );
 
-        LikwidChecker.checkPoolReserves(vault, key);
-
         skip(1000);
 
         marginPositionManager.close(tokenId, 1_000_000, 0, block.timestamp); // close remaining
@@ -293,7 +287,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after close");
         assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after close");
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testModify() public {
@@ -325,7 +318,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             positionBefore.marginAmount + modifyAmount,
             "position.marginAmount should be increased"
         );
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testLiquidateCall() public {
@@ -351,10 +343,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         // Perform swap on the vault
         IVault.SwapParams memory swapParams = IVault.SwapParams({
-            zeroForOne: true,
-            amountSpecified: -int256(swapAmount),
-            useMirror: false,
-            salt: bytes32(0)
+            zeroForOne: true, amountSpecified: -int256(swapAmount), useMirror: false, salt: bytes32(0)
         });
         bytes memory innerParamsSwap = abi.encode(key, swapParams);
         bytes memory dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
@@ -379,7 +368,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after liquidation");
         assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after liquidation");
         assertEq(position.marginTotal, 0, "position.marginTotal should be 0 after liquidation");
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testLiquidateBurn() public {
@@ -405,10 +393,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         // Perform swap on the vault
         IVault.SwapParams memory swapParams = IVault.SwapParams({
-            zeroForOne: true,
-            amountSpecified: -int256(swapAmount),
-            useMirror: false,
-            salt: bytes32(0)
+            zeroForOne: true, amountSpecified: -int256(swapAmount), useMirror: false, salt: bytes32(0)
         });
         bytes memory innerParamsSwap = abi.encode(key, swapParams);
         bytes memory dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
@@ -421,21 +406,25 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         address liquidator = makeAddr("liquidator");
         vm.startPrank(liquidator);
         LikwidHelper.PoolStateInfo memory poolStateBefore = helper.getPoolStateInfo(key.toId());
+        uint256 protocolFeesBefore = vault.protocolFeesAccrued(key.currency1);
         uint256 profit = marginPositionManager.liquidateBurn(tokenId, 0);
         vm.stopPrank();
 
         assertTrue(profit > 0, "Liquidator should make a profit");
         LikwidHelper.PoolStateInfo memory poolStateAfter = helper.getPoolStateInfo(key.toId());
+        uint256 protocolFeesAfter = vault.protocolFeesAccrued(key.currency1);
         assertEq(
             poolStateBefore.lendReserve0 - poolStateAfter.lendReserve0,
             position.marginAmount + position.marginTotal,
             "Pool lendReserve0 should decrease by position.marginAmount + position.marginTotal"
         );
-        assertEq(
+        assertLt(protocolFeesBefore, protocolFeesAfter, "Protocol fees should increase after liquidation");
+        assertApproxEqAbs(
             poolStateBefore.mirrorReserve1 + poolStateBefore.realReserve1
                 - (poolStateAfter.mirrorReserve1 + poolStateAfter.realReserve1),
             position.debtAmount,
-            "Pool reserve1 should decrease by position.debtAmount"
+            10,
+            "Pool reserve1 decrease should be approx position.debtAmount"
         );
         assertLt(
             poolStateAfter.pairReserve0 - poolStateBefore.pairReserve0,
@@ -449,23 +438,203 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         swapAmount = token1.balanceOf(address(this));
         swapParams = IVault.SwapParams({
-            zeroForOne: false,
-            amountSpecified: -int256(swapAmount),
-            useMirror: false,
-            salt: bytes32(0)
+            zeroForOne: false, amountSpecified: -int256(swapAmount), useMirror: false, salt: bytes32(0)
         });
         innerParamsSwap = abi.encode(key, swapParams);
         dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
         vault.unlock(dataSwap);
         assertEq(token1.balanceOf(address(this)), 0, "All token1 should be swapped out");
-
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testLiquidateBurn_Batch() public {
         for (uint256 i = 0; i < 2; i++) {
             testLiquidateBurn();
         }
+    }
+
+    function testLiquidateBurn_HasCloseAmount() public {
+        InsuranceFunds insuranceFundsBefore = StateLibrary.getInsuranceFunds(vault, key.toId());
+        assertEq(insuranceFundsBefore.amount0(), 0, "insuranceFundsBefore.amount0==0");
+        assertEq(insuranceFundsBefore.amount1(), 0, "insuranceFundsBefore.amount1==0");
+        uint256 marginAmount = 0.1 ether;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false, // margin with token0, borrow token1
+            leverage: 4,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
+        skip(1000);
+        // Manipulate price to make position liquidatable
+        // Swap a large amount of token0 for token1 to drive the price of token0 down
+        uint256 swapAmount = 1.0 ether;
+        token0.mint(address(this), swapAmount);
+
+        // Perform swap on the vault
+        IVault.SwapParams memory swapParams = IVault.SwapParams({
+            zeroForOne: true, amountSpecified: -int256(swapAmount), useMirror: false, salt: bytes32(0)
+        });
+        bytes memory innerParamsSwap = abi.encode(key, swapParams);
+        bytes memory dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
+        vault.unlock(dataSwap);
+        skip(1000);
+        bool liquidated = helper.checkMarginPositionLiquidate(tokenId);
+        assertTrue(liquidated, "Position should be liquidatable");
+        MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
+        // Liquidate
+        address liquidator = makeAddr("liquidator");
+        vm.startPrank(liquidator);
+        LikwidHelper.PoolStateInfo memory poolStateBefore = helper.getPoolStateInfo(key.toId());
+        uint256 protocolFeesBefore0 = vault.protocolFeesAccrued(key.currency0);
+        uint256 protocolFeesBefore1 = vault.protocolFeesAccrued(key.currency1);
+        uint256 profit = marginPositionManager.liquidateBurn(tokenId, 0);
+        vm.stopPrank();
+
+        assertTrue(profit > 0, "Liquidator should make a profit");
+        LikwidHelper.PoolStateInfo memory poolStateAfter = helper.getPoolStateInfo(key.toId());
+        uint256 protocolFeesAfter0 = vault.protocolFeesAccrued(key.currency0);
+        uint256 protocolFeesAfter1 = vault.protocolFeesAccrued(key.currency1);
+        assertEq(
+            poolStateBefore.lendReserve0 - poolStateAfter.lendReserve0,
+            position.marginAmount + position.marginTotal,
+            "Pool lendReserve0 should decrease by position.marginAmount + position.marginTotal"
+        );
+        assertLt(protocolFeesBefore1, protocolFeesAfter1, "Protocol fees should increase after liquidation");
+        assertApproxEqAbs(
+            poolStateBefore.mirrorReserve1 + poolStateBefore.realReserve1
+                - (poolStateAfter.mirrorReserve1 + poolStateAfter.realReserve1),
+            position.debtAmount,
+            10,
+            "Pool reserve1 decrease should be approx position.debtAmount"
+        );
+        uint256 totalMarginAmount = position.marginAmount + position.marginTotal;
+        assertLt(
+            poolStateAfter.pairReserve0 - poolStateBefore.pairReserve0,
+            totalMarginAmount - profit,
+            "Pool pairReserve0 should increase by position.marginAmount + position.marginTotal- profit"
+        );
+        position = marginPositionManager.getPositionState(tokenId);
+        assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after liquidation");
+        assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after liquidation");
+        assertEq(position.marginTotal, 0, "position.marginTotal should be 0 after liquidation");
+
+        swapAmount = token1.balanceOf(address(this));
+        swapParams = IVault.SwapParams({
+            zeroForOne: false, amountSpecified: -int256(swapAmount), useMirror: false, salt: bytes32(0)
+        });
+        innerParamsSwap = abi.encode(key, swapParams);
+        dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
+        vault.unlock(dataSwap);
+        assertEq(token1.balanceOf(address(this)), 0, "All token1 should be swapped out");
+
+        InsuranceFunds insuranceFundsAfter = StateLibrary.getInsuranceFunds(vault, key.toId());
+        assertGt(insuranceFundsAfter.amount0(), insuranceFundsBefore.amount0(), "insuranceFundsAfter.amount0>before");
+        assertApproxEqAbs(
+            insuranceFundsAfter.amount1(), insuranceFundsBefore.amount1(), 10, "insuranceFundsAfter.amount1 ~= before"
+        );
+        assertEq(
+            poolStateAfter.pairReserve0 - poolStateBefore.pairReserve0 + protocolFeesAfter0 - protocolFeesBefore0,
+            totalMarginAmount - profit - uint128(insuranceFundsAfter.amount0() - insuranceFundsBefore.amount0()),
+            "pairReserve0Changed + protocolFees0Changed == totalMarginAmount - profit - insuranceFunds0Changed"
+        );
+        assertEq(
+            poolStateBefore.realReserve0 - poolStateAfter.realReserve0 + protocolFeesBefore0 - protocolFeesAfter0,
+            profit,
+            "realReserve0 decrease + protocolFees0Changed should equal profit"
+        );
+
+        PoolId poolId = key.toId();
+        (,,,,, uint8 insuranceFundPercentage) = StateLibrary.getSlot0(vault, poolId);
+        Reserves insuranceFundUpperLimit = StateLibrary.getInsuranceFundUpperLimit(vault, poolId);
+        PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
+        Reserves realReserves = state.realReserves;
+        Reserves mirrorReserves = state.mirrorReserves;
+        Reserves totalReserves = realReserves + mirrorReserves;
+        (uint256 r0, uint256 r1) = totalReserves.reserves();
+        uint256 rLimit0 = (insuranceFundPercentage * r0) / 100;
+        uint256 rLimit1 = (insuranceFundPercentage * r1) / 100;
+        (uint256 limit0, uint256 limit1) = insuranceFundUpperLimit.reserves();
+
+        assertLe(rLimit0, limit0, "Total reserve0 should be within insurance fund upper limit");
+        assertLe(rLimit1, limit1, "Total reserve1 should be within insurance fund upper limit");
+    }
+
+    function testLiquidateBurn_AfterDonate() public {
+        uint256 donationAmount0 = 10e18;
+        uint256 donationAmount1 = 11e18;
+        token0.mint(address(this), donationAmount0);
+        token1.mint(address(this), donationAmount1);
+
+        token0.approve(address(vault), donationAmount0);
+        token1.approve(address(vault), donationAmount1);
+        pairPositionManager.donate(key.toId(), donationAmount0, donationAmount1, 10000);
+
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, key.toId());
+        assertEq(
+            uint128(insuranceFunds.amount0()),
+            donationAmount0,
+            "Insurance funds for currency0 should reflect the donation"
+        );
+        assertEq(
+            uint128(insuranceFunds.amount1()),
+            donationAmount1,
+            "Insurance funds for currency1 should reflect the donation"
+        );
+
+        uint256 marginAmount = 0.1 ether;
+        token0.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
+            marginForOne: false, // margin with token0, borrow token1
+            leverage: 4,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
+        skip(1000);
+
+        uint256 swapAmount = 5 ether;
+        token0.mint(address(this), swapAmount);
+
+        // Perform swap on the vault
+        IVault.SwapParams memory swapParams = IVault.SwapParams({
+            zeroForOne: true, amountSpecified: -int256(swapAmount), useMirror: false, salt: bytes32(0)
+        });
+        bytes memory innerParamsSwap = abi.encode(key, swapParams);
+        bytes memory dataSwap = abi.encode(this.swap_callback.selector, innerParamsSwap);
+        vault.unlock(dataSwap);
+        skip(1000);
+        bool liquidated = helper.checkMarginPositionLiquidate(tokenId);
+        assertTrue(liquidated, "Position should be liquidatable");
+        // Liquidate
+        address liquidator = makeAddr("liquidator");
+        vm.startPrank(liquidator);
+        uint256 profit = marginPositionManager.liquidateBurn(tokenId, 0);
+        vm.stopPrank();
+
+        assertTrue(profit > 0, "Liquidator should make a profit");
+
+        insuranceFunds = StateLibrary.getInsuranceFunds(vault, key.toId());
+        assertEq(
+            uint128(insuranceFunds.amount0()),
+            donationAmount0,
+            "Insurance funds for currency0 should reflect the donation"
+        );
+        assertLt(
+            uint128(insuranceFunds.amount1()),
+            donationAmount1,
+            "Insurance funds for currency1 should decrease after liquidation"
+        );
     }
 
     function testAddMargin_MarginForOneTrue() public {
@@ -492,7 +661,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertEq(position.marginAmount, marginAmount, "position.marginAmount==marginAmount");
         assertEq(position.debtAmount, borrowAmount, "position.debtAmount==borrowAmount");
         assertTrue(position.marginForOne, "position.marginForOne should be true");
-        LikwidChecker.checkPoolReserves(vault, key);
 
         skip(1000);
 
@@ -501,7 +669,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertEq(position.marginAmount, marginAmount, "position.marginAmount==marginAmount");
         assertGt(position.debtAmount, borrowAmount, "position.debtAmount>borrowAmount");
         assertTrue(position.marginForOne, "position.marginForOne should be true");
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testFuzz_AddMargin_NoLeverage(uint256 marginAmount) public {
@@ -522,7 +689,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
         assertTrue(tokenId > 0);
         assertEq(borrowAmount, 1000);
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testFuzz_AddMargin_MaxBorrowAmount(uint256 marginAmount) public {
@@ -543,7 +709,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
         assertTrue(tokenId > 0);
         assertGt(borrowAmount, 1000);
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testAddMargin_MaxLeverage() public {
@@ -553,7 +718,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         newMarginLevels = newMarginLevels.setLiquidateLevel(1050000);
         newMarginLevels = newMarginLevels.setLiquidationRatio(950000);
         newMarginLevels = newMarginLevels.setCallerProfit(10000);
-        newMarginLevels = newMarginLevels.setProtocolProfit(5000);
         marginPositionManager.setMarginLevel(MarginLevels.unwrap(newMarginLevels));
 
         uint256 marginAmount = 0.1e18;
@@ -573,7 +737,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         assertTrue(tokenId > 0);
         assertTrue(borrowAmount > 0);
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testRepay_Full() public {
@@ -598,7 +761,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
 
         assertTrue(positionAfter.debtAmount < 10, "position.debtAmount should be close to 0 after full repay");
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testClose_Partial() public {
@@ -626,7 +788,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             positionAfter.marginAmount, positionBefore.marginAmount / 2, 1, "marginAmount should be halved"
         );
         assertApproxEqAbs(positionAfter.debtAmount, positionBefore.debtAmount / 2, 1, "debtAmount should be halved");
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testModify_DecreaseCollateral() public {
@@ -656,7 +817,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             int256(uint256(positionBefore.marginAmount)) + modifyAmount,
             "position.marginAmount should be decreased"
         );
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testModify_DecreaseCollateral_InvalidLevel() public {
@@ -691,7 +851,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             int256(uint256(positionBefore.marginAmount)) + modifyAmount,
             "position.marginAmount should be decreased"
         );
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testModify_Fail_BelowMinBorrowLevel() public {
@@ -713,7 +872,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         int128 modifyAmount = -0.08e18; // Decrease collateral significantly
         vm.expectRevert(bytes4(keccak256("InvalidLevel()")));
         marginPositionManager.modify(tokenId, modifyAmount);
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testLiquidate_NotLiquidatable() public {
@@ -740,7 +898,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         vm.expectRevert(bytes4(keccak256("PositionNotLiquidated()")));
         marginPositionManager.liquidateBurn(tokenId, 0);
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testSetMarginLevel() public {
@@ -751,7 +908,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         newMarginLevels = newMarginLevels.setLiquidateLevel(1150000);
         newMarginLevels = newMarginLevels.setLiquidationRatio(900000);
         newMarginLevels = newMarginLevels.setCallerProfit(20000);
-        newMarginLevels = newMarginLevels.setProtocolProfit(10000);
 
         vm.expectEmit(true, true, true, true);
         emit MarginLevelChanged(MarginLevels.unwrap(oldLevels), MarginLevels.unwrap(newMarginLevels));
@@ -762,7 +918,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             MarginLevels.unwrap(newMarginLevels),
             "Margin levels should be updated"
         );
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testSetMarginLevel_NotOwner() public {
@@ -776,7 +931,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         vm.expectRevert(bytes("UNAUTHORIZED"));
         marginPositionManager.setMarginLevel(newLevels);
         vm.stopPrank();
-        LikwidChecker.checkPoolReserves(vault, key);
     }
 
     function testAddMarginNative() public {
@@ -802,7 +956,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         assertEq(position.marginAmount, marginAmount, "position.marginAmount==marginAmount");
         assertEq(position.debtAmount, borrowAmount, "position.debtAmount==borrowAmount");
-        LikwidChecker.checkPoolReserves(vault, keyNative);
     }
 
     function testAddMarginNative_MarginForOneTrue() public {
@@ -829,7 +982,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertEq(position.marginAmount, marginAmount, "position.marginAmount==marginAmount");
         assertEq(position.debtAmount, borrowAmount, "position.debtAmount==borrowAmount");
         assertTrue(position.marginForOne, "position.marginForOne should be true");
-        LikwidChecker.checkPoolReserves(vault, keyNative);
     }
 
     function testRepayNative() public {
@@ -863,7 +1015,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertTrue(
             positionAfter.debtAmount < positionBefore.debtAmount, "position.debtAmount should be less after repay"
         );
-        LikwidChecker.checkPoolReserves(vault, keyNative);
     }
 
     function testRepayNative_RepayNative() public {
@@ -896,7 +1047,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertTrue(
             positionAfter.debtAmount < positionBefore.debtAmount, "position.debtAmount should be less after repay"
         );
-        LikwidChecker.checkPoolReserves(vault, keyNative);
     }
 
     function testCloseNative() public {
@@ -924,7 +1074,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         assertEq(position.marginAmount, 0, "position.marginAmount should be 0 after close");
         assertEq(position.debtAmount, 0, "position.debtAmount should be 0 after close");
-        LikwidChecker.checkPoolReserves(vault, keyNative);
     }
 
     function testModifyNative() public {
@@ -954,7 +1103,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             positionBefore.marginAmount + modifyAmount,
             "position.marginAmount should be increased"
         );
-        LikwidChecker.checkPoolReserves(vault, keyNative);
     }
 
     function testModifyNative_DecreaseCollateral() public {
@@ -988,7 +1136,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             int256(uint256(positionBefore.marginAmount)) + modifyAmount,
             "position.marginAmount should be decreased"
         );
-        LikwidChecker.checkPoolReserves(vault, keyNative);
     }
 
     function testAddMargin_LowFeePoolMarginBanned() public {

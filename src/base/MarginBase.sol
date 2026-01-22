@@ -5,18 +5,21 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 
 import {PoolId} from "../types/PoolId.sol";
 import {MarginState} from "../types/MarginState.sol";
+import {PoolKey} from "../types/PoolKey.sol";
 import {DoubleEndedQueue} from "../libraries/external/DoubleEndedQueue.sol";
 import {IMarginBase} from "../interfaces/IMarginBase.sol";
 import {Math} from "../libraries/Math.sol";
 import {SafeCast} from "../libraries/SafeCast.sol";
 import {StageMath} from "../libraries/StageMath.sol";
 import {CustomRevert} from "../libraries/CustomRevert.sol";
+import {Pool} from "../libraries/Pool.sol";
 
 abstract contract MarginBase is IMarginBase, Owned {
     using SafeCast for *;
     using StageMath for uint256;
     using CustomRevert for bytes4;
     using DoubleEndedQueue for DoubleEndedQueue.Uint256Deque;
+    using Pool for Pool.State;
 
     error LiquidityLocked();
 
@@ -26,8 +29,12 @@ abstract contract MarginBase is IMarginBase, Owned {
     mapping(PoolId id => DoubleEndedQueue.Uint256Deque) private liquidityLockedQueue;
 
     modifier onlyManager() {
-        if (msg.sender != marginController) Unauthorized.selector.revertWith();
+        _onlyManager();
         _;
+    }
+
+    function _onlyManager() internal view {
+        if (msg.sender != marginController) Unauthorized.selector.revertWith();
     }
 
     uint24 private constant MAX_PRICE_MOVE_PER_SECOND = 3000; // 0.3%/second
@@ -163,6 +170,12 @@ abstract contract MarginBase is IMarginBase, Owned {
         }
     }
 
+    /// @dev abstract internal function to allow the ProtocolFees contract to access the lock
+    function _isUnlocked() internal virtual returns (bool);
+
+    /// @dev abstract internal function to allow the ProtocolFees contract to access pool state
+    function _getAndUpdatePool(PoolKey memory key) internal virtual returns (Pool.State storage);
+
     // ******************** OWNER CALL ********************
     /// @notice Sets the margin controller address.
     /// @dev Only the owner can call this function.
@@ -178,5 +191,11 @@ abstract contract MarginBase is IMarginBase, Owned {
     function setMarginState(MarginState newMarginState) external onlyOwner {
         marginState = newMarginState;
         emit MarginStateUpdated(newMarginState);
+    }
+
+    function setInsuranceFundPercentage(PoolKey memory key, uint8 insuranceFundPercentage) external onlyOwner {
+        Pool.State storage pool = _getAndUpdatePool(key);
+        pool.setInsuranceFundPercentage(insuranceFundPercentage);
+        emit InsuranceFundPercentageUpdated(key.toId(), insuranceFundPercentage);
     }
 }

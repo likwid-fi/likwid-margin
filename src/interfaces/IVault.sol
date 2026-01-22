@@ -68,6 +68,13 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
     /// @param fee The swap fee in hundredths of a bip
     event Swap(PoolId indexed id, address indexed sender, int128 amount0, int128 amount1, uint24 fee);
 
+    /// @notice Emitted for donations
+    /// @param id The abi encoded hash of the pool key struct for the pool that was donated to
+    /// @param sender The address that initiated the donate call
+    /// @param amount0 The amount donated in currency0
+    /// @param amount1 The amount donated in currency1
+    event Donate(PoolId indexed id, address indexed sender, uint256 amount0, uint256 amount1);
+
     /// @notice Emitted for fees
     /// @param id The abi encoded hash of the pool key struct for the pool that was modified
     /// @param currency The currency of the fee
@@ -133,6 +140,13 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
     function swap(PoolKey memory key, SwapParams memory params)
         external
         returns (BalanceDelta swapDelta, uint24 swapFee, uint256 feeAmount);
+
+    /// @notice Donate the given currency amounts to the insurance funds of a pool
+    /// @param key The key of the pool to donate to
+    /// @param amount0 The amount of currency0 to donate
+    /// @param amount1 The amount of currency1 to donate
+    /// @return BalanceDelta The delta of the caller after the donate
+    function donate(PoolKey memory key, uint256 amount0, uint256 amount1) external returns (BalanceDelta);
 
     struct LendParams {
         /// False if lend token0,true if lend token1

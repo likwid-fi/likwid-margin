@@ -11,6 +11,8 @@ import {PoolState} from "../../src/types/PoolState.sol";
 import {Currency, CurrencyLibrary} from "../../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../../src/types/PoolId.sol";
 import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
+import {Reserves, toReserves} from "../../src/types/Reserves.sol";
+import {InsuranceFunds} from "../../src/types/InsuranceFunds.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
 import {CurrentStateLibrary} from "../../src/libraries/CurrentStateLibrary.sol";
 import {StageMath} from "../../src/libraries/StageMath.sol";
@@ -60,10 +62,7 @@ contract StateLibraryTest is Test, IUnlockCallback {
         token1.mint(address(this), initialLiquidity);
 
         IVault.ModifyLiquidityParams memory mlParams = IVault.ModifyLiquidityParams({
-            amount0: initialLiquidity,
-            amount1: initialLiquidity,
-            liquidityDelta: 0,
-            salt: bytes32(0)
+            amount0: initialLiquidity, amount1: initialLiquidity, liquidityDelta: 0, salt: bytes32(0)
         });
 
         bytes memory innerData = abi.encode(poolKey, mlParams);
@@ -170,13 +169,39 @@ contract StateLibraryTest is Test, IUnlockCallback {
     }
 
     function testGetSlot0() public view {
-        (uint128 totalSupply, uint32 lastUpdated, uint24 protocolFee, uint24 lpFee, uint24 marginFee) =
-            StateLibrary.getSlot0(vault, poolId);
+        (
+            uint128 totalSupply,
+            uint32 lastUpdated,
+            uint24 protocolFee,
+            uint24 lpFee,
+            uint24 marginFee,
+            uint8 insuranceFundPercentage
+        ) = StateLibrary.getSlot0(vault, poolId);
         assertEq(protocolFee, vault.defaultProtocolFee(), "defaultProtocolFee should match protocolFee");
         assertEq(lpFee, 3000, "lpFee should be 3000");
         assertEq(marginFee, 3000, "marginFee should be 3000");
         assertEq(lastUpdated, 1, "lastUpdated should be 1");
         assertEq(totalSupply, initialLiquidity + 1000, "totalSupply should match initialLiquidity+1000");
+        assertEq(insuranceFundPercentage, 30, "insuranceFundPercentage should be 30");
+    }
+
+    function testGetNewReserves() public view {
+        Reserves protocolInterestReserves = StateLibrary.getProtocolInterestReserves(vault, poolId);
+        Reserves insuranceFundUpperLimit = StateLibrary.getInsuranceFundUpperLimit(vault, poolId);
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, poolId);
+        PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
+        Reserves realReserves = state.realReserves;
+        Reserves mirrorReserves = state.mirrorReserves;
+        Reserves totalReserves = realReserves + mirrorReserves;
+        Reserves insuranceFundUpperLimitExpected =
+            toReserves((totalReserves.reserve0() * 30) / 100, (totalReserves.reserve1() * 30) / 100); // 30%
+        assertEq(Reserves.unwrap(protocolInterestReserves), 0, "protocolInterestReserves should be 0");
+        assertEq(
+            Reserves.unwrap(insuranceFundUpperLimit),
+            Reserves.unwrap(insuranceFundUpperLimitExpected),
+            "insuranceFundUpperLimit should be insuranceFundUpperLimitExpected"
+        );
+        assertEq(InsuranceFunds.unwrap(insuranceFunds), 0, "insuranceFunds should be 0");
     }
 
     function testGetCurrentState() public view {

@@ -146,6 +146,7 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @param repayAmount The amount of debt repaid
     /// @param profitAmount The profit from the liquidation
     /// @param lostAmount The loss from the liquidation
+    /// @param fundAmount The amount added to the insurance fund
     event LiquidateBurn(
         PoolId indexed poolId,
         address indexed sender,
@@ -158,7 +159,8 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 releaseAmount,
         uint256 repayAmount,
         uint256 profitAmount,
-        uint256 lostAmount
+        uint256 lostAmount,
+        uint256 fundAmount
     );
 
     /// @notice Emitted when a margin position is liquidated by calling
@@ -174,6 +176,7 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @param repayAmount The amount of debt repaid
     /// @param needRepayAmount The amount of debt that needs to be repaid
     /// @param lostAmount The loss from the liquidation
+    /// @param fundAmount The amount added to the insurance fund
     event LiquidateCall(
         PoolId indexed poolId,
         address indexed sender,
@@ -186,7 +189,8 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 releaseAmount,
         uint256 repayAmount,
         uint256 needRepayAmount,
-        uint256 lostAmount
+        uint256 lostAmount,
+        uint256 fundAmount
     );
 
     /// @notice Gets the state of a position
