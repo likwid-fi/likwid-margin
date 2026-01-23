@@ -110,7 +110,7 @@ abstract contract BasePositionManager is IBasePositionManager, ImmutableState, I
         } else {
             PoolKey memory existingKey = poolKeys[poolId];
             if (!(existingKey.currency0 == key.currency0 && existingKey.currency1 == key.currency1
-                        && existingKey.fee == key.fee)) {
+                        && existingKey.fee == key.fee && existingKey.marginFee == key.marginFee)) {
                 MismatchedPoolKey.selector.revertWith();
             }
         }
