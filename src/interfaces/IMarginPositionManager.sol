@@ -281,7 +281,8 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @notice Modify the margin position
     /// @param tokenId The id of position
     /// @param changeAmount The amount to modify
-    function modify(uint256 tokenId, int128 changeAmount) external payable;
+    /// @param deadline Deadline for the transaction
+    function modify(uint256 tokenId, int128 changeAmount, uint256 deadline) external payable;
 
     /// @notice Gets the margin levels
     /// @return marginLevel The margin levels

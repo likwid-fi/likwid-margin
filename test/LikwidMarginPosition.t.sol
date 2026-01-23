@@ -309,7 +309,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         uint256 modifyAmount = 0.05e18;
         token0.mint(address(this), modifyAmount);
-        marginPositionManager.modify(tokenId, int128(int256(modifyAmount)));
+        marginPositionManager.modify(tokenId, int128(int256(modifyAmount)), block.timestamp);
 
         MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
 
@@ -808,7 +808,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
 
         int128 modifyAmount = -0.01 ether;
-        marginPositionManager.modify(tokenId, modifyAmount);
+        marginPositionManager.modify(tokenId, modifyAmount, block.timestamp);
 
         MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
 
@@ -838,12 +838,10 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         int128 modifyAmount = -0.05 ether;
         vm.expectRevert(IMarginPositionManager.InvalidLevel.selector);
-        marginPositionManager.modify(tokenId, modifyAmount);
-
+        marginPositionManager.modify(tokenId, modifyAmount, block.timestamp);
         skip(1000);
         modifyAmount = -0.01 ether;
-        marginPositionManager.modify(tokenId, modifyAmount);
-
+        marginPositionManager.modify(tokenId, modifyAmount, block.timestamp);
         MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
 
         assertEq(
@@ -871,7 +869,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         int128 modifyAmount = -0.08e18; // Decrease collateral significantly
         vm.expectRevert(bytes4(keccak256("InvalidLevel()")));
-        marginPositionManager.modify(tokenId, modifyAmount);
+        marginPositionManager.modify(tokenId, modifyAmount, block.timestamp);
     }
 
     function testLiquidate_NotLiquidatable() public {
@@ -1094,8 +1092,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         MarginPosition.State memory positionBefore = marginPositionManager.getPositionState(tokenId);
 
         uint256 modifyAmount = 0.05e18;
-        marginPositionManager.modify{value: modifyAmount}(tokenId, int128(int256(modifyAmount)));
-
+        marginPositionManager.modify{value: modifyAmount}(tokenId, int128(int256(modifyAmount)), block.timestamp);
         MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
 
         assertEq(
@@ -1124,7 +1121,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         int128 modifyAmount = -0.01 ether;
 
         uint256 balanceBefore = address(this).balance;
-        marginPositionManager.modify(tokenId, modifyAmount);
+        marginPositionManager.modify(tokenId, modifyAmount, block.timestamp);
         uint256 balanceAfter = address(this).balance;
 
         assertTrue(balanceAfter > balanceBefore, "should receive native currency back");

@@ -575,7 +575,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
     }
 
     /// @inheritdoc IMarginPositionManager
-    function modify(uint256 tokenId, int128 changeAmount) external payable {
+    function modify(uint256 tokenId, int128 changeAmount, uint256 deadline) external payable ensure(deadline) {
         _requireAuth(msg.sender, tokenId);
         PoolId poolId = poolIds[tokenId];
         PoolKey memory key = poolKeys[poolId];
