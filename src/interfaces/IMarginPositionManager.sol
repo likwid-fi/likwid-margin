@@ -39,6 +39,9 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @notice Thrown when margin is banned for low fee pools
     error LowFeePoolMarginBanned();
 
+    /// @notice Thrown when the margin is below the minimum required
+    error MarginBelowMinimum();
+
     /// @notice Thrown when the leverage exceeds the maximum allowed
     error ExceedMaxLeverage();
 

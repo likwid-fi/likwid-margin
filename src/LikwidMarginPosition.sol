@@ -42,6 +42,7 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
 
     uint8 constant MAX_LEVERAGE = 5; // 5x
     uint8 constant MAX_MIRROR_RATIO = 80; // 80%
+    uint24 constant MARGIN_MINIMUM_RATIO = 10000000; // 1/1000_0000
 
     mapping(uint256 tokenId => MarginPosition.State positionInfo) private positionInfos;
     MarginLevels public marginLevels;
@@ -120,12 +121,17 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
         PoolId poolId = poolIds[params.tokenId];
         PoolState memory poolState = _getPoolState(poolId);
         if (poolState.lpFee < 3000) revert LowFeePoolMarginBanned();
+
         PoolKey memory key = poolKeys[poolId];
         MarginPosition.State storage position = positionInfos[params.tokenId];
 
         MarginBalanceDelta memory delta;
         delta.action = MarginActions.MARGIN;
         delta.marginForOne = position.marginForOne;
+        uint256 marginReserve = poolState.pairReserves.reserve01(position.marginForOne);
+        if (params.marginAmount < marginReserve / MARGIN_MINIMUM_RATIO) {
+            MarginBelowMinimum.selector.revertWith();
+        }
         uint256 minLevel;
         if (params.leverage > 0) {
             minLevel = marginLevels.minMarginLevel();
