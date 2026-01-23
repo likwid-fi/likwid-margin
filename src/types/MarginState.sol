@@ -14,7 +14,7 @@ library MarginStateLibrary {
     uint8 internal constant M_LOW_OFFSET = 72;
     uint8 internal constant M_MIDDLE_OFFSET = 96;
     uint8 internal constant M_HIGH_OFFSET = 120;
-    uint8 internal constant MAX_PRICE_MOVE_PER_SECOND_OFFSET = 144;
+    uint8 internal constant PRICE_MOVE_SPEED_PPM_OFFSET = 144;
     uint8 internal constant STAGE_DURATION = 168;
     uint8 internal constant STAGE_SIZE = 192;
     uint8 internal constant STAGE_LEAVE_PART = 216;
@@ -56,9 +56,9 @@ library MarginStateLibrary {
         }
     }
 
-    function maxPriceMovePerSecond(MarginState _packed) internal pure returns (uint24 _maxPriceMovePerSecond) {
+    function priceMoveSpeedPPM(MarginState _packed) internal pure returns (uint24 _priceMoveSpeedPPM) {
         assembly ("memory-safe") {
-            _maxPriceMovePerSecond := and(MASK_24_BITS, shr(MAX_PRICE_MOVE_PER_SECOND_OFFSET, _packed))
+            _priceMoveSpeedPPM := and(MASK_24_BITS, shr(PRICE_MOVE_SPEED_PPM_OFFSET, _packed))
         }
     }
 
@@ -93,73 +93,77 @@ library MarginStateLibrary {
         returns (MarginState _result)
     {
         assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(USE_MIDDLE_LEVEL_OFFSET, MASK_24_BITS)), _packed),
-                    shl(USE_MIDDLE_LEVEL_OFFSET, and(MASK_24_BITS, _useMiddleLevel))
-                )
+            _result := or(
+                and(not(shl(USE_MIDDLE_LEVEL_OFFSET, MASK_24_BITS)), _packed),
+                shl(USE_MIDDLE_LEVEL_OFFSET, and(MASK_24_BITS, _useMiddleLevel))
+            )
         }
     }
 
     function setUseHighLevel(MarginState _packed, uint24 _useHighLevel) internal pure returns (MarginState _result) {
         assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(USE_HIGH_LEVEL_OFFSET, MASK_24_BITS)), _packed),
-                    shl(USE_HIGH_LEVEL_OFFSET, and(MASK_24_BITS, _useHighLevel))
-                )
+            _result := or(
+                and(not(shl(USE_HIGH_LEVEL_OFFSET, MASK_24_BITS)), _packed),
+                shl(USE_HIGH_LEVEL_OFFSET, and(MASK_24_BITS, _useHighLevel))
+            )
         }
     }
 
     function setMLow(MarginState _packed, uint24 _mLow) internal pure returns (MarginState _result) {
         assembly ("memory-safe") {
-            _result :=
-                or(and(not(shl(M_LOW_OFFSET, MASK_24_BITS)), _packed), shl(M_LOW_OFFSET, and(MASK_24_BITS, _mLow)))
+            _result := or(
+                and(not(shl(M_LOW_OFFSET, MASK_24_BITS)), _packed),
+                shl(M_LOW_OFFSET, and(MASK_24_BITS, _mLow))
+            )
         }
     }
 
     function setMMiddle(MarginState _packed, uint24 _mMiddle) internal pure returns (MarginState _result) {
         assembly ("memory-safe") {
-            _result :=
-                or(and(not(shl(M_MIDDLE_OFFSET, MASK_24_BITS)), _packed), shl(M_MIDDLE_OFFSET, and(MASK_24_BITS, _mMiddle)))
+            _result := or(
+                and(not(shl(M_MIDDLE_OFFSET, MASK_24_BITS)), _packed),
+                shl(M_MIDDLE_OFFSET, and(MASK_24_BITS, _mMiddle))
+            )
         }
     }
 
     function setMHigh(MarginState _packed, uint24 _mHigh) internal pure returns (MarginState _result) {
         assembly ("memory-safe") {
-            _result :=
-                or(and(not(shl(M_HIGH_OFFSET, MASK_24_BITS)), _packed), shl(M_HIGH_OFFSET, and(MASK_24_BITS, _mHigh)))
+            _result := or(
+                and(not(shl(M_HIGH_OFFSET, MASK_24_BITS)), _packed),
+                shl(M_HIGH_OFFSET, and(MASK_24_BITS, _mHigh))
+            )
         }
     }
 
-    function setMaxPriceMovePerSecond(MarginState _packed, uint24 _maxPriceMovePerSecond)
+    function setPriceMoveSpeedPPM(MarginState _packed, uint24 _priceMoveSpeedPPM)
         internal
         pure
         returns (MarginState _result)
     {
         assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(MAX_PRICE_MOVE_PER_SECOND_OFFSET, MASK_24_BITS)), _packed),
-                    shl(MAX_PRICE_MOVE_PER_SECOND_OFFSET, and(MASK_24_BITS, _maxPriceMovePerSecond))
-                )
+            _result := or(
+                and(not(shl(PRICE_MOVE_SPEED_PPM_OFFSET, MASK_24_BITS)), _packed),
+                shl(PRICE_MOVE_SPEED_PPM_OFFSET, and(MASK_24_BITS, _priceMoveSpeedPPM))
+            )
         }
     }
 
     function setStageDuration(MarginState _packed, uint24 _stageDuration) internal pure returns (MarginState _result) {
         assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(STAGE_DURATION, MASK_24_BITS)), _packed),
-                    shl(STAGE_DURATION, and(MASK_24_BITS, _stageDuration))
-                )
+            _result := or(
+                and(not(shl(STAGE_DURATION, MASK_24_BITS)), _packed),
+                shl(STAGE_DURATION, and(MASK_24_BITS, _stageDuration))
+            )
         }
     }
 
     function setStageSize(MarginState _packed, uint24 _stageSize) internal pure returns (MarginState _result) {
         assembly ("memory-safe") {
-            _result :=
-                or(and(not(shl(STAGE_SIZE, MASK_24_BITS)), _packed), shl(STAGE_SIZE, and(MASK_24_BITS, _stageSize)))
+            _result := or(
+                and(not(shl(STAGE_SIZE, MASK_24_BITS)), _packed),
+                shl(STAGE_SIZE, and(MASK_24_BITS, _stageSize))
+            )
         }
     }
 
@@ -169,11 +173,10 @@ library MarginStateLibrary {
         returns (MarginState _result)
     {
         assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(STAGE_LEAVE_PART, MASK_24_BITS)), _packed),
-                    shl(STAGE_LEAVE_PART, and(MASK_24_BITS, _stageLeavePart))
-                )
+            _result := or(
+                and(not(shl(STAGE_LEAVE_PART, MASK_24_BITS)), _packed),
+                shl(STAGE_LEAVE_PART, and(MASK_24_BITS, _stageLeavePart))
+            )
         }
     }
 }

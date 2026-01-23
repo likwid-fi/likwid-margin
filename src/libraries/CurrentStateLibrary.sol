@@ -128,7 +128,7 @@ library CurrentStateLibrary {
             state.lendReserves = toReserves(lendReserve0.toUint128(), lendReserve1.toUint128());
         }
         state.truncatedReserves = PriceMath.transferReserves(
-            _truncatedReserves, state.pairReserves, timeElapsed, state.marginState.maxPriceMovePerSecond()
+            _truncatedReserves, state.pairReserves, timeElapsed, state.marginState.priceMoveSpeedPPM()
         );
 
         state.interestReserves = toReserves(interestReserve0.toUint128(), interestReserve1.toUint128());

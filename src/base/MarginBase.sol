@@ -37,7 +37,7 @@ abstract contract MarginBase is IMarginBase, Owned {
         if (msg.sender != marginController) Unauthorized.selector.revertWith();
     }
 
-    uint24 private constant MAX_PRICE_MOVE_PER_SECOND = 3000; // 0.3%/second
+    uint24 private constant PRICE_MOVE_SPEED_PPM = 3000; // 0.3% per step
     uint24 private constant RATE_BASE = 50000;
     uint24 private constant USE_MIDDLE_LEVEL = 300000; // 30%
     uint24 private constant USE_HIGH_LEVEL = 700000; // 70%
@@ -49,7 +49,7 @@ abstract contract MarginBase is IMarginBase, Owned {
     uint24 private constant STAGE_LEAVE_PART = 5; // default: 5, meaning 20% of the total liquidity is free
 
     constructor(address initialOwner) Owned(initialOwner) {
-        MarginState _marginState = marginState.setMaxPriceMovePerSecond(MAX_PRICE_MOVE_PER_SECOND);
+        MarginState _marginState = marginState.setPriceMoveSpeedPPM(PRICE_MOVE_SPEED_PPM);
         _marginState = _marginState.setRateBase(RATE_BASE);
         _marginState = _marginState.setUseMiddleLevel(USE_MIDDLE_LEVEL);
         _marginState = _marginState.setUseHighLevel(USE_HIGH_LEVEL);

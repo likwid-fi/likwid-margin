@@ -493,9 +493,8 @@ library Pool {
                 toReserves(protocolInterestReserve0.toUint128(), protocolInterestReserve1.toUint128());
         }
         Reserves _truncatedReserves = self.truncatedReserves;
-        self.truncatedReserves = PriceMath.transferReserves(
-            _truncatedReserves, _pairReserves, timeElapsed, marginState.maxPriceMovePerSecond()
-        );
+        self.truncatedReserves =
+            PriceMath.transferReserves(_truncatedReserves, _pairReserves, timeElapsed, marginState.priceMoveSpeedPPM());
         if (borrow0CumulativeBefore < borrow0CumulativeLast) {
             self.borrow0CumulativeLast = borrow0CumulativeLast;
         }
