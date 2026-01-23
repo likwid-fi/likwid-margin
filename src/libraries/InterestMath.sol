@@ -77,6 +77,7 @@ library InterestMath {
         uint256 newInterestReserve;
         uint256 newProtocolInterestReserve;
         uint256 newDepositCumulativeLast;
+        uint256 protocolInterest;
         uint256 pairInterest;
         bool changed;
     }
@@ -113,10 +114,10 @@ library InterestMath {
                 }
                 uint256 remainder = allInterestX96 - grossAmount * FixedPoint96.Q96;
                 // Update protocol interest reserve
-                uint256 protocolInterest = (protocolInterestX96 + protocolPartInterestX96) / FixedPoint96.Q96;
-                result.newProtocolInterestReserve += protocolInterest;
+                result.protocolInterest = (protocolInterestX96 + protocolPartInterestX96) / FixedPoint96.Q96;
+                result.newProtocolInterestReserve += result.protocolInterest;
                 // Subtract protocol interest from all interest
-                grossAmount -= protocolInterest;
+                grossAmount -= result.protocolInterest;
 
                 result.pairInterest =
                     Math.mulDiv(grossAmount, params.pairReserve, params.pairReserve + params.lendReserve);

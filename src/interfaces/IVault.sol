@@ -80,8 +80,16 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
     /// @param currency The currency of the fee
     /// @param sender The address that paid the fee
     /// @param feeType The type of fee
-    /// @param feeAmount The amount of the fee
-    event Fees(PoolId indexed id, Currency indexed currency, address indexed sender, uint8 feeType, uint256 feeAmount);
+    /// @param feeAmount The amount of the lp fee
+    /// @param protocolFeeAmount The amount of the protocol fee
+    event Fees(
+        PoolId indexed id,
+        Currency indexed currency,
+        address indexed sender,
+        uint8 feeType,
+        uint256 feeAmount,
+        uint256 protocolFeeAmount
+    );
 
     event Lend(
         PoolId indexed id,
@@ -137,6 +145,8 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
     /// @param key The pool to swap in
     /// @param params The parameters for swapping
     /// @return swapDelta The balance delta of the address swapping
+    /// @return swapFee The cost of swap transactions is measured in parts per million (ppm) of the swapped amount
+    /// @return feeAmount The amount of lp fee charged for the swap
     function swap(PoolKey memory key, SwapParams memory params)
         external
         returns (BalanceDelta swapDelta, uint24 swapFee, uint256 feeAmount);

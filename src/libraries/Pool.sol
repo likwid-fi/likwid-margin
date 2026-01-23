@@ -409,11 +409,11 @@ library Pool {
     /// @return pairInterest1 The interest earned by the pair for token1.
     function updateInterests(State storage self, MarginState marginState, uint24 defaultProtocolFee)
         internal
-        returns (uint256 pairInterest0, uint256 pairInterest1)
+        returns (uint256 pairInterest0, uint256 pairInterest1, uint256 protocolInterest0, uint256 protocolInterest1)
     {
         Slot0 _slot0 = self.slot0;
         uint256 timeElapsed = _slot0.lastUpdated().getTimeElapsed();
-        if (timeElapsed == 0) return (0, 0);
+        if (timeElapsed == 0) return (0, 0, 0, 0);
 
         uint24 protocolFee = _slot0.protocolFee(defaultProtocolFee);
 
@@ -456,6 +456,7 @@ library Pool {
             lendReserve0 = result0.newLendReserve;
             self.deposit0CumulativeLast = result0.newDepositCumulativeLast;
             protocolInterestReserve0 = result0.newProtocolInterestReserve;
+            protocolInterest0 = result0.protocolInterest;
             pairInterest0 = result0.pairInterest;
         }
 
@@ -479,6 +480,7 @@ library Pool {
             lendReserve1 = result1.newLendReserve;
             self.deposit1CumulativeLast = result1.newDepositCumulativeLast;
             protocolInterestReserve1 = result1.newProtocolInterestReserve;
+            protocolInterest1 = result1.protocolInterest;
             pairInterest1 = result1.pairInterest;
         }
 

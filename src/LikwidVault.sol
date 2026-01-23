@@ -150,8 +150,8 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         }
 
         Currency feeCurrency = params.zeroForOne ? key.currency0 : key.currency1;
-        if (feeAmount > 0) {
-            emit Fees(id, feeCurrency, msg.sender, uint8(FeeTypes.SWAP), feeAmount);
+        if (feeAmount > 0 || amountToProtocol > 0) {
+            emit Fees(id, feeCurrency, msg.sender, uint8(FeeTypes.SWAP), feeAmount, amountToProtocol);
         }
         if (amountToProtocol > 0) {
             _updateProtocolFees(feeCurrency, amountToProtocol);
@@ -222,19 +222,21 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
             params.marginForOne ? (key.currency1, key.currency0) : (key.currency0, key.currency1);
         Currency swapCurrency = isMargin ? borrowCurrency : marginCurrency;
 
-        if (params.marginFeeAmount > 0) {
-            emit Fees(id, marginCurrency, msg.sender, uint8(FeeTypes.MARGIN), params.marginFeeAmount);
-        }
-        if (marginFeesToProtocol > 0) {
-            _updateProtocolFees(marginCurrency, marginFeesToProtocol);
+        if (params.marginFeeAmount > 0 || marginFeesToProtocol > 0) {
+            if (marginFeesToProtocol > 0) {
+                _updateProtocolFees(marginCurrency, marginFeesToProtocol);
+            }
+            emit Fees(
+                id, marginCurrency, msg.sender, uint8(FeeTypes.MARGIN), params.marginFeeAmount, marginFeesToProtocol
+            );
         }
 
-        if (params.swapFeeAmount > 0) {
+        if (params.swapFeeAmount > 0 || swapFeesToProtocol > 0) {
             uint8 feeType = isMargin ? uint8(FeeTypes.MARGIN_SWAP) : uint8(FeeTypes.MARGIN_CLOSE_SWAP);
-            emit Fees(id, swapCurrency, msg.sender, feeType, params.swapFeeAmount);
-        }
-        if (swapFeesToProtocol > 0) {
-            _updateProtocolFees(swapCurrency, swapFeesToProtocol);
+            if (swapFeesToProtocol > 0) {
+                _updateProtocolFees(swapCurrency, swapFeesToProtocol);
+            }
+            emit Fees(id, swapCurrency, msg.sender, feeType, params.swapFeeAmount, swapFeesToProtocol);
         }
 
         if (protocolInterest0 > 0) {
@@ -358,12 +360,13 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         PoolId id = key.toId();
         _pool = _pools[id];
         _pool.checkPoolInitialized();
-        (uint256 pairInterest0, uint256 pairInterest1) = _pool.updateInterests(marginState, defaultProtocolFee);
-        if (pairInterest0 > 0) {
-            emit Fees(id, key.currency0, address(this), uint8(FeeTypes.INTERESTS), pairInterest0);
+        (uint256 pairInterest0, uint256 pairInterest1, uint256 protocolInterest0, uint256 protocolInterest1) =
+            _pool.updateInterests(marginState, defaultProtocolFee);
+        if (pairInterest0 > 0 || protocolInterest0 > 0) {
+            emit Fees(id, key.currency0, address(this), uint8(FeeTypes.INTERESTS), pairInterest0, protocolInterest0);
         }
-        if (pairInterest1 > 0) {
-            emit Fees(id, key.currency1, address(this), uint8(FeeTypes.INTERESTS), pairInterest1);
+        if (pairInterest1 > 0 || protocolInterest1 > 0) {
+            emit Fees(id, key.currency1, address(this), uint8(FeeTypes.INTERESTS), pairInterest1, protocolInterest1);
         }
     }
 
