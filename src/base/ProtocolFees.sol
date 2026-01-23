@@ -68,7 +68,7 @@ abstract contract ProtocolFees is IProtocolFees, MarginBase {
         }
         if (recipient == address(0)) InvalidRecipient.selector.revertWith();
 
-        amountCollected = (amount == 0) ? protocolFeesAccrued[currency] : amount;
+        amountCollected = (amount > protocolFeesAccrued[currency]) ? protocolFeesAccrued[currency] : amount;
         protocolFeesAccrued[currency] -= amountCollected;
         currency.transfer(recipient, amountCollected);
     }
