@@ -6,6 +6,7 @@ import {PoolKey} from "../types/PoolKey.sol";
 import {MarginBalanceDelta} from "../types/MarginBalanceDelta.sol";
 import {IERC6909Claims} from "./external/IERC6909Claims.sol";
 import {BalanceDelta} from "../types/BalanceDelta.sol";
+import {Reserves} from "../types/Reserves.sol";
 import {PoolId} from "../types/PoolId.sol";
 import {IMarginBase} from "./IMarginBase.sol";
 import {IExtsload} from "./IExtsload.sol";
@@ -91,6 +92,13 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
         uint256 protocolFeeAmount
     );
 
+    /// @notice Emitted for lends between currency0 and currency1
+    /// @param id The abi encoded hash of the pool key struct for the pool that was modified
+    /// @param sender The address that initiated the lend call
+    /// @param lendingForOne False if lending currency0, true if lending currency1
+    /// @param lendingAmount The amount lent, negative for deposit, positive for withdraw
+    /// @param depositCumulativeLast The deposit cumulative at the time of the lend
+    /// @param salt The extra data to make lends unique
     event Lend(
         PoolId indexed id,
         address indexed sender,
@@ -98,6 +106,16 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
         int128 lendingAmount,
         uint256 depositCumulativeLast,
         bytes32 salt
+    );
+
+    /// @notice Emitted when interest is updated for a pool
+    /// @param id The abi encoded hash of the pool key struct for the pool that was modified
+    /// @param realReserves The real reserves of the pool
+    /// @param mirrorReserves The mirror reserves of the pool
+    /// @param pairReserves The pair reserves of the pool
+    /// @param lendReserves The lend reserves of the pool
+    event InterestUpdated(
+        PoolId indexed id, Reserves realReserves, Reserves mirrorReserves, Reserves pairReserves, Reserves lendReserves
     );
 
     /// @notice All interactions on the contract that account deltas require unlocking. A caller that calls `unlock` must implement
