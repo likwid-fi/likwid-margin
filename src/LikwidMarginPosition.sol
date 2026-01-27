@@ -544,8 +544,9 @@ contract LikwidMarginPosition is IMarginPositionManager, BasePositionManager {
                 delta.marginDelta = toBalanceDelta(0, profit.toInt128());
                 delta.lendDelta = toBalanceDelta(0, (releaseAmount + profit).toInt128());
                 delta.mirrorDelta = toBalanceDelta(repayAmount.toInt128(), 0);
-                delta.pairDelta = toBalanceDelta(repayAmount.toInt128(), -releaseAmount.toInt128());
-                delta.fundsDelta = toBalanceDelta(-lostAmount.toInt128(), -closeAmount.toInt128());
+                delta.pairDelta =
+                    toBalanceDelta((repayAmount - lostAmount).toInt128(), -(releaseAmount - closeAmount).toInt128());
+                delta.fundsDelta = toBalanceDelta(-lostAmount.toInt128(), closeAmount.toInt128());
             } else {
                 delta.marginDelta = toBalanceDelta(profit.toInt128(), 0);
                 delta.lendDelta = toBalanceDelta((releaseAmount + profit).toInt128(), 0);
