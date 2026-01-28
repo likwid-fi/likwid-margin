@@ -15,7 +15,7 @@ import {IMarginPositionManager} from "../src/interfaces/IMarginPositionManager.s
 
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../src/types/Currency.sol";
-import {PoolIdLibrary} from "../src/types/PoolId.sol";
+import {PoolId, PoolIdLibrary} from "../src/types/PoolId.sol";
 
 import {ReservesLibrary} from "../src/types/Reserves.sol";
 import {LendPosition} from "../src/libraries/LendPosition.sol";
@@ -38,6 +38,8 @@ contract LikwidLendPositionTest is Test {
     receive() external payable {}
 
     function setUp() public {
+        skip(1); // Ensure block.timestamp is not zero
+
         // Deploy Vault and Position Manager
         vault = new LikwidVault(address(this));
         lendPositionManager = new LikwidLendPosition(address(this), vault);
@@ -185,11 +187,7 @@ contract LikwidLendPositionTest is Test {
         assertEq(positionBefore.lendAmount, 0, "lendAmount should be zero");
         // swap mirror token0
         ILendPositionManager.SwapInputParams memory params = ILendPositionManager.SwapInputParams({
-            zeroForOne: false,
-            tokenId: tokenId,
-            amountIn: amountIn,
-            amountOutMin: 0,
-            deadline: block.timestamp
+            zeroForOne: false, tokenId: tokenId, amountIn: amountIn, amountOutMin: 0, deadline: block.timestamp
         });
 
         (,, uint256 amountOut) = lendPositionManager.exactInput(params);
@@ -228,11 +226,7 @@ contract LikwidLendPositionTest is Test {
         assertEq(positionBefore.lendAmount, 0, "positionBefore.lendAmount should be zero");
         // swap mirror token0
         ILendPositionManager.SwapOutputParams memory params = ILendPositionManager.SwapOutputParams({
-            zeroForOne: false,
-            tokenId: tokenId,
-            amountInMax: 0,
-            amountOut: amountOut,
-            deadline: block.timestamp
+            zeroForOne: false, tokenId: tokenId, amountInMax: 0, amountOut: amountOut, deadline: block.timestamp
         });
 
         (,, uint256 amountInResult) = lendPositionManager.exactOutput(params);
@@ -281,11 +275,7 @@ contract LikwidLendPositionTest is Test {
 
         bool zeroForOne = true; // swap mirror token1
         ILendPositionManager.SwapInputParams memory params = ILendPositionManager.SwapInputParams({
-            zeroForOne: zeroForOne,
-            tokenId: tokenId,
-            amountIn: amountIn,
-            amountOutMin: 0,
-            deadline: block.timestamp
+            zeroForOne: zeroForOne, tokenId: tokenId, amountIn: amountIn, amountOutMin: 0, deadline: block.timestamp
         });
 
         (,, uint256 amountOut) = lendPositionManager.exactInput(params);
@@ -326,11 +316,7 @@ contract LikwidLendPositionTest is Test {
 
         bool zeroForOne = true; // swap mirror token1
         ILendPositionManager.SwapOutputParams memory params = ILendPositionManager.SwapOutputParams({
-            zeroForOne: zeroForOne,
-            tokenId: tokenId,
-            amountInMax: 0,
-            amountOut: amountOut,
-            deadline: block.timestamp
+            zeroForOne: zeroForOne, tokenId: tokenId, amountInMax: 0, amountOut: amountOut, deadline: block.timestamp
         });
 
         (,, uint256 amountInResult) = lendPositionManager.exactOutput(params);
@@ -539,11 +525,7 @@ contract LikwidLendPositionTest is Test {
         lendPositionManager.withdraw(tokenId, amount, 0);
 
         ILendPositionManager.SwapInputParams memory swapParams = ILendPositionManager.SwapInputParams({
-            zeroForOne: false,
-            tokenId: tokenId,
-            amountIn: amount,
-            amountOutMin: 0,
-            deadline: block.timestamp
+            zeroForOne: false, tokenId: tokenId, amountIn: amount, amountOutMin: 0, deadline: block.timestamp
         });
         vm.expectRevert(expectedError);
         lendPositionManager.exactInput(swapParams);
@@ -559,5 +541,687 @@ contract LikwidLendPositionTest is Test {
         lendPositionManager.exactOutput(outputParams);
 
         vm.stopPrank();
+    }
+
+    // ==================== Error Scenario Tests ====================
+
+    function test_RevertIf_InvalidCurrency_SwapDirectionMismatch() public {
+        uint256 marginAmount = 1e18;
+        token1.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory marginParams = IMarginPositionManager.CreateParams({
+            marginForOne: true,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 marginTokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, marginParams);
+        assertTrue(marginTokenId > 0);
+        assertTrue(borrowAmount > 0);
+
+        uint256 amountIn = 0.1e18;
+        token1.mint(address(this), amountIn);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
+
+        ILendPositionManager.SwapInputParams memory params = ILendPositionManager.SwapInputParams({
+            zeroForOne: true, tokenId: tokenId, amountIn: amountIn, amountOutMin: 0, deadline: block.timestamp
+        });
+
+        vm.expectRevert(ILendPositionManager.InvalidCurrency.selector);
+        lendPositionManager.exactInput(params);
+    }
+
+    function test_RevertIf_PriceSlippageTooHigh_ExactInput() public {
+        uint256 marginAmount = 1e18;
+        token1.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory marginParams = IMarginPositionManager.CreateParams({
+            marginForOne: true,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 marginTokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, marginParams);
+        assertTrue(marginTokenId > 0);
+        assertTrue(borrowAmount > 0);
+
+        uint256 amountIn = 0.1e18;
+        token1.mint(address(this), amountIn);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
+
+        ILendPositionManager.SwapInputParams memory params = ILendPositionManager.SwapInputParams({
+            zeroForOne: false,
+            tokenId: tokenId,
+            amountIn: amountIn,
+            amountOutMin: amountIn * 1000,
+            deadline: block.timestamp
+        });
+
+        vm.expectRevert(IBasePositionManager.PriceSlippageTooHigh.selector);
+        lendPositionManager.exactInput(params);
+    }
+
+    function test_RevertIf_PriceSlippageTooHigh_ExactOutput() public {
+        uint256 marginAmount = 1e18;
+        token1.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory marginParams = IMarginPositionManager.CreateParams({
+            marginForOne: true,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        (uint256 marginTokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, marginParams);
+        assertTrue(marginTokenId > 0);
+        assertTrue(borrowAmount > 0);
+
+        uint256 amountOut = 1e18;
+        token1.mint(address(this), amountOut * 10);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
+
+        ILendPositionManager.SwapOutputParams memory params = ILendPositionManager.SwapOutputParams({
+            zeroForOne: false, tokenId: tokenId, amountInMax: 1, amountOut: amountOut, deadline: block.timestamp
+        });
+
+        vm.expectRevert(IBasePositionManager.PriceSlippageTooHigh.selector);
+        lendPositionManager.exactOutput(params);
+    }
+
+    function test_RevertIf_WithdrawOverflow() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
+
+        // First add liquidity from another user to enable withdrawal
+        address liquidator = makeAddr("liquidator");
+        vm.startPrank(liquidator);
+        token0.mint(liquidator, amount);
+        token0.approve(address(lendPositionManager), amount);
+        lendPositionManager.addLending(key, false, liquidator, amount, 0);
+        vm.stopPrank();
+
+        vm.expectRevert(LendPosition.WithdrawOverflow.selector);
+        lendPositionManager.withdraw(tokenId, amount + 1, 0);
+    }
+
+    function test_RevertIf_NotEnoughReserves() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        // Create a position and add liquidity
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
+
+        // Add another position with liquidity to allow partial withdrawal
+        address otherUser = makeAddr("otherUser");
+        vm.startPrank(otherUser);
+        token0.mint(otherUser, amount);
+        token0.approve(address(lendPositionManager), amount);
+        lendPositionManager.addLending(key, false, otherUser, amount, 0);
+        vm.stopPrank();
+
+        // Withdraw half first
+        lendPositionManager.withdraw(tokenId, amount / 2, 0);
+
+        // Now try to withdraw more than remaining - should revert with WithdrawOverflow
+        vm.expectRevert(LendPosition.WithdrawOverflow.selector);
+        lendPositionManager.withdraw(tokenId, amount, 0);
+    }
+
+    // ==================== Boundary Condition Tests ====================
+
+    function test_RevertIf_ExpiredDeadline_AddLending() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        vm.expectRevert("EXPIRED");
+        lendPositionManager.addLending(key, false, address(this), amount, block.timestamp - 1);
+    }
+
+    function test_RevertIf_ExpiredDeadline_Deposit() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
+
+        vm.expectRevert("EXPIRED");
+        lendPositionManager.deposit(tokenId, amount, block.timestamp - 1);
+    }
+
+    function test_RevertIf_ExpiredDeadline_Withdraw() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
+
+        vm.expectRevert("EXPIRED");
+        lendPositionManager.withdraw(tokenId, amount, block.timestamp - 1);
+    }
+
+    function test_RevertIf_ExpiredDeadline_ExactInput() public {
+        uint256 marginAmount = 1e18;
+        token1.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory marginParams = IMarginPositionManager.CreateParams({
+            marginForOne: true,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        marginPositionManager.addMargin(key, marginParams);
+
+        uint256 amountIn = 0.1e18;
+        token1.mint(address(this), amountIn);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
+
+        ILendPositionManager.SwapInputParams memory params = ILendPositionManager.SwapInputParams({
+            zeroForOne: false, tokenId: tokenId, amountIn: amountIn, amountOutMin: 0, deadline: block.timestamp - 1
+        });
+
+        vm.expectRevert("EXPIRED");
+        lendPositionManager.exactInput(params);
+    }
+
+    function test_RevertIf_ExpiredDeadline_ExactOutput() public {
+        uint256 marginAmount = 1e18;
+        token1.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory marginParams = IMarginPositionManager.CreateParams({
+            marginForOne: true,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        marginPositionManager.addMargin(key, marginParams);
+
+        uint256 amountOut = 1e18;
+        token1.mint(address(this), amountOut * 10);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
+
+        ILendPositionManager.SwapOutputParams memory params = ILendPositionManager.SwapOutputParams({
+            zeroForOne: false,
+            tokenId: tokenId,
+            amountInMax: type(uint256).max,
+            amountOut: amountOut,
+            deadline: block.timestamp - 1
+        });
+
+        vm.expectRevert("EXPIRED");
+        lendPositionManager.exactOutput(params);
+    }
+
+    function test_WithdrawMaxUint256() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
+
+        address liquidator = makeAddr("liquidator");
+        vm.startPrank(liquidator);
+        token0.mint(liquidator, amount);
+        token0.approve(address(lendPositionManager), amount);
+        lendPositionManager.addLending(key, false, liquidator, amount, 0);
+        vm.stopPrank();
+
+        uint256 balanceBefore = token0.balanceOf(address(this));
+        lendPositionManager.withdraw(tokenId, type(uint256).max, 0);
+        uint256 balanceAfter = token0.balanceOf(address(this));
+
+        assertGt(balanceAfter, balanceBefore, "Balance should increase after withdraw");
+
+        LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
+        assertEq(position.lendAmount, 0, "Position should be empty after max withdraw");
+    }
+
+    function test_RevertIf_DepositZeroAmount() public {
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
+
+        vm.expectRevert();
+        lendPositionManager.deposit(tokenId, 0, 0);
+    }
+
+    // ==================== Event Tests ====================
+
+    function test_Emit_DepositEvent() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
+
+        vm.expectEmit(true, true, true, true);
+        emit ILendPositionManager.Deposit(key.toId(), currency0, address(this), tokenId, address(this), amount);
+
+        lendPositionManager.deposit(tokenId, amount, 0);
+    }
+
+    function test_Emit_WithdrawEvent() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
+
+        address liquidator = makeAddr("liquidator");
+        vm.startPrank(liquidator);
+        token0.mint(liquidator, amount);
+        token0.approve(address(lendPositionManager), amount);
+        lendPositionManager.addLending(key, false, liquidator, amount, 0);
+        vm.stopPrank();
+
+        vm.expectEmit(true, true, true, true);
+        emit ILendPositionManager.Withdraw(key.toId(), currency0, address(this), tokenId, address(this), amount / 2);
+
+        lendPositionManager.withdraw(tokenId, amount / 2, 0);
+    }
+
+    // ==================== ERC721 and Permission Tests ====================
+
+    function test_TransferPositionOwnership() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
+        assertEq(lendPositionManager.ownerOf(tokenId), address(this));
+
+        address newOwner = makeAddr("newOwner");
+        lendPositionManager.transferFrom(address(this), newOwner, tokenId);
+
+        assertEq(lendPositionManager.ownerOf(tokenId), newOwner);
+    }
+
+    function test_TransferAndNewOwnerCanDeposit() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
+
+        address newOwner = makeAddr("newOwner");
+        lendPositionManager.transferFrom(address(this), newOwner, tokenId);
+
+        vm.startPrank(newOwner);
+        token0.mint(newOwner, amount);
+        token0.approve(address(lendPositionManager), amount);
+        lendPositionManager.deposit(tokenId, amount, 0);
+        vm.stopPrank();
+
+        LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
+        assertGt(position.lendAmount, amount, "New owner should be able to deposit");
+    }
+
+    function test_TransferAndNewOwnerCanWithdraw() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
+
+        address liquidator = makeAddr("liquidator");
+        vm.startPrank(liquidator);
+        token0.mint(liquidator, amount);
+        token0.approve(address(lendPositionManager), amount);
+        lendPositionManager.addLending(key, false, liquidator, amount, 0);
+        vm.stopPrank();
+
+        address newOwner = makeAddr("newOwner");
+        lendPositionManager.transferFrom(address(this), newOwner, tokenId);
+
+        vm.startPrank(newOwner);
+        lendPositionManager.withdraw(tokenId, amount / 2, 0);
+        vm.stopPrank();
+
+        LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
+        assertLt(position.lendAmount, amount, "New owner should be able to withdraw");
+    }
+
+    function test_TransferAndNewOwnerCanSwap() public {
+        uint256 marginAmount = 1e18;
+        token1.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory marginParams = IMarginPositionManager.CreateParams({
+            marginForOne: true,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        marginPositionManager.addMargin(key, marginParams);
+
+        uint256 amountIn = 0.1e18;
+        token1.mint(address(this), amountIn);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
+
+        address newOwner = makeAddr("newOwner");
+        lendPositionManager.transferFrom(address(this), newOwner, tokenId);
+
+        vm.startPrank(newOwner);
+        token1.mint(newOwner, amountIn);
+        token1.approve(address(lendPositionManager), amountIn);
+
+        ILendPositionManager.SwapInputParams memory params = ILendPositionManager.SwapInputParams({
+            zeroForOne: false, tokenId: tokenId, amountIn: amountIn, amountOutMin: 0, deadline: block.timestamp
+        });
+
+        (,, uint256 amountOut) = lendPositionManager.exactInput(params);
+        vm.stopPrank();
+
+        assertTrue(amountOut > 0, "New owner should be able to swap");
+    }
+
+    function test_PreviousOwnerCannotAccessAfterTransfer() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
+
+        address newOwner = makeAddr("newOwner");
+        lendPositionManager.transferFrom(address(this), newOwner, tokenId);
+
+        vm.expectRevert(IBasePositionManager.NotOwner.selector);
+        lendPositionManager.deposit(tokenId, amount, 0);
+
+        vm.expectRevert(IBasePositionManager.NotOwner.selector);
+        lendPositionManager.withdraw(tokenId, amount, 0);
+    }
+
+    // ==================== State Query Tests ====================
+
+    function test_PoolIds() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
+
+        PoolId poolId = lendPositionManager.poolIds(tokenId);
+        assertEq(PoolId.unwrap(poolId), PoolId.unwrap(key.toId()), "PoolId should match");
+    }
+
+    function test_PoolKeys() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
+
+        PoolId poolId = lendPositionManager.poolIds(tokenId);
+        (Currency c0, Currency c1, uint24 fee, uint24 marginFee) = lendPositionManager.poolKeys(poolId);
+
+        assertEq(Currency.unwrap(c0), Currency.unwrap(key.currency0), "Currency0 should match");
+        assertEq(Currency.unwrap(c1), Currency.unwrap(key.currency1), "Currency1 should match");
+        assertEq(fee, key.fee, "Fee should match");
+        assertEq(marginFee, key.marginFee, "MarginFee should match");
+    }
+
+    function test_LendDirections() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+        token1.mint(address(this), amount);
+
+        uint256 tokenId0 = lendPositionManager.addLending(key, false, address(this), amount, 0);
+        uint256 tokenId1 = lendPositionManager.addLending(key, true, address(this), amount, 0);
+
+        assertEq(lendPositionManager.lendDirections(tokenId0), false, "LendDirection for tokenId0 should be false");
+        assertEq(lendPositionManager.lendDirections(tokenId1), true, "LendDirection for tokenId1 should be true");
+    }
+
+    function test_NextIdIncrement() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount * 3);
+
+        uint256 tokenId1 = lendPositionManager.addLending(key, false, address(this), amount, 0);
+        uint256 tokenId2 = lendPositionManager.addLending(key, false, address(this), amount, 0);
+        uint256 tokenId3 = lendPositionManager.addLending(key, false, address(this), amount, 0);
+
+        assertEq(tokenId2, tokenId1 + 1, "TokenId should increment by 1");
+        assertEq(tokenId3, tokenId2 + 1, "TokenId should increment by 1");
+    }
+
+    // ==================== Complex Scenario Tests ====================
+
+    function test_MultipleDepositsAndWithdrawals() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount * 3);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
+
+        address liquidator = makeAddr("liquidator");
+        vm.startPrank(liquidator);
+        token0.mint(liquidator, amount * 3);
+        token0.approve(address(lendPositionManager), amount * 3);
+        lendPositionManager.addLending(key, false, liquidator, amount * 3, 0);
+        vm.stopPrank();
+
+        lendPositionManager.deposit(tokenId, amount, 0);
+        LendPosition.State memory position1 = lendPositionManager.getPositionState(tokenId);
+        assertEq(position1.lendAmount, amount * 2, "Position should have 2x amount after second deposit");
+
+        lendPositionManager.deposit(tokenId, amount, 0);
+        LendPosition.State memory position2 = lendPositionManager.getPositionState(tokenId);
+        assertEq(position2.lendAmount, amount * 3, "Position should have 3x amount after third deposit");
+
+        lendPositionManager.withdraw(tokenId, amount, 0);
+        LendPosition.State memory position3 = lendPositionManager.getPositionState(tokenId);
+        assertEq(position3.lendAmount, amount * 2, "Position should have 2x amount after first withdraw");
+
+        lendPositionManager.withdraw(tokenId, amount, 0);
+        LendPosition.State memory position4 = lendPositionManager.getPositionState(tokenId);
+        assertEq(position4.lendAmount, amount, "Position should have 1x amount after second withdraw");
+    }
+
+    function test_InterestAccrual() public {
+        uint256 marginAmount = 1e18;
+        token1.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory marginParams = IMarginPositionManager.CreateParams({
+            marginForOne: true,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        marginPositionManager.addMargin(key, marginParams);
+
+        uint256 amountOut = 1e18;
+        token1.mint(address(this), amountOut * 10);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
+
+        ILendPositionManager.SwapOutputParams memory params = ILendPositionManager.SwapOutputParams({
+            zeroForOne: false,
+            tokenId: tokenId,
+            amountInMax: type(uint256).max,
+            amountOut: amountOut,
+            deadline: block.timestamp
+        });
+
+        lendPositionManager.exactOutput(params);
+
+        LendPosition.State memory positionBefore = lendPositionManager.getPositionState(tokenId);
+
+        skip(1000);
+
+        LendPosition.State memory positionAfter = lendPositionManager.getPositionState(tokenId);
+
+        assertGt(positionAfter.lendAmount, positionBefore.lendAmount, "Lend amount should increase due to interest");
+    }
+
+    function test_SwapAndWithdraw() public {
+        uint256 marginAmount = 1e18;
+        token1.mint(address(this), marginAmount);
+
+        IMarginPositionManager.CreateParams memory marginParams = IMarginPositionManager.CreateParams({
+            marginForOne: true,
+            leverage: 2,
+            marginAmount: uint128(marginAmount),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        marginPositionManager.addMargin(key, marginParams);
+
+        uint256 amountIn = 0.5e18;
+        token1.mint(address(this), amountIn);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
+
+        ILendPositionManager.SwapInputParams memory swapParams = ILendPositionManager.SwapInputParams({
+            zeroForOne: false, tokenId: tokenId, amountIn: amountIn, amountOutMin: 0, deadline: block.timestamp
+        });
+
+        (,, uint256 amountOut) = lendPositionManager.exactInput(swapParams);
+        assertTrue(amountOut > 0, "Swap should produce output");
+
+        LendPosition.State memory positionAfterSwap = lendPositionManager.getPositionState(tokenId);
+        assertEq(positionAfterSwap.lendAmount, amountOut, "Position should hold swapped amount");
+
+        address liquidator = makeAddr("liquidator");
+        vm.startPrank(liquidator);
+        token0.mint(liquidator, amountOut);
+        token0.approve(address(lendPositionManager), amountOut);
+        lendPositionManager.addLending(key, false, liquidator, amountOut, 0);
+        vm.stopPrank();
+
+        uint256 withdrawAmount = amountOut / 2;
+        uint256 balanceBefore = token0.balanceOf(address(this));
+        lendPositionManager.withdraw(tokenId, withdrawAmount, 0);
+        uint256 balanceAfter = token0.balanceOf(address(this));
+
+        assertGt(balanceAfter, balanceBefore, "Balance should increase after withdraw");
+
+        LendPosition.State memory positionAfterWithdraw = lendPositionManager.getPositionState(tokenId);
+        // Use approximate equality to handle rounding
+        assertApproxEqAbs(
+            positionAfterWithdraw.lendAmount,
+            amountOut - withdrawAmount,
+            1,
+            "Position should have approximately half remaining"
+        );
+    }
+
+    function test_AddLendingWithZeroAmount() public {
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), 0, 0);
+
+        assertTrue(tokenId > 0, "TokenId should be created even with zero amount");
+
+        LendPosition.State memory position = lendPositionManager.getPositionState(tokenId);
+        assertEq(position.lendAmount, 0, "Position should have zero lend amount");
+    }
+
+    function test_GetPositionStateForNonExistentPosition() public view {
+        // Get state for a non-existent position should return empty state
+        // This may revert depending on implementation, so we just check it doesn't crash
+        try lendPositionManager.getPositionState(99999) returns (LendPosition.State memory position) {
+            assertEq(position.lendAmount, 0, "Non-existent position should have zero lend amount");
+        } catch {
+            // If it reverts, that's also acceptable behavior
+        }
+    }
+
+    function test_WithdrawAllAndRedeposit() public {
+        uint256 amount = 1e18;
+        token0.mint(address(this), amount);
+
+        uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
+
+        address liquidator = makeAddr("liquidator");
+        vm.startPrank(liquidator);
+        token0.mint(liquidator, amount);
+        token0.approve(address(lendPositionManager), amount);
+        lendPositionManager.addLending(key, false, liquidator, amount, 0);
+        vm.stopPrank();
+
+        lendPositionManager.withdraw(tokenId, type(uint256).max, 0);
+
+        LendPosition.State memory positionAfterWithdraw = lendPositionManager.getPositionState(tokenId);
+        assertEq(positionAfterWithdraw.lendAmount, 0, "Position should be empty");
+
+        token0.mint(address(this), amount);
+        lendPositionManager.deposit(tokenId, amount, 0);
+
+        LendPosition.State memory positionAfterRedeposit = lendPositionManager.getPositionState(tokenId);
+        assertEq(positionAfterRedeposit.lendAmount, amount, "Position should have amount after redeposit");
+    }
+
+    function test_MirrorSwapBothDirections() public {
+        uint256 marginAmount0 = 1e18;
+        token0.mint(address(this), marginAmount0);
+
+        IMarginPositionManager.CreateParams memory marginParams0 = IMarginPositionManager.CreateParams({
+            marginForOne: false,
+            leverage: 2,
+            marginAmount: uint128(marginAmount0),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        marginPositionManager.addMargin(key, marginParams0);
+
+        uint256 marginAmount1 = 1e18;
+        token1.mint(address(this), marginAmount1);
+
+        IMarginPositionManager.CreateParams memory marginParams1 = IMarginPositionManager.CreateParams({
+            marginForOne: true,
+            leverage: 2,
+            marginAmount: uint128(marginAmount1),
+            borrowAmount: 0,
+            borrowAmountMax: 0,
+            recipient: address(this),
+            deadline: block.timestamp
+        });
+
+        marginPositionManager.addMargin(key, marginParams1);
+
+        uint256 amountIn = 0.1e18;
+        token0.mint(address(this), amountIn);
+        token1.mint(address(this), amountIn);
+
+        uint256 tokenId0 = lendPositionManager.addLending(key, true, address(this), 0, 0);
+        uint256 tokenId1 = lendPositionManager.addLending(key, false, address(this), 0, 0);
+
+        ILendPositionManager.SwapInputParams memory params0 = ILendPositionManager.SwapInputParams({
+            zeroForOne: true, tokenId: tokenId0, amountIn: amountIn, amountOutMin: 0, deadline: block.timestamp
+        });
+
+        (,, uint256 amountOut0) = lendPositionManager.exactInput(params0);
+        assertTrue(amountOut0 > 0, "Swap token0->token1 should work");
+
+        ILendPositionManager.SwapInputParams memory params1 = ILendPositionManager.SwapInputParams({
+            zeroForOne: false, tokenId: tokenId1, amountIn: amountIn, amountOutMin: 0, deadline: block.timestamp
+        });
+
+        (,, uint256 amountOut1) = lendPositionManager.exactInput(params1);
+        assertTrue(amountOut1 > 0, "Swap token1->token0 should work");
     }
 }

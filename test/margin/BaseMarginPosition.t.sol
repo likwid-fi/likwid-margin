@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 
@@ -15,11 +15,9 @@ import {IUnlockCallback} from "../../src/interfaces/callback/IUnlockCallback.sol
 import {PoolKey} from "../../src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "../../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../../src/types/PoolId.sol";
-import {Math} from "../../src/libraries/Math.sol";
 import {MarginPosition} from "../../src/libraries/MarginPosition.sol";
 import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
 import {MarginLevels, MarginLevelsLibrary} from "../../src/types/MarginLevels.sol";
-import {PoolState} from "../../src/types/PoolState.sol";
 
 abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
     using CurrencyLibrary for Currency;
