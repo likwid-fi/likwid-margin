@@ -783,4 +783,314 @@ contract LikwidPairPositionTest is Test {
             "Insurance funds for currency1 should reflect the donation"
         );
     }
+
+    function testIncreaseLiquidityNative() public {
+        // 1. Arrange: Add initial liquidity
+        uint256 initialAmount0 = 10e18;
+        uint256 initialAmount1 = 10e18;
+        token1.mint(address(this), initialAmount1);
+        (uint256 tokenId, uint128 initialLiquidity) = pairPositionManager.addLiquidity{value: initialAmount0}(
+            keyNative, address(this), initialAmount0, initialAmount1, 0, 0, 10000
+        );
+
+        // 2. Arrange: Prepare for increasing liquidity
+        uint256 increaseAmount0 = 5e18;
+        uint256 increaseAmount1 = 5e18;
+        token1.mint(address(this), increaseAmount1);
+
+        // 3. Act
+        uint128 addedLiquidity = pairPositionManager.increaseLiquidity{value: increaseAmount0}(
+            tokenId, increaseAmount0, increaseAmount1, 0, 0, 10000
+        );
+
+        // 4. Assert
+        assertTrue(addedLiquidity > 0, "Added liquidity should be positive");
+
+        // Check position state
+        PairPosition.State memory positionState = pairPositionManager.getPositionState(tokenId);
+        assertEq(positionState.liquidity, initialLiquidity + addedLiquidity, "Total liquidity should have increased");
+
+        // Check vault reserves
+        Reserves reserves = StateLibrary.getPairReserves(vault, keyNative.toId());
+        assertEq(reserves.reserve0(), initialAmount0 + increaseAmount0, "Vault reserve0 should be updated");
+        assertEq(reserves.reserve1(), initialAmount1 + increaseAmount1, "Vault reserve1 should be updated");
+        PoolState memory poolState = CurrentStateLibrary.getState(vault, keyNative.toId());
+        assertTrue(poolState.pairReserves == reserves, "poolState.pairReserves should match reserves");
+
+        // Check user balances
+        assertEq(token1.balanceOf(address(this)), 0, "User should have spent all token1");
+    }
+
+    function testDonateNative() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 100e18;
+        uint256 amount1ToAdd = 100e18;
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity{value: amount0ToAdd}(
+            keyNative, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000
+        );
+
+        // 2. Arrange: Prepare donation (only token1, since donate is not payable)
+        uint256 donationAmount1 = 11e18;
+        token1.mint(address(this), donationAmount1);
+
+        // 3. Act
+        token1.approve(address(vault), donationAmount1);
+        pairPositionManager.donate(keyNative.toId(), 0, donationAmount1, 10000);
+
+        // 4. Assert
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, keyNative.toId());
+        assertEq(uint128(insuranceFunds.amount0()), 0, "Insurance funds for native should be 0");
+        assertEq(
+            uint128(insuranceFunds.amount1()), donationAmount1, "Insurance funds for token1 should reflect the donation"
+        );
+    }
+
+    function testGetPositionState() public {
+        // 1. Arrange: Add liquidity to create a position
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 20e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        (uint256 tokenId, uint128 liquidity) =
+            pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+
+        // 2. Act
+        PairPosition.State memory positionState = pairPositionManager.getPositionState(tokenId);
+
+        // 3. Assert
+        assertEq(positionState.liquidity, liquidity, "Liquidity should match");
+        assertTrue(positionState.totalInvestment > 0, "Total investment should be positive");
+    }
+
+    function testGetPositionStateAfterModify() public {
+        // 1. Arrange: Add initial liquidity
+        uint256 initialAmount0 = 10e18;
+        uint256 initialAmount1 = 10e18;
+        token0.mint(address(this), initialAmount0);
+        token1.mint(address(this), initialAmount1);
+        (uint256 tokenId, uint128 initialLiquidity) =
+            pairPositionManager.addLiquidity(key, address(this), initialAmount0, initialAmount1, 0, 0, 10000);
+        assertGt(initialLiquidity, 0, "Initial liquidity should be positive");
+        PairPosition.State memory positionBefore = pairPositionManager.getPositionState(tokenId);
+
+        // 2. Act: Increase liquidity
+        uint256 increaseAmount0 = 5e18;
+        uint256 increaseAmount1 = 5e18;
+        token0.mint(address(this), increaseAmount0);
+        token1.mint(address(this), increaseAmount1);
+        pairPositionManager.increaseLiquidity(tokenId, increaseAmount0, increaseAmount1, 0, 0, 10000);
+
+        // 3. Assert
+        PairPosition.State memory positionAfter = pairPositionManager.getPositionState(tokenId);
+        assertTrue(positionAfter.liquidity > positionBefore.liquidity, "Liquidity should have increased");
+        assertTrue(
+            positionAfter.totalInvestment > positionBefore.totalInvestment, "Total investment should have increased"
+        );
+    }
+
+    function testEmitModifyLiquidityEvent() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 10e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+
+        // 2. Act & Assert: Expect event emission
+        vm.expectEmit(true, true, true, true);
+        emit IPairPositionManager.ModifyLiquidity(
+            key.toId(), 1, address(this), int128(uint128(10e18)), amount0ToAdd, amount1ToAdd
+        );
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+    }
+
+    function test_RevertIf_ExactOutputSwapNativeWithExpiredDeadline() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 100e18;
+        uint256 amount1ToAdd = 100e18;
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity{value: amount0ToAdd}(
+            keyNative, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000
+        );
+
+        // 2. Arrange: Prepare for swap
+        uint256 amountOut = 10e18;
+        PoolId poolId = keyNative.toId();
+
+        IPairPositionManager.SwapOutputParams memory params = IPairPositionManager.SwapOutputParams({
+            poolId: poolId,
+            zeroForOne: true,
+            to: address(this),
+            amountInMax: 20e18,
+            amountOut: amountOut,
+            deadline: block.timestamp - 1 // Expired deadline
+        });
+
+        // 3. Act & Assert
+        vm.expectRevert("EXPIRED");
+        pairPositionManager.exactOutput{value: 20e18}(params);
+    }
+
+    function test_RevertIf_ExactOutputSwapNativeWithTooLowAmountInMax() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 100e18;
+        uint256 amount1ToAdd = 100e18;
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity{value: amount0ToAdd}(
+            keyNative, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000
+        );
+
+        // 2. Arrange: Prepare for swap
+        uint256 amountOut = 10e18;
+        PoolId poolId = keyNative.toId();
+
+        IPairPositionManager.SwapOutputParams memory params = IPairPositionManager.SwapOutputParams({
+            poolId: poolId,
+            zeroForOne: true,
+            to: address(this),
+            amountInMax: 5e18, // Insufficient max input
+            amountOut: amountOut,
+            deadline: block.timestamp + 1
+        });
+
+        // 3. Act & Assert
+        vm.expectRevert(bytes4(keccak256("PriceSlippageTooHigh()")));
+        pairPositionManager.exactOutput{value: 5e18}(params);
+    }
+
+    function test_RevertIf_AddLiquidityWithExpiredDeadline() public {
+        // 1. Arrange
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 10e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+
+        // 2. Act & Assert
+        vm.expectRevert("EXPIRED");
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, block.timestamp - 1);
+    }
+
+    function test_RevertIf_RemoveLiquidityWithExpiredDeadline() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 10e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        (uint256 tokenId, uint128 liquidity) =
+            pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+
+        // 2. Act & Assert
+        vm.expectRevert("EXPIRED");
+        pairPositionManager.removeLiquidity(tokenId, liquidity, 0, 0, block.timestamp - 1);
+    }
+
+    function test_RevertIf_IncreaseLiquidityWithExpiredDeadline() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 10e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        (uint256 tokenId,) =
+            pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+
+        // 2. Arrange: Prepare for increasing liquidity
+        uint256 increaseAmount0 = 5e18;
+        uint256 increaseAmount1 = 5e18;
+        token0.mint(address(this), increaseAmount0);
+        token1.mint(address(this), increaseAmount1);
+
+        // 3. Act & Assert
+        vm.expectRevert("EXPIRED");
+        pairPositionManager.increaseLiquidity(tokenId, increaseAmount0, increaseAmount1, 0, 0, block.timestamp - 1);
+    }
+
+    function test_RevertIf_DonateWithExpiredDeadline() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 100e18;
+        uint256 amount1ToAdd = 100e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+
+        // 2. Arrange: Prepare donation
+        uint256 donationAmount = 10e18;
+        token0.mint(address(this), donationAmount);
+
+        // 3. Act & Assert
+        vm.expectRevert("EXPIRED");
+        pairPositionManager.donate(key.toId(), donationAmount, 0, block.timestamp - 1);
+    }
+
+    function testAddLiquidityWithZeroAmounts() public {
+        // 1. Arrange
+        uint256 amount0ToAdd = 0;
+        uint256 amount1ToAdd = 0;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+
+        // 2. Act & Assert - Zero amounts should work but produce zero liquidity
+        (uint256 tokenId, uint128 liquidity) =
+            pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        assertGt(tokenId, 0, "TokenId should be positive");
+        assertEq(liquidity, 0, "Liquidity should be 0 for zero amounts");
+    }
+
+    function testRemoveLiquidityWithZeroLiquidity() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 10e18;
+        uint256 amount1ToAdd = 10e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        (uint256 tokenId,) =
+            pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+
+        // 2. Act & Assert - Removing zero liquidity should work but return zero amounts
+        (uint256 amount0Removed, uint256 amount1Removed) = pairPositionManager.removeLiquidity(tokenId, 0, 0, 0, 10000);
+        assertEq(amount0Removed, 0, "Amount0 removed should be 0");
+        assertEq(amount1Removed, 0, "Amount1 removed should be 0");
+    }
+
+    function testSwapWithZeroAmount() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 100e18;
+        uint256 amount1ToAdd = 100e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+
+        // 2. Arrange: Prepare for swap with zero amount
+        uint256 amountIn = 0;
+        token0.mint(address(this), amountIn);
+        PoolId poolId = key.toId();
+
+        IPairPositionManager.SwapInputParams memory params = IPairPositionManager.SwapInputParams({
+            poolId: poolId,
+            zeroForOne: true,
+            to: address(this),
+            amountIn: amountIn,
+            amountOutMin: 0,
+            deadline: block.timestamp + 1
+        });
+
+        // 3. Act & Assert
+        vm.expectRevert();
+        pairPositionManager.exactInput(params);
+    }
+
+    function testDonateWithZeroAmounts() public {
+        // 1. Arrange: Add liquidity
+        uint256 amount0ToAdd = 100e18;
+        uint256 amount1ToAdd = 100e18;
+        token0.mint(address(this), amount0ToAdd);
+        token1.mint(address(this), amount1ToAdd);
+        pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+
+        // 2. Act
+        pairPositionManager.donate(key.toId(), 0, 0, 10000);
+
+        // 3. Assert
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, key.toId());
+        assertEq(uint128(insuranceFunds.amount0()), 0, "Insurance funds for currency0 should be 0");
+        assertEq(uint128(insuranceFunds.amount1()), 0, "Insurance funds for currency1 should be 0");
+    }
 }
