@@ -167,4 +167,52 @@ contract PriceMathTest is Test {
         assertEq(result.reserve0(), destReserves.reserve0());
         assertEq(result.reserve1(), destReserves.reserve1());
     }
+
+    function testTransferReserves_extremePrices() public pure {
+        // Test with extreme price ratio (100:1)
+        Reserves originReserves = toReserves(1e18, 100e18);
+        Reserves destReserves = toReserves(2e18, 200e18);
+        uint256 timeElapsed = 10;
+        uint24 priceMoveSpeedPPM = 100;
+
+        Reserves result = PriceMath.transferReserves(originReserves, destReserves, timeElapsed, priceMoveSpeedPPM);
+
+        assertEq(result.reserve1(), destReserves.reserve1());
+    }
+
+    function testTransferReserves_verySmallReserves() public pure {
+        Reserves originReserves = toReserves(1000, 1000);
+        Reserves destReserves = toReserves(1200, 1200);
+        uint256 timeElapsed = 10;
+        uint24 priceMoveSpeedPPM = 100;
+
+        Reserves result = PriceMath.transferReserves(originReserves, destReserves, timeElapsed, priceMoveSpeedPPM);
+
+        assertEq(result.reserve0(), destReserves.reserve0());
+        assertEq(result.reserve1(), destReserves.reserve1());
+    }
+
+    function testTransferReserves_bothReservesEqual() public pure {
+        Reserves originReserves = toReserves(100e18, 100e18);
+        Reserves destReserves = toReserves(100e18, 100e18);
+        uint256 timeElapsed = 10;
+        uint24 priceMoveSpeedPPM = 100;
+
+        Reserves result = PriceMath.transferReserves(originReserves, destReserves, timeElapsed, priceMoveSpeedPPM);
+
+        assertEq(result.reserve0(), destReserves.reserve0());
+        assertEq(result.reserve1(), destReserves.reserve1());
+    }
+
+    function testTransferReserves_veryHighPriceMoveSpeed() public pure {
+        Reserves originReserves = toReserves(100e18, 100e18);
+        Reserves destReserves = toReserves(120e18, 120e18);
+        uint256 timeElapsed = 100;
+        uint24 priceMoveSpeedPPM = 10000; // 1%
+
+        Reserves result = PriceMath.transferReserves(originReserves, destReserves, timeElapsed, priceMoveSpeedPPM);
+
+        assertEq(result.reserve0(), destReserves.reserve0());
+        assertEq(result.reserve1(), destReserves.reserve1());
+    }
 }

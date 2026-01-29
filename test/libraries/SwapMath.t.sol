@@ -132,4 +132,72 @@ contract SwapMathTest is Test {
         uint256 degree = SwapMath.getPriceDegree(testReserves, testTruncatedReserves, 3000, true, 0, 0);
         assertEq(degree, 0, "Degree should be zero for no swap");
     }
+
+    function testDynamicFee_boundary() public pure {
+        uint24 baseFee = 3000;
+
+        // Just below threshold - fee should remain base
+        uint24 feeLow = SwapMath.dynamicFee(baseFee, 100000);
+        assertEq(feeLow, baseFee, "Fee should be base at threshold");
+
+        // At threshold where dynamic fee kicks in
+        uint24 feeHigh = SwapMath.dynamicFee(baseFee, 100001);
+        assertTrue(feeHigh >= baseFee, "Fee should increase above threshold");
+    }
+
+    function testGetPriceDegree_zeroTruncatedReserves() public view {
+        Reserves zeroReserves = toReserves(0, 0);
+        uint256 degree = SwapMath.getPriceDegree(testReserves, zeroReserves, 3000, true, 100e18, 0);
+        assertEq(degree, 0, "Degree should be 0 when truncated reserves are 0");
+    }
+
+    function testGetPriceDegree_zeroPairReserves() public view {
+        Reserves zeroReserves = toReserves(0, 0);
+        uint256 degree = SwapMath.getPriceDegree(zeroReserves, testTruncatedReserves, 3000, true, 100e18, 0);
+        assertEq(degree, 0, "Degree should be 0 when pair reserves are 0");
+    }
+
+    function testGetAmountOut_reverseDirection() public view {
+        uint256 amountIn = 100e18;
+        uint24 fee = 3000;
+
+        // Swap token0 for token1
+        (uint256 amountOut01,) = SwapMath.getAmountOut(testReserves, fee, true, amountIn);
+
+        // Swap token1 for token0
+        (uint256 amountOut10,) = SwapMath.getAmountOut(testReserves, fee, false, amountIn);
+
+        // Both should work and return positive amounts
+        assertGt(amountOut01, 0, "Amount out should be positive for 0->1");
+        assertGt(amountOut10, 0, "Amount out should be positive for 1->0");
+    }
+
+    function testGetAmountIn_reverseDirection() public view {
+        uint256 amountOut = 50e18;
+        uint24 fee = 3000;
+
+        // Swap token0 for token1
+        (uint256 amountIn01,) = SwapMath.getAmountIn(testReserves, fee, true, amountOut);
+
+        // Swap token1 for token0
+        (uint256 amountIn10,) = SwapMath.getAmountIn(testReserves, fee, false, amountOut);
+
+        // Both should work and return positive amounts
+        assertGt(amountIn01, 0, "Amount in should be positive for 0->1");
+        assertGt(amountIn10, 0, "Amount in should be positive for 1->0");
+    }
+
+    function testDifferencePrice_largeDifference() public pure {
+        uint256 price1 = 1e18;
+        uint256 price2 = 100e18;
+        uint256 diff = SwapMath.differencePrice(price1, price2);
+        assertEq(diff, 99e18, "Should calculate large difference correctly");
+    }
+
+    function testDynamicFee_maxCap() public pure {
+        uint24 baseFee = 500000; // 50%
+        uint256 degree = SwapMath.MAX_SWAP_FEE + 1000;
+        uint24 fee = SwapMath.dynamicFee(baseFee, degree);
+        assertEq(fee, uint24(SwapMath.MAX_SWAP_FEE) - 10000, "Fee should be capped at max");
+    }
 }
