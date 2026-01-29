@@ -14,6 +14,7 @@ library LendPosition {
     using CustomRevert for bytes4;
     using PositionLibrary for address;
     using SafeCast for *;
+    using LendPosition for State;
 
     error CannotUpdateEmptyPosition();
 
