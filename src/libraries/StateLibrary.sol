@@ -214,7 +214,7 @@ library StateLibrary {
      */
     function getInsuranceFunds(IVault vault, PoolId poolId) internal view returns (InsuranceFunds) {
         bytes32 slot = bytes32(uint256(_getPoolStateSlot(poolId)) + INSURANCE_FUNDS_OFFSET);
-        return InsuranceFunds.wrap(uint256(vault.extsload(slot)).toInt256());
+        return InsuranceFunds.wrap(int256(uint256(vault.extsload(slot))));
     }
 
     function getLastStageTimestamp(IVault vault, PoolId poolId) internal view returns (uint256) {
