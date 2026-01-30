@@ -11,6 +11,7 @@ import {IVault} from "../../src/interfaces/IVault.sol";
 import {IMarginPositionManager} from "../../src/interfaces/IMarginPositionManager.sol";
 import {IMarginBase} from "../../src/interfaces/IMarginBase.sol";
 import {MarginState} from "../../src/types/MarginState.sol";
+import {InsuranceFunds} from "../../src/types/InsuranceFunds.sol";
 import {StageMath} from "../../src/libraries/StageMath.sol";
 import {Math} from "../../src/libraries/Math.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
@@ -50,6 +51,8 @@ contract LikwidHelper is Owned {
         uint128 lendReserve1;
         uint128 interestReserve0;
         uint128 interestReserve1;
+        int128 InsuranceFund0;
+        int128 InsuranceFund1;
         uint256 borrow0CumulativeLast;
         uint256 borrow1CumulativeLast;
         uint256 deposit0CumulativeLast;
@@ -81,6 +84,10 @@ contract LikwidHelper is Owned {
         (uint128 interestReserve0, uint128 interestReserve1) = state.interestReserves.reserves();
         stateInfo.interestReserve0 = interestReserve0;
         stateInfo.interestReserve1 = interestReserve1;
+
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, poolId);
+        stateInfo.InsuranceFund0 = insuranceFunds.amount0();
+        stateInfo.InsuranceFund1 = insuranceFunds.amount1();
 
         stateInfo.borrow0CumulativeLast = state.borrow0CumulativeLast;
         stateInfo.borrow1CumulativeLast = state.borrow1CumulativeLast;

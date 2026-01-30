@@ -524,6 +524,9 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             assertEq(lostAmount, 0);
             assertApproxEqAbs(fundAmount, uint128(insuranceFundsAfter.amount1() - insuranceFundsBefore.amount1()), 1);
         }
+        LikwidHelper.PoolStateInfo memory poolState = helper.getPoolStateInfo(key.toId());
+        assertEq(poolState.InsuranceFund0, insuranceFundsAfter.amount0());
+        assertEq(poolState.InsuranceFund1, insuranceFundsAfter.amount1());
     }
 
     function testLiquidateCall_MarginForZero() public {
@@ -585,6 +588,10 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertEq(position.debtAmount, 0);
         assertEq(position.marginAmount, 0);
         assertEq(position.marginTotal, 0);
+
+        LikwidHelper.PoolStateInfo memory poolState = helper.getPoolStateInfo(key.toId());
+        assertEq(poolState.InsuranceFund0, insuranceFundsAfter.amount0());
+        assertEq(poolState.InsuranceFund1, insuranceFundsAfter.amount1());
     }
 
     function testLiquidateCall_MarginForOne() public {
@@ -629,6 +636,10 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             positionBefore.marginAmount + positionBefore.marginTotal
         );
         assertLt(protocolFeesBefore, protocolFeesAfter);
+
+        LikwidHelper.PoolStateInfo memory poolState = helper.getPoolStateInfo(key.toId());
+        assertEq(poolState.InsuranceFund0, insuranceFundsAfter.amount0());
+        assertEq(poolState.InsuranceFund1, insuranceFundsAfter.amount1());
     }
 
     function testLiquidateBurn_Batch() public {
@@ -679,6 +690,10 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         assertLe((insuranceFundPercentage * r0) / 100, limit0);
         assertLe((insuranceFundPercentage * r1) / 100, limit1);
+
+        LikwidHelper.PoolStateInfo memory poolState = helper.getPoolStateInfo(key.toId());
+        assertEq(poolState.InsuranceFund0, insuranceFundsAfter.amount0());
+        assertEq(poolState.InsuranceFund1, insuranceFundsAfter.amount1());
     }
 
     function testLiquidateBurn_WithCloseAmount_MarginForOne() public {
@@ -710,6 +725,10 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertGt(insuranceFundsAfter.amount1(), insuranceFundsBefore.amount1());
         assertEq(lostAmount, 0);
         assertEq(fundAmount, uint128(insuranceFundsAfter.amount1() - insuranceFundsBefore.amount1()));
+
+        LikwidHelper.PoolStateInfo memory poolState = helper.getPoolStateInfo(key.toId());
+        assertEq(poolState.InsuranceFund0, insuranceFundsAfter.amount0());
+        assertEq(poolState.InsuranceFund1, insuranceFundsAfter.amount1());
     }
 
     function testLiquidateBurn_AfterDonate() public {
@@ -740,6 +759,11 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         insuranceFunds = StateLibrary.getInsuranceFunds(vault, key.toId());
         assertEq(uint128(insuranceFunds.amount0()), donationAmount0);
         assertLt(uint128(insuranceFunds.amount1()), donationAmount1);
+
+        InsuranceFunds insuranceFundsAfter = StateLibrary.getInsuranceFunds(vault, key.toId());
+        LikwidHelper.PoolStateInfo memory poolState = helper.getPoolStateInfo(key.toId());
+        assertEq(poolState.InsuranceFund0, insuranceFundsAfter.amount0());
+        assertEq(poolState.InsuranceFund1, insuranceFundsAfter.amount1());
     }
 
     function testLiquidate_NotLiquidatable() public {

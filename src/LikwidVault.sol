@@ -368,7 +368,15 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         if (pairInterest1 > 0 || protocolInterest1 > 0) {
             emit Fees(id, key.currency1, address(this), uint8(FeeTypes.INTERESTS), pairInterest1, protocolInterest1);
         }
-        emit InterestUpdated(id, _pool.realReserves, _pool.mirrorReserves, _pool.pairReserves, _pool.lendReserves);
+        emit PoolUpdated(
+            id,
+            _pool.realReserves,
+            _pool.mirrorReserves,
+            _pool.pairReserves,
+            _pool.lendReserves,
+            _pool.protocolInterestReserves,
+            _pool.insuranceFunds
+        );
     }
 
     /// @notice Implementation of the _isUnlocked function defined in ProtocolFees

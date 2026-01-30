@@ -6,6 +6,7 @@ import {PoolKey} from "../types/PoolKey.sol";
 import {MarginBalanceDelta} from "../types/MarginBalanceDelta.sol";
 import {IERC6909Claims} from "./external/IERC6909Claims.sol";
 import {BalanceDelta} from "../types/BalanceDelta.sol";
+import {InsuranceFunds} from "../types/InsuranceFunds.sol";
 import {Reserves} from "../types/Reserves.sol";
 import {PoolId} from "../types/PoolId.sol";
 import {IMarginBase} from "./IMarginBase.sol";
@@ -114,8 +115,16 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
     /// @param mirrorReserves The mirror reserves of the pool
     /// @param pairReserves The pair reserves of the pool
     /// @param lendReserves The lend reserves of the pool
-    event InterestUpdated(
-        PoolId indexed id, Reserves realReserves, Reserves mirrorReserves, Reserves pairReserves, Reserves lendReserves
+    /// @param protocolInterestReserves The protocol interest reserves of the pool
+    /// @param insuranceFunds The insurance funds of the pool
+    event PoolUpdated(
+        PoolId indexed id,
+        Reserves realReserves,
+        Reserves mirrorReserves,
+        Reserves pairReserves,
+        Reserves lendReserves,
+        Reserves protocolInterestReserves,
+        InsuranceFunds insuranceFunds
     );
 
     /// @notice All interactions on the contract that account deltas require unlocking. A caller that calls `unlock` must implement
