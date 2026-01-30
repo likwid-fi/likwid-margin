@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
-import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
+import {Test, console} from "forge-std/Test.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 import {LikwidVault} from "../src/LikwidVault.sol";
@@ -103,7 +104,9 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
         token1.mint(address(this), amount1ToAdd);
-        pairPositionManager.addLiquidity{value: amount0ToAdd}(keyNative, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
+        pairPositionManager.addLiquidity{value: amount0ToAdd}(
+            keyNative, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000
+        );
     }
 
     // ==================== Helper Functions ====================
@@ -141,7 +144,8 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             token1.mint(address(this), marginAmount);
         }
         IMarginPositionManager.CreateParams memory params = _createDefaultParams(marginForOne, leverage, marginAmount);
-        (tokenId, borrowAmount,) = marginPositionManager.addMargin{value: marginForOne ? 0 : marginAmount}(keyNative, params);
+        (tokenId, borrowAmount,) =
+            marginPositionManager.addMargin{value: marginForOne ? 0 : marginAmount}(keyNative, params);
     }
 
     function _mintMarginToken(bool marginForOne, uint256 amount) internal {
@@ -168,10 +172,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         }
 
         IVault.SwapParams memory swapParams = IVault.SwapParams({
-            zeroForOne: zeroForOne,
-            amountSpecified: -int256(swapAmount),
-            useMirror: false,
-            salt: bytes32(0)
+            zeroForOne: zeroForOne, amountSpecified: -int256(swapAmount), useMirror: false, salt: bytes32(0)
         });
         bytes memory innerParams = abi.encode(key, swapParams);
         bytes memory data = abi.encode(this.swap_callback.selector, innerParams);
@@ -214,6 +215,46 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertEq(position.debtAmount, 0, "Debt should be 0 after liquidation");
         assertEq(position.marginAmount, 0, "Margin should be 0 after liquidation");
         assertEq(position.marginTotal, 0, "MarginTotal should be 0 after liquidation");
+    }
+
+    function _getLiquidateBurnValues() internal returns (uint256 lostAmount, uint256 fundAmount) {
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+
+        bytes32 eventSignature = keccak256(
+            "LiquidateBurn(bytes32,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"
+        );
+
+        for (uint256 i = 0; i < entries.length; i++) {
+            if (entries[i].topics[0] == eventSignature) {
+                (,,,,,,,,, lostAmount, fundAmount) = abi.decode(
+                    entries[i].data,
+                    (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)
+                );
+
+                return (lostAmount, fundAmount);
+            }
+        }
+        revert("LiquidateBurn event not found");
+    }
+
+    function _getLiquidateCallValues() internal returns (uint256 lostAmount, uint256 fundAmount) {
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+
+        bytes32 eventSignature = keccak256(
+            "LiquidateCall(bytes32,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"
+        );
+
+        for (uint256 i = 0; i < entries.length; i++) {
+            if (entries[i].topics[0] == eventSignature) {
+                (,,,,,,,,, lostAmount, fundAmount) = abi.decode(
+                    entries[i].data,
+                    (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)
+                );
+
+                return (lostAmount, fundAmount);
+            }
+        }
+        revert("LiquidateCall event not found");
     }
 
     // ==================== Callback Functions ====================
@@ -424,7 +465,9 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         marginPositionManager.modify(tokenId, modifyAmount, block.timestamp);
 
         MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
-        assertEq(int256(uint256(positionAfter.marginAmount)), int256(uint256(positionBefore.marginAmount)) + modifyAmount);
+        assertEq(
+            int256(uint256(positionAfter.marginAmount)), int256(uint256(positionBefore.marginAmount)) + modifyAmount
+        );
     }
 
     function testModifyNative_Increase() public {
@@ -450,34 +493,82 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertTrue(balanceAfter > balanceBefore);
 
         MarginPosition.State memory positionAfter = marginPositionManager.getPositionState(tokenId);
-        assertEq(int256(uint256(positionAfter.marginAmount)), int256(uint256(positionBefore.marginAmount)) + modifyAmount);
+        assertEq(
+            int256(uint256(positionAfter.marginAmount)), int256(uint256(positionBefore.marginAmount)) + modifyAmount
+        );
     }
 
     // ==================== Liquidation Tests ====================
 
-    function testLiquidateCall_MarginForZero() public {
+    function _liquidateCallMarginForZero(uint256 swapAmount) public returns (uint256 lostAmount, uint256 fundAmount) {
+        InsuranceFunds insuranceFundsBefore = StateLibrary.getInsuranceFunds(vault, key.toId());
+
         (uint256 tokenId,) = _createPosition(false, 4, DEFAULT_MARGIN_AMOUNT);
         skip(1000);
 
-        _manipulatePrice(true, DEFAULT_SWAP_AMOUNT);
+        _manipulatePrice(true, swapAmount);
         assertTrue(helper.checkMarginPositionLiquidate(tokenId));
 
+        vm.recordLogs();
         _liquidateAndVerify(tokenId, false);
+        (lostAmount, fundAmount) = _getLiquidateCallValues();
+
+        InsuranceFunds insuranceFundsAfter = StateLibrary.getInsuranceFunds(vault, key.toId());
+        if (lostAmount > 0) {
+            assertLt(insuranceFundsAfter.amount1(), insuranceFundsBefore.amount1());
+            assertEq(fundAmount, 0);
+            assertApproxEqAbs(lostAmount, uint128(insuranceFundsBefore.amount1() - insuranceFundsAfter.amount1()), 1);
+        }
+        if (fundAmount > 0) {
+            assertGt(insuranceFundsAfter.amount1(), insuranceFundsBefore.amount1());
+            assertEq(lostAmount, 0);
+            assertApproxEqAbs(fundAmount, uint128(insuranceFundsAfter.amount1() - insuranceFundsBefore.amount1()), 1);
+        }
     }
 
-    function testLiquidateCall_MarginForOne() public {
+    function testLiquidateCall_MarginForZero() public {
+        (uint256 lostAmount, uint256 fundAmount) = _liquidateCallMarginForZero(DEFAULT_SWAP_AMOUNT);
+        assertGt(lostAmount, 0);
+        assertEq(fundAmount, 0);
+    }
+
+    function testLiquidateCall_WithFundAmount_MarginForZero() public {
+        (uint256 lostAmount, uint256 fundAmount) = _liquidateCallMarginForZero(1e18);
+        assertEq(lostAmount, 0);
+        assertGt(fundAmount, 0);
+    }
+
+    function _liquidateCallMarginForOne(uint256 swapAmount) public returns (uint256 lostAmount, uint256 fundAmount) {
+        InsuranceFunds insuranceFundsBefore = StateLibrary.getInsuranceFunds(vault, key.toId());
+        assertEq(insuranceFundsBefore.amount0(), 0);
+        assertEq(insuranceFundsBefore.amount1(), 0);
+
         (uint256 tokenId,) = _createPosition(true, 4, DEFAULT_MARGIN_AMOUNT);
         skip(1000);
 
-        _manipulatePrice(false, DEFAULT_SWAP_AMOUNT);
+        _manipulatePrice(false, swapAmount);
         assertTrue(helper.checkMarginPositionLiquidate(tokenId));
 
         _createLiquidator();
+        vm.recordLogs();
         (uint256 profit,) = marginPositionManager.liquidateCall(tokenId, 0);
+        (lostAmount, fundAmount) = _getLiquidateCallValues();
         vm.stopPrank();
 
         assertTrue(profit > 0);
+        InsuranceFunds insuranceFundsAfter = StateLibrary.getInsuranceFunds(vault, key.toId());
+        if (lostAmount > 0) {
+            assertLt(insuranceFundsAfter.amount0(), insuranceFundsBefore.amount0());
+            assertEq(fundAmount, 0);
+            assertApproxEqAbs(lostAmount, uint128(insuranceFundsBefore.amount0() - insuranceFundsAfter.amount0()), 1);
+        }
+        if (fundAmount > 0) {
+            assertGt(insuranceFundsAfter.amount0(), insuranceFundsBefore.amount0());
+            assertEq(lostAmount, 0);
+            assertApproxEqAbs(fundAmount, uint128(insuranceFundsAfter.amount0() - insuranceFundsBefore.amount0()), 1);
+        }
 
+        // Test modify after liquidation
         MarginPosition.State memory position = marginPositionManager.getPositionState(tokenId);
         assertEq(position.debtAmount, 0);
         assertEq(position.marginAmount, 0);
@@ -496,7 +587,21 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertEq(position.marginTotal, 0);
     }
 
+    function testLiquidateCall_MarginForOne() public {
+        (uint256 lostAmount, uint256 fundAmount) = _liquidateCallMarginForOne(DEFAULT_SWAP_AMOUNT);
+        assertGt(lostAmount, 0);
+        assertEq(fundAmount, 0);
+    }
+
+    function testLiquidateCall_WithFundAmount_MarginForOne() public {
+        (uint256 lostAmount, uint256 fundAmount) = _liquidateCallMarginForOne(1.5e18);
+        assertEq(lostAmount, 0);
+        assertGt(fundAmount, 0);
+    }
+
     function testLiquidateBurn() public {
+        InsuranceFunds insuranceFundsBefore = StateLibrary.getInsuranceFunds(vault, key.toId());
+
         (uint256 tokenId,) = _createPosition(false, 4, DEFAULT_MARGIN_AMOUNT);
         skip(1000);
 
@@ -507,7 +612,14 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         LikwidHelper.PoolStateInfo memory poolStateBefore = helper.getPoolStateInfo(key.toId());
         uint256 protocolFeesBefore = vault.protocolFeesAccrued(key.currency1);
 
+        vm.recordLogs();
         _liquidateAndVerify(tokenId, true);
+        (uint256 lostAmount, uint256 fundAmount) = _getLiquidateBurnValues();
+
+        InsuranceFunds insuranceFundsAfter = StateLibrary.getInsuranceFunds(vault, key.toId());
+        assertLt(insuranceFundsAfter.amount1(), insuranceFundsBefore.amount1());
+        assertEq(fundAmount, 0);
+        assertApproxEqAbs(lostAmount, uint128(insuranceFundsBefore.amount1() - insuranceFundsAfter.amount1()), 1);
 
         LikwidHelper.PoolStateInfo memory poolStateAfter = helper.getPoolStateInfo(key.toId());
         uint256 protocolFeesAfter = vault.protocolFeesAccrued(key.currency1);
@@ -540,7 +652,9 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         LikwidHelper.PoolStateInfo memory poolStateBefore = helper.getPoolStateInfo(key.toId());
 
         _createLiquidator();
+        vm.recordLogs();
         uint256 profit = marginPositionManager.liquidateBurn(tokenId, 0);
+        (uint256 lostAmount, uint256 fundAmount) = _getLiquidateBurnValues();
         vm.stopPrank();
 
         assertTrue(profit > 0);
@@ -552,6 +666,8 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         InsuranceFunds insuranceFundsAfter = StateLibrary.getInsuranceFunds(vault, key.toId());
         assertGt(insuranceFundsAfter.amount0(), insuranceFundsBefore.amount0());
+        assertEq(lostAmount, 0);
+        assertEq(fundAmount, uint128(insuranceFundsAfter.amount0() - insuranceFundsBefore.amount0()));
 
         PoolId poolId = key.toId();
         (,,,,, uint8 insuranceFundPercentage) = StateLibrary.getSlot0(vault, poolId);
@@ -578,16 +694,22 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         LikwidHelper.PoolStateInfo memory poolStateBefore = helper.getPoolStateInfo(key.toId());
 
         _createLiquidator();
+        vm.recordLogs();
         uint256 profit = marginPositionManager.liquidateBurn(tokenId, 0);
+        (uint256 lostAmount, uint256 fundAmount) = _getLiquidateBurnValues();
         vm.stopPrank();
 
         assertTrue(profit > 0);
 
         LikwidHelper.PoolStateInfo memory poolStateAfter = helper.getPoolStateInfo(key.toId());
-        assertEq(poolStateBefore.lendReserve1 - poolStateAfter.lendReserve1, position.marginAmount + position.marginTotal);
+        assertEq(
+            poolStateBefore.lendReserve1 - poolStateAfter.lendReserve1, position.marginAmount + position.marginTotal
+        );
 
         InsuranceFunds insuranceFundsAfter = StateLibrary.getInsuranceFunds(vault, key.toId());
         assertGt(insuranceFundsAfter.amount1(), insuranceFundsBefore.amount1());
+        assertEq(lostAmount, 0);
+        assertEq(fundAmount, uint128(insuranceFundsAfter.amount1() - insuranceFundsBefore.amount1()));
     }
 
     function testLiquidateBurn_AfterDonate() public {
@@ -827,7 +949,9 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
     function testSetMarginLevel_Fail_NotOwner() public {
         bytes32 newLevels = keccak256(
-            abi.encodePacked(uint24(1200000), uint24(1500000), uint24(1150000), uint24(900000), uint24(20000), uint24(10000))
+            abi.encodePacked(
+                uint24(1200000), uint24(1500000), uint24(1150000), uint24(900000), uint24(20000), uint24(10000)
+            )
         );
         address notOwner = makeAddr("notOwner");
         vm.startPrank(notOwner);
