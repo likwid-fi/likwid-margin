@@ -51,8 +51,8 @@ contract LikwidHelper is Owned {
         uint128 lendReserve1;
         uint128 interestReserve0;
         uint128 interestReserve1;
-        int128 InsuranceFund0;
-        int128 InsuranceFund1;
+        int128 insuranceFund0;
+        int128 insuranceFund1;
         uint256 borrow0CumulativeLast;
         uint256 borrow1CumulativeLast;
         uint256 deposit0CumulativeLast;
@@ -86,8 +86,8 @@ contract LikwidHelper is Owned {
         stateInfo.interestReserve1 = interestReserve1;
 
         InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, poolId);
-        stateInfo.InsuranceFund0 = insuranceFunds.amount0();
-        stateInfo.InsuranceFund1 = insuranceFunds.amount1();
+        stateInfo.insuranceFund0 = insuranceFunds.amount0();
+        stateInfo.insuranceFund1 = insuranceFunds.amount1();
 
         stateInfo.borrow0CumulativeLast = state.borrow0CumulativeLast;
         stateInfo.borrow1CumulativeLast = state.borrow1CumulativeLast;
