@@ -83,4 +83,62 @@ contract ProtocolFeeLibraryTest is Test {
         assertEq(protocolFee, 0, "Protocol fee should be 0");
         assertEq(remainingFee, 1000, "Remaining fee should be 1000");
     }
+
+    function testGetProtocolFees_maxValues() public pure {
+        uint24 fees = 0xC8C8C8; // 200, 200, 200 (max values)
+
+        assertEq(fees.getProtocolInterestFee(), 200, "Interest fee should be 200");
+        assertEq(fees.getProtocolMarginFee(), 200, "Margin fee should be 200");
+        assertEq(fees.getProtocolSwapFee(), 200, "Swap fee should be 200");
+    }
+
+    function testSplitFee_maxProtocolFee() public pure {
+        uint24 fees = 0;
+        fees = fees.setProtocolFee(FeeTypes.SWAP, 200); // 100% protocol fee
+
+        uint256 totalFee = 1000;
+        (uint256 protocolFee, uint256 remainingFee) = fees.splitFee(FeeTypes.SWAP, totalFee);
+
+        assertEq(protocolFee, 1000, "Protocol fee should be 100%");
+        assertEq(remainingFee, 0, "Remaining fee should be 0");
+    }
+
+    function testIsValidProtocolFee_boundary() public pure {
+        uint24 validAtMax = 0xC8C8C8; // 200, 200, 200
+        assertTrue(validAtMax.isValidProtocolFee(), "Max value should be valid");
+
+        uint24 invalidJustAbove = 0xC9C8C8; // 201, 200, 200
+        assertFalse(invalidJustAbove.isValidProtocolFee(), "201 should be invalid");
+    }
+
+    function testSetProtocolFee_allTypes() public pure {
+        uint24 fees = 0;
+
+        fees = fees.setProtocolFee(FeeTypes.INTERESTS, 10);
+        assertEq(fees.getProtocolInterestFee(), 10);
+
+        fees = fees.setProtocolFee(FeeTypes.MARGIN, 20);
+        assertEq(fees.getProtocolMarginFee(), 20);
+
+        fees = fees.setProtocolFee(FeeTypes.SWAP, 30);
+        assertEq(fees.getProtocolSwapFee(), 30);
+    }
+
+    function testSplitFee_allTypes() public pure {
+        uint24 fees = 0x646464; // 100, 100, 100 (50% protocol fee for all)
+
+        uint256 totalFee = 1000;
+
+        (uint256 protocolInterest, uint256 remainingInterest) = fees.splitFee(FeeTypes.INTERESTS, totalFee);
+        assertEq(protocolInterest, 500, "Interest protocol fee should be 50%");
+        assertEq(remainingInterest, 500);
+
+        (uint256 protocolMargin, uint256 remainingMargin) = fees.splitFee(FeeTypes.MARGIN, totalFee);
+        assertEq(protocolMargin, 500, "Margin protocol fee should be 50%");
+        assertEq(remainingMargin, 500);
+
+        (uint256 protocolSwap, uint256 remainingSwap) = fees.splitFee(FeeTypes.SWAP, totalFee);
+        assertEq(protocolSwap, 500, "Swap protocol fee should be 50%");
+        assertEq(remainingSwap, 500);
+    }
 }

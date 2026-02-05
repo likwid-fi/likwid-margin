@@ -39,6 +39,9 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @notice Thrown when margin is banned for low fee pools
     error LowFeePoolMarginBanned();
 
+    /// @notice Thrown when the margin is below the minimum required
+    error MarginBelowMinimum();
+
     /// @notice Thrown when the leverage exceeds the maximum allowed
     error ExceedMaxLeverage();
 
@@ -146,6 +149,7 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @param repayAmount The amount of debt repaid
     /// @param profitAmount The profit from the liquidation
     /// @param lostAmount The loss from the liquidation
+    /// @param fundAmount The amount added to the insurance fund
     event LiquidateBurn(
         PoolId indexed poolId,
         address indexed sender,
@@ -158,7 +162,8 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 releaseAmount,
         uint256 repayAmount,
         uint256 profitAmount,
-        uint256 lostAmount
+        uint256 lostAmount,
+        uint256 fundAmount
     );
 
     /// @notice Emitted when a margin position is liquidated by calling
@@ -174,6 +179,7 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @param repayAmount The amount of debt repaid
     /// @param needRepayAmount The amount of debt that needs to be repaid
     /// @param lostAmount The loss from the liquidation
+    /// @param fundAmount The amount added to the insurance fund
     event LiquidateCall(
         PoolId indexed poolId,
         address indexed sender,
@@ -186,7 +192,8 @@ interface IMarginPositionManager is IBasePositionManager {
         uint256 releaseAmount,
         uint256 repayAmount,
         uint256 needRepayAmount,
-        uint256 lostAmount
+        uint256 lostAmount,
+        uint256 fundAmount
     );
 
     /// @notice Gets the state of a position
@@ -277,7 +284,8 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @notice Modify the margin position
     /// @param tokenId The id of position
     /// @param changeAmount The amount to modify
-    function modify(uint256 tokenId, int128 changeAmount) external payable;
+    /// @param deadline Deadline for the transaction
+    function modify(uint256 tokenId, int128 changeAmount, uint256 deadline) external payable;
 
     /// @notice Gets the margin levels
     /// @return marginLevel The margin levels

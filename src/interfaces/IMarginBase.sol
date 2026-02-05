@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {PoolId} from "../types/PoolId.sol";
 import {MarginState} from "../types/MarginState.sol";
 
 /// @notice Interface for all interest-fee related functions in the pool manager
@@ -13,6 +14,8 @@ interface IMarginBase {
     /// @param newMarginState The new rate state being set
     /// @dev This event is emitted when the rate state is updated, allowing external observers to
     event MarginStateUpdated(MarginState indexed newMarginState);
+
+    event InsuranceFundPercentageUpdated(PoolId poolId, uint8 insuranceFundPercentage);
 
     /// @notice Sets the rate state for interest fees
     /// @param newMarginState The new rate state to set

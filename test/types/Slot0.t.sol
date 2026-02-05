@@ -50,4 +50,14 @@ contract Slot0Test is Test {
         slot0 = slot0.setMarginFee(marginFee);
         assertEq(slot0.marginFee(), marginFee);
     }
+
+    function testSetAndGetInsuranceFundPercentage() public {
+        uint8 insuranceFundPercentage = 10; // 10%
+        slot0 = slot0.setInsuranceFundPercentage(insuranceFundPercentage);
+        assertEq(slot0.insuranceFundPercentage(), insuranceFundPercentage);
+
+        insuranceFundPercentage = 101; // 101%
+        slot0 = slot0.setInsuranceFundPercentage(insuranceFundPercentage);
+        assertEq(slot0.insuranceFundPercentage(), insuranceFundPercentage);
+    }
 }

@@ -68,16 +68,10 @@ abstract contract ProtocolFees is IProtocolFees, MarginBase {
         }
         if (recipient == address(0)) InvalidRecipient.selector.revertWith();
 
-        amountCollected = (amount == 0) ? protocolFeesAccrued[currency] : amount;
+        amountCollected = (amount > protocolFeesAccrued[currency]) ? protocolFeesAccrued[currency] : amount;
         protocolFeesAccrued[currency] -= amountCollected;
         currency.transfer(recipient, amountCollected);
     }
-
-    /// @dev abstract internal function to allow the ProtocolFees contract to access the lock
-    function _isUnlocked() internal virtual returns (bool);
-
-    /// @dev abstract internal function to allow the ProtocolFees contract to access pool state
-    function _getAndUpdatePool(PoolKey memory key) internal virtual returns (Pool.State storage);
 
     function _updateProtocolFees(Currency currency, uint256 amount) internal {
         unchecked {

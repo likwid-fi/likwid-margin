@@ -16,7 +16,6 @@ contract MarginLevelsTest is Test {
         marginLevels = marginLevels.setLiquidateLevel(1100000);
         marginLevels = marginLevels.setLiquidationRatio(950000);
         marginLevels = marginLevels.setCallerProfit(10000);
-        marginLevels = marginLevels.setProtocolProfit(5000);
     }
 
     function test_Getters() public view {
@@ -25,7 +24,6 @@ contract MarginLevelsTest is Test {
         assertEq(marginLevels.liquidateLevel(), 1100000);
         assertEq(marginLevels.liquidationRatio(), 950000);
         assertEq(marginLevels.callerProfit(), 10000);
-        assertEq(marginLevels.protocolProfit(), 5000);
     }
 
     function test_SetMinMarginLevel() public {
@@ -64,14 +62,6 @@ contract MarginLevelsTest is Test {
         uint24 newProfit = 20000;
         marginLevels = marginLevels.setCallerProfit(newProfit);
         assertEq(marginLevels.callerProfit(), newProfit);
-        // check other values are unchanged
-        assertEq(marginLevels.minMarginLevel(), 1170000);
-    }
-
-    function test_SetProtocolProfit() public {
-        uint24 newProfit = 7500;
-        marginLevels = marginLevels.setProtocolProfit(newProfit);
-        assertEq(marginLevels.protocolProfit(), newProfit);
         // check other values are unchanged
         assertEq(marginLevels.minMarginLevel(), 1170000);
     }

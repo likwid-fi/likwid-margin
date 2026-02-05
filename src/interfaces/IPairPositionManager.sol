@@ -111,4 +111,11 @@ interface IPairPositionManager is IERC721 {
         external
         payable
         returns (uint24 swapFee, uint256 feeAmount, uint256 amountIn);
+
+    /// @notice Donate to the insurance fund of a given pool
+    /// @param poolId The ID of the pool to donate to
+    /// @param amount0 The amount of token0 to donate
+    /// @param amount1 The amount of token1 to donate
+    /// @param deadline Deadline for the transaction
+    function donate(PoolId poolId, uint256 amount0, uint256 amount1, uint256 deadline) external;
 }

@@ -13,14 +13,13 @@ library MarginLevelsLibrary {
     uint8 internal constant LIQUIDATE_LEVEL_OFFSET = 48;
     uint8 internal constant LIQUIDATION_RATIO_OFFSET = 72;
     uint8 internal constant CALLER_PROFIT_OFFSET = 96;
-    uint8 internal constant PROTOCOL_PROFIT_OFFSET = 120;
 
     function isValidMarginLevels(MarginLevels _packed) internal pure returns (bool valid) {
         uint24 _liquidateLevel = liquidateLevel(_packed);
         uint24 one = 10 ** 6;
         valid = _liquidateLevel >= one && minMarginLevel(_packed) > _liquidateLevel
             && minBorrowLevel(_packed) > _liquidateLevel && liquidationRatio(_packed) <= one
-            && callerProfit(_packed) + protocolProfit(_packed) <= one;
+            && callerProfit(_packed) <= one;
     }
 
     // #### GETTERS ####
@@ -54,12 +53,6 @@ library MarginLevelsLibrary {
         }
     }
 
-    function protocolProfit(MarginLevels _packed) internal pure returns (uint24 _protocolProfit) {
-        assembly ("memory-safe") {
-            _protocolProfit := and(MASK_24_BITS, shr(PROTOCOL_PROFIT_OFFSET, _packed))
-        }
-    }
-
     // #### SETTERS ####
     function setMinMarginLevel(MarginLevels _packed, uint24 _minMarginLevel)
         internal
@@ -77,11 +70,10 @@ library MarginLevelsLibrary {
         returns (MarginLevels _result)
     {
         assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(MIN_BORROW_LEVEL_OFFSET, MASK_24_BITS)), _packed),
-                    shl(MIN_BORROW_LEVEL_OFFSET, and(MASK_24_BITS, _minBorrowLevel))
-                )
+            _result := or(
+                and(not(shl(MIN_BORROW_LEVEL_OFFSET, MASK_24_BITS)), _packed),
+                shl(MIN_BORROW_LEVEL_OFFSET, and(MASK_24_BITS, _minBorrowLevel))
+            )
         }
     }
 
@@ -91,11 +83,10 @@ library MarginLevelsLibrary {
         returns (MarginLevels _result)
     {
         assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(LIQUIDATE_LEVEL_OFFSET, MASK_24_BITS)), _packed),
-                    shl(LIQUIDATE_LEVEL_OFFSET, and(MASK_24_BITS, _liquidateLevel))
-                )
+            _result := or(
+                and(not(shl(LIQUIDATE_LEVEL_OFFSET, MASK_24_BITS)), _packed),
+                shl(LIQUIDATE_LEVEL_OFFSET, and(MASK_24_BITS, _liquidateLevel))
+            )
         }
     }
 
@@ -105,35 +96,19 @@ library MarginLevelsLibrary {
         returns (MarginLevels _result)
     {
         assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(LIQUIDATION_RATIO_OFFSET, MASK_24_BITS)), _packed),
-                    shl(LIQUIDATION_RATIO_OFFSET, and(MASK_24_BITS, _liquidationRatio))
-                )
+            _result := or(
+                and(not(shl(LIQUIDATION_RATIO_OFFSET, MASK_24_BITS)), _packed),
+                shl(LIQUIDATION_RATIO_OFFSET, and(MASK_24_BITS, _liquidationRatio))
+            )
         }
     }
 
     function setCallerProfit(MarginLevels _packed, uint24 _callerProfit) internal pure returns (MarginLevels _result) {
         assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(CALLER_PROFIT_OFFSET, MASK_24_BITS)), _packed),
-                    shl(CALLER_PROFIT_OFFSET, and(MASK_24_BITS, _callerProfit))
-                )
-        }
-    }
-
-    function setProtocolProfit(MarginLevels _packed, uint24 _protocolProfit)
-        internal
-        pure
-        returns (MarginLevels _result)
-    {
-        assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(PROTOCOL_PROFIT_OFFSET, MASK_24_BITS)), _packed),
-                    shl(PROTOCOL_PROFIT_OFFSET, and(MASK_24_BITS, _protocolProfit))
-                )
+            _result := or(
+                and(not(shl(CALLER_PROFIT_OFFSET, MASK_24_BITS)), _packed),
+                shl(CALLER_PROFIT_OFFSET, and(MASK_24_BITS, _callerProfit))
+            )
         }
     }
 }

@@ -43,7 +43,7 @@ library CurrentStateLibrary {
 
         // 2. Get all other data in one call
         bytes32 startSlot = bytes32(uint256(poolStateSlot) + 1); // BORROW_0_CUMULATIVE_LAST_OFFSET
-        bytes32[] memory data = vault.extsload(startSlot, 10); // read 10 slots
+        bytes32[] memory data = vault.extsload(startSlot, 11); // read 13 slots
 
         uint256 borrow0CumulativeBefore = uint256(data[0]);
         uint256 borrow1CumulativeBefore = uint256(data[1]);
@@ -55,6 +55,7 @@ library CurrentStateLibrary {
         Reserves _truncatedReserves = Reserves.wrap(uint256(data[7]));
         state.lendReserves = Reserves.wrap(uint256(data[8]));
         state.interestReserves = Reserves.wrap(uint256(data[9]));
+        state.protocolInterestReserves = Reserves.wrap(uint256(data[10]));
 
         // 3. Get marginState
         state.marginState = IMarginBase(address(vault)).marginState();
@@ -66,6 +67,7 @@ library CurrentStateLibrary {
         (uint256 pairReserve0, uint256 pairReserve1) = state.pairReserves.reserves();
         (uint256 lendReserve0, uint256 lendReserve1) = state.lendReserves.reserves();
         (uint256 interestReserve0, uint256 interestReserve1) = state.interestReserves.reserves();
+        (uint256 protocolInterestReserve0, uint256 protocolInterestReserve1) = state.protocolInterestReserves.reserves();
 
         (uint256 borrow0CumulativeLast, uint256 borrow1CumulativeLast) = InterestMath.getBorrowRateCumulativeLast(
             timeElapsed,
@@ -83,6 +85,7 @@ library CurrentStateLibrary {
             interestReserve: interestReserve0,
             pairReserve: pairReserve0,
             lendReserve: lendReserve0,
+            protocolInterestReserve: protocolInterestReserve0,
             depositCumulativeLast: deposit0CumulativeBefore,
             protocolFee: state.protocolFee
         });
@@ -104,6 +107,7 @@ library CurrentStateLibrary {
             interestReserve: interestReserve1,
             pairReserve: pairReserve1,
             lendReserve: lendReserve1,
+            protocolInterestReserve: protocolInterestReserve1,
             depositCumulativeLast: deposit1CumulativeBefore,
             protocolFee: state.protocolFee
         });
@@ -124,7 +128,7 @@ library CurrentStateLibrary {
             state.lendReserves = toReserves(lendReserve0.toUint128(), lendReserve1.toUint128());
         }
         state.truncatedReserves = PriceMath.transferReserves(
-            _truncatedReserves, state.pairReserves, timeElapsed, state.marginState.maxPriceMovePerSecond()
+            _truncatedReserves, state.pairReserves, timeElapsed, state.marginState.priceMoveSpeedPPM()
         );
 
         state.interestReserves = toReserves(interestReserve0.toUint128(), interestReserve1.toUint128());

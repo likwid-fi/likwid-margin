@@ -11,6 +11,7 @@ import {IVault} from "../../src/interfaces/IVault.sol";
 import {IMarginPositionManager} from "../../src/interfaces/IMarginPositionManager.sol";
 import {IMarginBase} from "../../src/interfaces/IMarginBase.sol";
 import {MarginState} from "../../src/types/MarginState.sol";
+import {InsuranceFunds} from "../../src/types/InsuranceFunds.sol";
 import {StageMath} from "../../src/libraries/StageMath.sol";
 import {Math} from "../../src/libraries/Math.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
@@ -50,6 +51,8 @@ contract LikwidHelper is Owned {
         uint128 lendReserve1;
         uint128 interestReserve0;
         uint128 interestReserve1;
+        int128 insuranceFund0;
+        int128 insuranceFund1;
         uint256 borrow0CumulativeLast;
         uint256 borrow1CumulativeLast;
         uint256 deposit0CumulativeLast;
@@ -81,6 +84,10 @@ contract LikwidHelper is Owned {
         (uint128 interestReserve0, uint128 interestReserve1) = state.interestReserves.reserves();
         stateInfo.interestReserve0 = interestReserve0;
         stateInfo.interestReserve1 = interestReserve1;
+
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, poolId);
+        stateInfo.insuranceFund0 = insuranceFunds.amount0();
+        stateInfo.insuranceFund1 = insuranceFunds.amount1();
 
         stateInfo.borrow0CumulativeLast = state.borrow0CumulativeLast;
         stateInfo.borrow1CumulativeLast = state.borrow1CumulativeLast;
@@ -183,9 +190,8 @@ contract LikwidHelper is Owned {
     function getMaxDecrease(uint256 tokenId) external view returns (uint256 maxAmount) {
         IMarginPositionManager manager = IMarginPositionManager(vault.marginController());
         MarginPosition.State memory _position = manager.getPositionState(tokenId);
-        IVault _vault = manager.vault();
         PoolId poolId = manager.poolIds(tokenId);
-        PoolState memory _state = CurrentStateLibrary.getState(_vault, poolId);
+        PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
         maxAmount = _getMaxDecrease(manager, _state, _position);
     }
 
@@ -198,9 +204,8 @@ contract LikwidHelper is Owned {
     function getLiquidateRepayAmount(uint256 tokenId) external view returns (uint256 repayAmount) {
         IMarginPositionManager manager = IMarginPositionManager(vault.marginController());
         MarginPosition.State memory _position = manager.getPositionState(tokenId);
-        IVault _vault = manager.vault();
         PoolId poolId = manager.poolIds(tokenId);
-        PoolState memory _state = CurrentStateLibrary.getState(_vault, poolId);
+        PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
         (uint128 pairReserve0, uint128 pairReserve1) = _state.pairReserves.reserves();
         (uint256 reserveBorrow, uint256 reserveMargin) =
             _position.marginForOne ? (pairReserve0, pairReserve1) : (pairReserve1, pairReserve0);
@@ -285,9 +290,8 @@ contract LikwidHelper is Owned {
     function checkMarginPositionLiquidate(uint256 tokenId) external view returns (bool liquidated) {
         IMarginPositionManager manager = IMarginPositionManager(vault.marginController());
         MarginPosition.State memory _position = manager.getPositionState(tokenId);
-        IVault _vault = manager.vault();
         PoolId poolId = manager.poolIds(tokenId);
-        PoolState memory _state = CurrentStateLibrary.getState(_vault, poolId);
+        PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
         uint256 level = _position.marginLevel(
             _state.truncatedReserves, _position.borrowCumulativeLast, _position.depositCumulativeLast
         );

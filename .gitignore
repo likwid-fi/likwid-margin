@@ -15,6 +15,7 @@ docs/
 # Dotenv file
 .env
 .vscode/
+.trae
 
 # Certora
 .certora_internal/

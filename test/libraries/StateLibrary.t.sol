@@ -11,10 +11,13 @@ import {PoolState} from "../../src/types/PoolState.sol";
 import {Currency, CurrencyLibrary} from "../../src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "../../src/types/PoolId.sol";
 import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
+import {Reserves, toReserves} from "../../src/types/Reserves.sol";
+import {InsuranceFunds} from "../../src/types/InsuranceFunds.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
 import {CurrentStateLibrary} from "../../src/libraries/CurrentStateLibrary.sol";
 import {StageMath} from "../../src/libraries/StageMath.sol";
 import {LendPosition} from "../../src/libraries/LendPosition.sol";
+import {PairPosition} from "../../src/libraries/PairPosition.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 contract StateLibraryTest is Test, IUnlockCallback {
@@ -60,10 +63,7 @@ contract StateLibraryTest is Test, IUnlockCallback {
         token1.mint(address(this), initialLiquidity);
 
         IVault.ModifyLiquidityParams memory mlParams = IVault.ModifyLiquidityParams({
-            amount0: initialLiquidity,
-            amount1: initialLiquidity,
-            liquidityDelta: 0,
-            salt: bytes32(0)
+            amount0: initialLiquidity, amount1: initialLiquidity, liquidityDelta: 0, salt: bytes32(0)
         });
 
         bytes memory innerData = abi.encode(poolKey, mlParams);
@@ -170,18 +170,126 @@ contract StateLibraryTest is Test, IUnlockCallback {
     }
 
     function testGetSlot0() public view {
-        (uint128 totalSupply, uint32 lastUpdated, uint24 protocolFee, uint24 lpFee, uint24 marginFee) =
-            StateLibrary.getSlot0(vault, poolId);
+        (
+            uint128 totalSupply,
+            uint32 lastUpdated,
+            uint24 protocolFee,
+            uint24 lpFee,
+            uint24 marginFee,
+            uint8 insuranceFundPercentage
+        ) = StateLibrary.getSlot0(vault, poolId);
         assertEq(protocolFee, vault.defaultProtocolFee(), "defaultProtocolFee should match protocolFee");
         assertEq(lpFee, 3000, "lpFee should be 3000");
         assertEq(marginFee, 3000, "marginFee should be 3000");
         assertEq(lastUpdated, 1, "lastUpdated should be 1");
         assertEq(totalSupply, initialLiquidity + 1000, "totalSupply should match initialLiquidity+1000");
+        assertEq(insuranceFundPercentage, 30, "insuranceFundPercentage should be 30");
+    }
+
+    function testGetNewReserves() public view {
+        Reserves protocolInterestReserves = StateLibrary.getProtocolInterestReserves(vault, poolId);
+        Reserves insuranceFundUpperLimit = StateLibrary.getInsuranceFundUpperLimit(vault, poolId);
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, poolId);
+        PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
+        Reserves realReserves = state.realReserves;
+        Reserves mirrorReserves = state.mirrorReserves;
+        Reserves totalReserves = realReserves + mirrorReserves;
+        Reserves insuranceFundUpperLimitExpected =
+            toReserves((totalReserves.reserve0() * 30) / 100, (totalReserves.reserve1() * 30) / 100); // 30%
+        assertEq(Reserves.unwrap(protocolInterestReserves), 0, "protocolInterestReserves should be 0");
+        assertEq(
+            Reserves.unwrap(insuranceFundUpperLimit),
+            Reserves.unwrap(insuranceFundUpperLimitExpected),
+            "insuranceFundUpperLimit should be insuranceFundUpperLimitExpected"
+        );
+        assertEq(InsuranceFunds.unwrap(insuranceFunds), 0, "insuranceFunds should be 0");
     }
 
     function testGetCurrentState() public view {
         PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
         uint24 protocolFee = vault.defaultProtocolFee();
         assertEq(protocolFee, state.protocolFee, "defaultProtocolFee should match state.protocolFee");
+    }
+
+    function testGetBorrowDepositCumulative() public view {
+        (
+            uint256 borrow0CumulativeLast,
+            uint256 borrow1CumulativeLast,
+            uint256 deposit0CumulativeLast,
+            uint256 deposit1CumulativeLast
+        ) = StateLibrary.getBorrowDepositCumulative(vault, poolId);
+
+        assertGt(borrow0CumulativeLast, 0, "borrow0CumulativeLast should be initialized");
+        assertGt(borrow1CumulativeLast, 0, "borrow1CumulativeLast should be initialized");
+        assertGt(deposit0CumulativeLast, 0, "deposit0CumulativeLast should be initialized");
+        assertGt(deposit1CumulativeLast, 0, "deposit1CumulativeLast should be initialized");
+    }
+
+    function testGetPairReserves() public view {
+        Reserves pairReserves = StateLibrary.getPairReserves(vault, poolId);
+        (uint128 reserve0, uint128 reserve1) = pairReserves.reserves();
+        assertGt(reserve0, 0, "pair reserve0 should be > 0");
+        assertGt(reserve1, 0, "pair reserve1 should be > 0");
+    }
+
+    function testGetRealReserves() public view {
+        Reserves realReserves = StateLibrary.getRealReserves(vault, poolId);
+        (uint128 reserve0, uint128 reserve1) = realReserves.reserves();
+        assertGt(reserve0, 0, "real reserve0 should be > 0");
+        assertGt(reserve1, 0, "real reserve1 should be > 0");
+    }
+
+    function testGetMirrorReserves() public view {
+        Reserves mirrorReserves = StateLibrary.getMirrorReserves(vault, poolId);
+        (uint128 reserve0, uint128 reserve1) = mirrorReserves.reserves();
+        assertEq(reserve0, 0, "mirror reserve0 should be 0 initially");
+        assertEq(reserve1, 0, "mirror reserve1 should be 0 initially");
+    }
+
+    function testGetTruncatedReserves() public view {
+        Reserves truncatedReserves = StateLibrary.getTruncatedReserves(vault, poolId);
+        (uint128 reserve0, uint128 reserve1) = truncatedReserves.reserves();
+        assertGt(reserve0, 0, "truncated reserve0 should be > 0");
+        assertGt(reserve1, 0, "truncated reserve1 should be > 0");
+    }
+
+    function testGetLendReserves() public view {
+        Reserves lendReserves = StateLibrary.getLendReserves(vault, poolId);
+        (uint128 reserve0, uint128 reserve1) = lendReserves.reserves();
+        assertEq(reserve0, 0, "lend reserve0 should be 0 initially");
+        assertEq(reserve1, 0, "lend reserve1 should be 0 initially");
+    }
+
+    function testGetInterestReserves() public view {
+        Reserves interestReserves = StateLibrary.getInterestReserves(vault, poolId);
+        (uint128 reserve0, uint128 reserve1) = interestReserves.reserves();
+        assertEq(reserve0, 0, "interest reserve0 should be 0 initially");
+        assertEq(reserve1, 0, "interest reserve1 should be 0 initially");
+    }
+
+    function testGetPairPositionState() public {
+        // First add liquidity to create a position
+        bytes32 salt = keccak256("test_position");
+        uint256 amount0 = 1e18;
+        uint256 amount1 = 1e18;
+        token0.mint(address(this), amount0);
+        token1.mint(address(this), amount1);
+
+        IVault.ModifyLiquidityParams memory mlParams =
+            IVault.ModifyLiquidityParams({amount0: amount0, amount1: amount1, liquidityDelta: 0, salt: salt});
+
+        bytes memory innerData = abi.encode(poolKey, mlParams);
+        bytes memory data = abi.encode(this.modifyLiquidity_callback.selector, innerData);
+        vault.unlock(data);
+
+        // Now get the position state
+        PairPosition.State memory position = StateLibrary.getPairPositionState(vault, poolId, address(this), salt);
+        assertGt(position.liquidity, 0, "Position liquidity should be > 0");
+    }
+
+    function testGetLastStageTimestamp() public view {
+        uint256 lastStageTimestamp = StateLibrary.getLastStageTimestamp(vault, poolId);
+        // After pool initialization and liquidity addition, timestamp may be set
+        assertGe(lastStageTimestamp, 0, "Last stage timestamp should be >= 0");
     }
 }

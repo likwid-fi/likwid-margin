@@ -10,11 +10,13 @@ library Slot0Library {
     uint128 internal constant MASK_128_BITS = 0x00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
     uint32 internal constant MASK_32_BITS = 0xFFFFFFFF;
     uint24 internal constant MASK_24_BITS = 0xFFFFFF;
+    uint8 internal constant MASK_8_BITS = 0xFF;
 
     uint8 internal constant LAST_UPDATED_OFFSET = 128;
     uint8 internal constant PROTOCOL_FEE_OFFSET = 160;
     uint8 internal constant LP_FEE_OFFSET = 184;
     uint8 internal constant MARGIN_FEE_OFFSET = 208;
+    uint8 internal constant INSURANCE_FUND_PERCENTAGE_OFFSET = 232;
 
     // #### GETTERS ####
     function totalSupply(Slot0 _packed) internal pure returns (uint128 _totalSupply) {
@@ -49,6 +51,12 @@ library Slot0Library {
     function marginFee(Slot0 _packed) internal pure returns (uint24 _marginFee) {
         assembly ("memory-safe") {
             _marginFee := and(MASK_24_BITS, shr(MARGIN_FEE_OFFSET, _packed))
+        }
+    }
+
+    function insuranceFundPercentage(Slot0 _packed) internal pure returns (uint8 _insuranceFundPercentage) {
+        assembly ("memory-safe") {
+            _insuranceFundPercentage := and(MASK_8_BITS, shr(INSURANCE_FUND_PERCENTAGE_OFFSET, _packed))
         }
     }
 
@@ -92,6 +100,20 @@ library Slot0Library {
                 or(
                     and(not(shl(MARGIN_FEE_OFFSET, MASK_24_BITS)), _packed),
                     shl(MARGIN_FEE_OFFSET, and(MASK_24_BITS, _marginFee))
+                )
+        }
+    }
+
+    function setInsuranceFundPercentage(Slot0 _packed, uint8 _insuranceFundPercentage)
+        internal
+        pure
+        returns (Slot0 _result)
+    {
+        assembly ("memory-safe") {
+            _result :=
+                or(
+                    and(not(shl(INSURANCE_FUND_PERCENTAGE_OFFSET, MASK_8_BITS)), _packed),
+                    shl(INSURANCE_FUND_PERCENTAGE_OFFSET, and(MASK_8_BITS, _insuranceFundPercentage))
                 )
         }
     }

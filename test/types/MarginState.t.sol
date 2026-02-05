@@ -74,13 +74,13 @@ contract MarginStateTest is Test {
     }
 
     function testSetAndGetMaxPriceMovePerSecond() public {
-        uint24 maxPriceMovePerSecond = 7000;
-        marginState = marginState.setMaxPriceMovePerSecond(maxPriceMovePerSecond);
-        assertEq(marginState.maxPriceMovePerSecond(), maxPriceMovePerSecond);
+        uint24 priceMoveSpeedPPM = 7000;
+        marginState = marginState.setPriceMoveSpeedPPM(priceMoveSpeedPPM);
+        assertEq(marginState.priceMoveSpeedPPM(), priceMoveSpeedPPM);
 
-        maxPriceMovePerSecond = 17000;
-        marginState = marginState.setMaxPriceMovePerSecond(maxPriceMovePerSecond);
-        assertEq(marginState.maxPriceMovePerSecond(), maxPriceMovePerSecond);
+        priceMoveSpeedPPM = 17000;
+        marginState = marginState.setPriceMoveSpeedPPM(priceMoveSpeedPPM);
+        assertEq(marginState.priceMoveSpeedPPM(), priceMoveSpeedPPM);
     }
 
     function testSetAndGetStageDuration() public {
@@ -120,7 +120,7 @@ contract MarginStateTest is Test {
         uint24 mLow = 4000;
         uint24 mMiddle = 5000;
         uint24 mHigh = 6000;
-        uint24 maxPriceMovePerSecond = 7000;
+        uint24 priceMoveSpeedPPM = 7000;
         uint24 stageDuration = 8000;
         uint24 stageSize = 10;
         uint24 stageLeavePart = 20;
@@ -131,7 +131,7 @@ contract MarginStateTest is Test {
         marginState = marginState.setMLow(mLow);
         marginState = marginState.setMMiddle(mMiddle);
         marginState = marginState.setMHigh(mHigh);
-        marginState = marginState.setMaxPriceMovePerSecond(maxPriceMovePerSecond);
+        marginState = marginState.setPriceMoveSpeedPPM(priceMoveSpeedPPM);
         marginState = marginState.setStageDuration(stageDuration);
         marginState = marginState.setStageSize(stageSize);
         marginState = marginState.setStageLeavePart(stageLeavePart);
@@ -142,7 +142,7 @@ contract MarginStateTest is Test {
         assertEq(marginState.mLow(), mLow);
         assertEq(marginState.mMiddle(), mMiddle);
         assertEq(marginState.mHigh(), mHigh);
-        assertEq(marginState.maxPriceMovePerSecond(), maxPriceMovePerSecond);
+        assertEq(marginState.priceMoveSpeedPPM(), priceMoveSpeedPPM);
         assertEq(marginState.stageDuration(), stageDuration);
         assertEq(marginState.stageSize(), stageSize);
         assertEq(marginState.stageLeavePart(), stageLeavePart);
