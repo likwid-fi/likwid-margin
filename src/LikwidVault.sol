@@ -71,7 +71,7 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         }
 
         PoolId id = key.toId();
-        _pools[id].initialize(key.fee, key.marginFee);
+        _pools[id].initialize(key.fee, key.marginFee, key.rateRange);
         emit Initialize(id, key.currency0, key.currency1, key.fee, key.marginFee);
     }
 

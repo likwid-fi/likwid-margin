@@ -71,6 +71,7 @@ library CurrentStateLibrary {
 
         (uint256 borrow0CumulativeLast, uint256 borrow1CumulativeLast) = InterestMath.getBorrowRateCumulativeLast(
             timeElapsed,
+            slot0.rateRange(),
             borrow0CumulativeBefore,
             borrow1CumulativeBefore,
             state.marginState,

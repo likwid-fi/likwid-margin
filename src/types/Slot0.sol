@@ -10,6 +10,7 @@ library Slot0Library {
     uint128 internal constant MASK_128_BITS = 0x00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
     uint32 internal constant MASK_32_BITS = 0xFFFFFFFF;
     uint24 internal constant MASK_24_BITS = 0xFFFFFF;
+    uint16 internal constant MASK_16_BITS = 0xFFFF;
     uint8 internal constant MASK_8_BITS = 0xFF;
 
     uint8 internal constant LAST_UPDATED_OFFSET = 128;
@@ -17,6 +18,7 @@ library Slot0Library {
     uint8 internal constant LP_FEE_OFFSET = 184;
     uint8 internal constant MARGIN_FEE_OFFSET = 208;
     uint8 internal constant INSURANCE_FUND_PERCENTAGE_OFFSET = 232;
+    uint8 internal constant RATE_RANGE_OFFSET = 240;
 
     // #### GETTERS ####
     function totalSupply(Slot0 _packed) internal pure returns (uint128 _totalSupply) {
@@ -60,6 +62,12 @@ library Slot0Library {
         }
     }
 
+    function rateRange(Slot0 _packed) internal pure returns (uint16 _rateRange) {
+        assembly ("memory-safe") {
+            _rateRange := and(MASK_16_BITS, shr(RATE_RANGE_OFFSET, _packed))
+        }
+    }
+
     // #### SETTERS ####
     function setTotalSupply(Slot0 _packed, uint128 _totalSupply) internal pure returns (Slot0 _result) {
         assembly ("memory-safe") {
@@ -69,38 +77,37 @@ library Slot0Library {
 
     function setLastUpdated(Slot0 _packed, uint32 _lastUpdated) internal pure returns (Slot0 _result) {
         assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(LAST_UPDATED_OFFSET, MASK_32_BITS)), _packed),
-                    shl(LAST_UPDATED_OFFSET, and(MASK_32_BITS, _lastUpdated))
-                )
+            _result := or(
+                and(not(shl(LAST_UPDATED_OFFSET, MASK_32_BITS)), _packed),
+                shl(LAST_UPDATED_OFFSET, and(MASK_32_BITS, _lastUpdated))
+            )
         }
     }
 
     function setProtocolFee(Slot0 _packed, uint24 _protocolFee) internal pure returns (Slot0 _result) {
         assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(PROTOCOL_FEE_OFFSET, MASK_24_BITS)), _packed),
-                    shl(PROTOCOL_FEE_OFFSET, and(MASK_24_BITS, _protocolFee))
-                )
+            _result := or(
+                and(not(shl(PROTOCOL_FEE_OFFSET, MASK_24_BITS)), _packed),
+                shl(PROTOCOL_FEE_OFFSET, and(MASK_24_BITS, _protocolFee))
+            )
         }
     }
 
     function setLpFee(Slot0 _packed, uint24 _lpFee) internal pure returns (Slot0 _result) {
         assembly ("memory-safe") {
-            _result :=
-                or(and(not(shl(LP_FEE_OFFSET, MASK_24_BITS)), _packed), shl(LP_FEE_OFFSET, and(MASK_24_BITS, _lpFee)))
+            _result := or(
+                and(not(shl(LP_FEE_OFFSET, MASK_24_BITS)), _packed),
+                shl(LP_FEE_OFFSET, and(MASK_24_BITS, _lpFee))
+            )
         }
     }
 
     function setMarginFee(Slot0 _packed, uint24 _marginFee) internal pure returns (Slot0 _result) {
         assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(MARGIN_FEE_OFFSET, MASK_24_BITS)), _packed),
-                    shl(MARGIN_FEE_OFFSET, and(MASK_24_BITS, _marginFee))
-                )
+            _result := or(
+                and(not(shl(MARGIN_FEE_OFFSET, MASK_24_BITS)), _packed),
+                shl(MARGIN_FEE_OFFSET, and(MASK_24_BITS, _marginFee))
+            )
         }
     }
 
@@ -110,11 +117,19 @@ library Slot0Library {
         returns (Slot0 _result)
     {
         assembly ("memory-safe") {
-            _result :=
-                or(
-                    and(not(shl(INSURANCE_FUND_PERCENTAGE_OFFSET, MASK_8_BITS)), _packed),
-                    shl(INSURANCE_FUND_PERCENTAGE_OFFSET, and(MASK_8_BITS, _insuranceFundPercentage))
-                )
+            _result := or(
+                and(not(shl(INSURANCE_FUND_PERCENTAGE_OFFSET, MASK_8_BITS)), _packed),
+                shl(INSURANCE_FUND_PERCENTAGE_OFFSET, and(MASK_8_BITS, _insuranceFundPercentage))
+            )
+        }
+    }
+
+    function setRateRange(Slot0 _packed, uint16 _rateRange) internal pure returns (Slot0 _result) {
+        assembly ("memory-safe") {
+            _result := or(
+                and(not(shl(RATE_RANGE_OFFSET, MASK_16_BITS)), _packed),
+                shl(RATE_RANGE_OFFSET, and(MASK_16_BITS, _rateRange))
+            )
         }
     }
 }

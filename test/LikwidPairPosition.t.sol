@@ -69,9 +69,11 @@ contract LikwidPairPositionTest is Test {
         token0.approve(address(pairPositionManager), type(uint256).max);
         token1.approve(address(pairPositionManager), type(uint256).max);
         uint24 fee = 3000; // 0.3%
-        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee, marginFee: 3000});
+        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee, marginFee: 3000, rateRange: 0});
         vault.initialize(key);
-        keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee, marginFee: 3000});
+        keyNative = PoolKey({
+            currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee, marginFee: 3000, rateRange: 0
+        });
         vault.initialize(keyNative);
     }
 
@@ -96,9 +98,10 @@ contract LikwidPairPositionTest is Test {
         // Check NFT ownership and position data
         assertEq(tokenId, 1, "First token minted should have ID 1");
         assertEq(pairPositionManager.ownerOf(tokenId), address(this), "Owner of new token should be the caller");
-        (Currency c0, Currency c1, uint24 storedFee, uint24 marginFee) =
+        (Currency c0, Currency c1, uint24 storedFee, uint24 marginFee, uint16 rateRange) =
             pairPositionManager.poolKeys(pairPositionManager.poolIds(tokenId));
-        PoolKey memory storedKey = PoolKey({currency0: c0, currency1: c1, fee: storedFee, marginFee: marginFee});
+        PoolKey memory storedKey =
+            PoolKey({currency0: c0, currency1: c1, fee: storedFee, marginFee: marginFee, rateRange: rateRange});
         assertEq(PoolId.unwrap(storedKey.toId()), PoolId.unwrap(id), "Stored PoolKey should be correct");
         assertTrue(liquidity > 0, "Liquidity should be greater than zero");
 
@@ -152,9 +155,10 @@ contract LikwidPairPositionTest is Test {
         // Check NFT ownership and position data
         assertEq(tokenId, 1, "First token minted should have ID 1");
         assertEq(pairPositionManager.ownerOf(tokenId), address(this), "Owner of new token should be the caller");
-        (Currency c0, Currency c1, uint24 storedFee, uint24 marginFee) =
+        (Currency c0, Currency c1, uint24 storedFee, uint24 marginFee, uint16 rateRange) =
             pairPositionManager.poolKeys(pairPositionManager.poolIds(tokenId));
-        PoolKey memory storedKey = PoolKey({currency0: c0, currency1: c1, fee: storedFee, marginFee: marginFee});
+        PoolKey memory storedKey =
+            PoolKey({currency0: c0, currency1: c1, fee: storedFee, marginFee: marginFee, rateRange: rateRange});
         assertEq(PoolId.unwrap(storedKey.toId()), PoolId.unwrap(id), "Stored PoolKey should be correct");
         assertTrue(liquidity > 0, "Liquidity should be greater than zero");
 

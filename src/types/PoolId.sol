@@ -10,8 +10,8 @@ library PoolIdLibrary {
     /// @notice Returns value equal to keccak256(abi.encode(poolKey))
     function toId(PoolKey memory poolKey) internal pure returns (PoolId poolId) {
         assembly ("memory-safe") {
-            // 0x80 represents the total size of the poolKey struct (4 slots of 32 bytes)
-            poolId := keccak256(poolKey, 0x80)
+            // 0x80 represents the total size of the poolKey struct (5 slots of 32 bytes)
+            poolId := keccak256(poolKey, 0xa0)
         }
     }
 }

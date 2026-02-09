@@ -21,17 +21,18 @@ contract PoolIdTest is Test {
             (currency0, currency1) = (currency1, currency0);
         }
 
-        PoolKey memory poolKey = PoolKey({currency0: currency0, currency1: currency1, fee: 3000, marginFee: 1000});
+        PoolKey memory poolKey =
+            PoolKey({currency0: currency0, currency1: currency1, fee: 3000, marginFee: 1000, rateRange: 0});
 
         PoolId poolId = PoolIdLibrary.toId(poolKey);
         bytes32 expectedPoolId = keccak256(abi.encode(poolKey));
         assertEq(PoolId.unwrap(poolId), expectedPoolId);
 
-        poolKey = PoolKey({currency0: currency0, currency1: currency1, fee: 3000, marginFee: 1200});
+        poolKey = PoolKey({currency0: currency0, currency1: currency1, fee: 3000, marginFee: 1200, rateRange: 0});
         PoolId poolIdChanged01 = PoolIdLibrary.toId(poolKey);
         assertNotEq(PoolId.unwrap(poolIdChanged01), expectedPoolId);
 
-        poolKey = PoolKey({currency0: currency0, currency1: currency1, fee: 3100, marginFee: 1000});
+        poolKey = PoolKey({currency0: currency0, currency1: currency1, fee: 3100, marginFee: 1000, rateRange: 0});
         PoolId poolIdChanged02 = PoolIdLibrary.toId(poolKey);
         bytes32 expectedPoolId02 = keccak256(abi.encode(poolKey));
         assertNotEq(PoolId.unwrap(poolIdChanged01), PoolId.unwrap(poolIdChanged02));

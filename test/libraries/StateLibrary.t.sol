@@ -52,7 +52,7 @@ contract StateLibraryTest is Test, IUnlockCallback {
             (token0, token1) = (token1, token0);
         }
 
-        poolKey = PoolKey({currency0: currency0, currency1: currency1, fee: 3000, marginFee: 3000});
+        poolKey = PoolKey({currency0: currency0, currency1: currency1, fee: 3000, marginFee: 3000, rateRange: 0x1011});
         poolId = poolKey.toId();
         vault.initialize(poolKey);
         vault.setMarginController(address(this));
@@ -176,7 +176,8 @@ contract StateLibraryTest is Test, IUnlockCallback {
             uint24 protocolFee,
             uint24 lpFee,
             uint24 marginFee,
-            uint8 insuranceFundPercentage
+            uint8 insuranceFundPercentage,
+            uint16 rateRange
         ) = StateLibrary.getSlot0(vault, poolId);
         assertEq(protocolFee, vault.defaultProtocolFee(), "defaultProtocolFee should match protocolFee");
         assertEq(lpFee, 3000, "lpFee should be 3000");
@@ -184,6 +185,7 @@ contract StateLibraryTest is Test, IUnlockCallback {
         assertEq(lastUpdated, 1, "lastUpdated should be 1");
         assertEq(totalSupply, initialLiquidity + 1000, "totalSupply should match initialLiquidity+1000");
         assertEq(insuranceFundPercentage, 30, "insuranceFundPercentage should be 30");
+        assertEq(rateRange, 0x1011, "rateRange should be 0x1011");
     }
 
     function testGetNewReserves() public view {

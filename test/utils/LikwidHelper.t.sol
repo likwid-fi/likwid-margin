@@ -21,6 +21,7 @@ import {SwapMath} from "../../src/libraries/SwapMath.sol";
 import {InterestMath} from "../../src/libraries/InterestMath.sol";
 import {Math} from "../../src/libraries/Math.sol";
 import {PerLibrary} from "../../src/libraries/PerLibrary.sol";
+import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
 import {CurrentStateLibrary} from "../../src/libraries/CurrentStateLibrary.sol";
 import {ProtocolFeeLibrary} from "../../src/libraries/ProtocolFeeLibrary.sol";
 
@@ -72,7 +73,7 @@ contract LikwidHelperTest is Test {
         token1.approve(address(pairPositionManager), type(uint256).max);
 
         uint24 fee = 3000; // 0.3%
-        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee, marginFee: 3000});
+        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee, marginFee: 3000, rateRange: 0});
         vault.initialize(key);
         poolId = key.toId();
         uint256 amount0ToAdd = 10e18;
@@ -102,6 +103,15 @@ contract LikwidHelperTest is Test {
         assertEq(stateInfo.lendReserve1, 0);
         assertEq(stateInfo.interestReserve0, 0);
         assertEq(stateInfo.interestReserve1, 0);
+    }
+
+    function testGetRatePoolStateInfo() public {
+        PoolKey memory rateKey =
+            PoolKey({currency0: currency0, currency1: currency1, fee: 3000, marginFee: 3000, rateRange: 0x1011});
+        vault.initialize(rateKey);
+        LikwidHelper.PoolStateInfo memory stateInfo = helper.getPoolStateInfo(rateKey.toId());
+        assertEq(stateInfo.minRate, 0x10, "stateInfo.minRate==0x10");
+        assertEq(stateInfo.maxRate, 0x11, "stateInfo.maxRate==0x11");
     }
 
     function testChangePoolProtocolFee() public {
@@ -186,6 +196,7 @@ contract LikwidHelperTest is Test {
 
     function testGetBorrowRate() public view {
         PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
+        (,,,,,, uint16 rateRange) = StateLibrary.getSlot0(vault, poolId);
 
         uint256 borrowRate = helper.getBorrowRate(poolId, true);
         (uint128 realReserve0,) = state.realReserves.reserves();
@@ -194,7 +205,7 @@ contract LikwidHelperTest is Test {
         uint256 mirrorReserve = mirrorReserve0;
 
         uint256 expectedBorrowRate =
-            InterestMath.getBorrowRateByReserves(state.marginState, borrowReserve, mirrorReserve);
+            InterestMath.getBorrowRateByReserves(state.marginState, rateRange, borrowReserve, mirrorReserve);
         assertEq(borrowRate, expectedBorrowRate);
         assertTrue(expectedBorrowRate > 0);
     }

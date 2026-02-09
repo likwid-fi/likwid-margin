@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {Vm} from "forge-std/Vm.sol";
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
 import {LikwidVault} from "../src/LikwidVault.sol";
@@ -79,17 +79,22 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         token0.approve(address(pairPositionManager), type(uint256).max);
         token1.approve(address(pairPositionManager), type(uint256).max);
 
-        key = PoolKey({currency0: currency0, currency1: currency1, fee: DEFAULT_FEE, marginFee: DEFAULT_MARGIN_FEE});
+        key = PoolKey({
+            currency0: currency0, currency1: currency1, fee: DEFAULT_FEE, marginFee: DEFAULT_MARGIN_FEE, rateRange: 0
+        });
         vault.initialize(key);
 
-        keyLowFee = PoolKey({currency0: currency0, currency1: currency1, fee: LOW_FEE, marginFee: DEFAULT_MARGIN_FEE});
+        keyLowFee = PoolKey({
+            currency0: currency0, currency1: currency1, fee: LOW_FEE, marginFee: DEFAULT_MARGIN_FEE, rateRange: 0
+        });
         vault.initialize(keyLowFee);
 
         keyNative = PoolKey({
             currency0: CurrencyLibrary.ADDRESS_ZERO,
             currency1: currency1,
             fee: DEFAULT_FEE,
-            marginFee: DEFAULT_MARGIN_FEE
+            marginFee: DEFAULT_MARGIN_FEE,
+            rateRange: 0
         });
         vault.initialize(keyNative);
 
@@ -681,7 +686,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertEq(fundAmount, uint128(insuranceFundsAfter.amount0() - insuranceFundsBefore.amount0()));
 
         PoolId poolId = key.toId();
-        (,,,,, uint8 insuranceFundPercentage) = StateLibrary.getSlot0(vault, poolId);
+        (,,,,, uint8 insuranceFundPercentage,) = StateLibrary.getSlot0(vault, poolId);
         Reserves insuranceFundUpperLimit = StateLibrary.getInsuranceFundUpperLimit(vault, poolId);
         PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
         Reserves totalReserves = state.realReserves + state.mirrorReserves;

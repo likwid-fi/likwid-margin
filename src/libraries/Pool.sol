@@ -97,14 +97,15 @@ library Pool {
     /// @param self The pool state
     /// @param lpFee The initial fee for the pool
     /// @param marginFee The initial margin fee for the pool
-    function initialize(State storage self, uint24 lpFee, uint24 marginFee) internal {
+    /// @param rateRange The rate range for the pool
+    function initialize(State storage self, uint24 lpFee, uint24 marginFee, uint16 rateRange) internal {
         if (self.borrow0CumulativeLast != 0) PoolAlreadyInitialized.selector.revertWith();
         if (lpFee >= PerLibrary.ONE_MILLION || marginFee >= PerLibrary.ONE_MILLION) {
             InvalidFee.selector.revertWith();
         }
-
         self.slot0 = Slot0.wrap(bytes32(0)).setLastUpdated(uint32(block.timestamp)).setLpFee(lpFee)
-            .setMarginFee(marginFee).setInsuranceFundPercentage(DEFAULT_INSURANCE_FUND_PERCENTAGE);
+            .setMarginFee(marginFee).setInsuranceFundPercentage(DEFAULT_INSURANCE_FUND_PERCENTAGE)
+            .setRateRange(rateRange);
         self.borrow0CumulativeLast = FixedPoint96.Q96;
         self.borrow1CumulativeLast = FixedPoint96.Q96;
         self.deposit0CumulativeLast = FixedPoint96.Q96;
@@ -428,7 +429,13 @@ library Pool {
         uint256 borrow1CumulativeBefore = self.borrow1CumulativeLast;
 
         (uint256 borrow0CumulativeLast, uint256 borrow1CumulativeLast) = InterestMath.getBorrowRateCumulativeLast(
-            timeElapsed, borrow0CumulativeBefore, borrow1CumulativeBefore, marginState, _realReserves, _mirrorReserves
+            timeElapsed,
+            _slot0.rateRange(),
+            borrow0CumulativeBefore,
+            borrow1CumulativeBefore,
+            marginState,
+            _realReserves,
+            _mirrorReserves
         );
         (uint256 pairReserve0, uint256 pairReserve1) = _pairReserves.reserves();
         (uint256 lendReserve0, uint256 lendReserve1) = _lendReserves.reserves();

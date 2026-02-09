@@ -16,11 +16,11 @@ contract MockVault is IVault {
     mapping(uint256 => uint256) public balances;
     uint256 public nativeBalance;
 
-    function mint(address to, uint256 id, uint256 amount) external {
+    function mint(address, uint256 id, uint256 amount) external {
         balances[id] += amount;
     }
 
-    function burn(address from, uint256 id, uint256 amount) external {
+    function burn(address, uint256 id, uint256 amount) external {
         require(balances[id] >= amount, "Insufficient balance");
         balances[id] -= amount;
     }
@@ -34,7 +34,7 @@ contract MockVault is IVault {
         return msg.value;
     }
 
-    function settleFor(address recipient) external payable returns (uint256 paid) {
+    function settleFor(address) external payable returns (uint256 paid) {
         nativeBalance += msg.value;
         return msg.value;
     }
@@ -50,35 +50,36 @@ contract MockVault is IVault {
     // IVault interface functions
     function modifyLiquidity(PoolKey calldata, IVault.ModifyLiquidityParams calldata)
         external
+        pure
         returns (BalanceDelta, int128)
     {
         return (BalanceDelta.wrap(0), 0);
     }
 
-    function swap(PoolKey calldata, IVault.SwapParams calldata) external returns (BalanceDelta, uint24, uint256) {
+    function swap(PoolKey calldata, IVault.SwapParams calldata) external pure returns (BalanceDelta, uint24, uint256) {
         return (BalanceDelta.wrap(0), 0, 0);
     }
 
-    function donate(PoolKey calldata, uint256, uint256) external returns (BalanceDelta) {
+    function donate(PoolKey calldata, uint256, uint256) external pure returns (BalanceDelta) {
         return BalanceDelta.wrap(0);
     }
 
-    function lend(PoolKey calldata, IVault.LendParams calldata) external returns (BalanceDelta) {
+    function lend(PoolKey calldata, IVault.LendParams calldata) external pure returns (BalanceDelta) {
         return BalanceDelta.wrap(0);
     }
 
-    function marginBalance(PoolKey calldata, MarginBalanceDelta calldata) external returns (BalanceDelta) {
+    function marginBalance(PoolKey calldata, MarginBalanceDelta calldata) external pure returns (BalanceDelta) {
         return BalanceDelta.wrap(0);
     }
 
     function initialize(PoolKey calldata) external {}
 
     // IExtsload interface functions
-    function extsload(bytes32 slot) external view returns (bytes32) {
+    function extsload(bytes32) external pure returns (bytes32) {
         return bytes32(0);
     }
 
-    function extsload(bytes32 slot, uint256 count) external view returns (bytes32[] memory) {
+    function extsload(bytes32, uint256 count) external pure returns (bytes32[] memory) {
         bytes32[] memory values = new bytes32[](count);
         for (uint256 i = 0; i < count; i++) {
             values[i] = bytes32(0);
@@ -86,7 +87,7 @@ contract MockVault is IVault {
         return values;
     }
 
-    function extsload(bytes32[] calldata slots) external view returns (bytes32[] memory) {
+    function extsload(bytes32[] calldata slots) external pure returns (bytes32[] memory) {
         bytes32[] memory values = new bytes32[](slots.length);
         for (uint256 i = 0; i < slots.length; i++) {
             values[i] = bytes32(0);

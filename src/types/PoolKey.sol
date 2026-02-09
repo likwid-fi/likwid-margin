@@ -16,4 +16,6 @@ struct PoolKey {
     uint24 fee;
     /// @notice The pool LP margin fee, capped at 1_000_000. E.g., 0.3% = 3_000
     uint24 marginFee;
+    /// @notice The rate range for the pool, encoded as (minRate << 8) | maxRate
+    uint16 rateRange;
 }

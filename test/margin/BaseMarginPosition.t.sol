@@ -87,7 +87,7 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
         token0.approve(address(pairPositionManager), type(uint256).max);
         token1.approve(address(pairPositionManager), type(uint256).max);
 
-        key = PoolKey({currency0: currency0, currency1: currency1, fee: 3000, marginFee: 3000});
+        key = PoolKey({currency0: currency0, currency1: currency1, fee: 3000, marginFee: 3000, rateRange: 0});
         vault.initialize(key);
 
         amount0 = _amount0ToAdd();
@@ -98,7 +98,9 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
         pairPositionManager.addLiquidity(key, address(this), amount0, amount1, 0, 0, 10000);
 
         // Native currency setup
-        keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: 3000, marginFee: 3000});
+        keyNative = PoolKey({
+            currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: 3000, marginFee: 3000, rateRange: 0
+        });
         vault.initialize(keyNative);
         token1.mint(address(this), amount1); // Mint extra token1 for native liquidity
         pairPositionManager.addLiquidity{value: amount0}(keyNative, address(this), amount0, amount1, 0, 0, 10000);

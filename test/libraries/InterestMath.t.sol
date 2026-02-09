@@ -20,7 +20,7 @@ contract InterestMathTest is Test {
     function test_getBorrowRateByReserves() public view {
         uint256 borrowReserve = 1000e18;
         uint256 mirrorReserve = 100e18;
-        uint256 rate = InterestMath.getBorrowRateByReserves(marginState, borrowReserve, mirrorReserve);
+        uint256 rate = InterestMath.getBorrowRateByReserves(marginState, 0, borrowReserve, mirrorReserve);
         console.log("rate", rate);
         assertTrue(rate > marginState.rateBase());
     }
@@ -33,7 +33,7 @@ contract InterestMathTest is Test {
         Reserves mirrorReserve = toReserves(uint128(100e18), uint128(200e18));
 
         (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = InterestMath.getBorrowRateCumulativeLast(
-            timeElapsed, rate0CumulativeBefore, rate1CumulativeBefore, marginState, realReserves, mirrorReserve
+            timeElapsed, 0, rate0CumulativeBefore, rate1CumulativeBefore, marginState, realReserves, mirrorReserve
         );
 
         assertTrue(rate0CumulativeLast > rate0CumulativeBefore);
@@ -66,14 +66,14 @@ contract InterestMathTest is Test {
     function test_getBorrowRateByReserves_zeroMirrorReserve() public view {
         uint256 borrowReserve = 1000e18;
         uint256 mirrorReserve = 0;
-        uint256 rate = InterestMath.getBorrowRateByReserves(marginState, borrowReserve, mirrorReserve);
+        uint256 rate = InterestMath.getBorrowRateByReserves(marginState, 0, borrowReserve, mirrorReserve);
         assertEq(rate, marginState.rateBase(), "Rate should equal rateBase when mirrorReserve is 0");
     }
 
     function test_getBorrowRateByReserves_highUtilization() public view {
         uint256 borrowReserve = 100e18;
         uint256 mirrorReserve = 90e18;
-        uint256 rate = InterestMath.getBorrowRateByReserves(marginState, borrowReserve, mirrorReserve);
+        uint256 rate = InterestMath.getBorrowRateByReserves(marginState, 0, borrowReserve, mirrorReserve);
         assertTrue(rate > marginState.rateBase(), "Rate should increase with high utilization");
         uint256 useLevel = (mirrorReserve * 1e6) / borrowReserve;
         if (useLevel >= marginState.useHighLevel()) {
@@ -91,7 +91,7 @@ contract InterestMathTest is Test {
         Reserves mirrorReserve = toReserves(uint128(100e18), uint128(200e18));
 
         (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = InterestMath.getBorrowRateCumulativeLast(
-            timeElapsed, rate0CumulativeBefore, rate1CumulativeBefore, marginState, realReserves, mirrorReserve
+            timeElapsed, 0, rate0CumulativeBefore, rate1CumulativeBefore, marginState, realReserves, mirrorReserve
         );
 
         assertEq(rate0CumulativeLast, rate0CumulativeBefore, "Rate should not change when timeElapsed is 0");
@@ -141,7 +141,7 @@ contract InterestMathTest is Test {
     function test_getBorrowRateByReserves_lowUtilization() public view {
         uint256 borrowReserve = 1000e18;
         uint256 mirrorReserve = 100e18;
-        uint256 rate = InterestMath.getBorrowRateByReserves(marginState, borrowReserve, mirrorReserve);
+        uint256 rate = InterestMath.getBorrowRateByReserves(marginState, 0, borrowReserve, mirrorReserve);
         uint256 useLevel = (mirrorReserve * 1e6) / borrowReserve;
         assertTrue(useLevel < marginState.useMiddleLevel(), "Should be low utilization");
         uint256 expectedRate = marginState.rateBase() + (useLevel * marginState.mLow() / 100);
@@ -156,10 +156,48 @@ contract InterestMathTest is Test {
         Reserves mirrorReserve = toReserves(uint128(100e18), uint128(200e18));
 
         (uint256 rate0CumulativeLast, uint256 rate1CumulativeLast) = InterestMath.getBorrowRateCumulativeLast(
-            timeElapsed, rate0CumulativeBefore, rate1CumulativeBefore, marginState, realReserves, mirrorReserve
+            timeElapsed, 0, rate0CumulativeBefore, rate1CumulativeBefore, marginState, realReserves, mirrorReserve
         );
 
         assertTrue(rate0CumulativeLast > rate0CumulativeBefore, "Rate should increase over time");
         assertTrue(rate1CumulativeLast > rate1CumulativeBefore, "Rate should increase over time");
+    }
+
+    function test_getBorrowRateByReserves_withLowRate() public view {
+        uint256 borrowReserve = 1000e18;
+        uint256 mirrorReserve = 100e18;
+        // minRate component = 25 -> 25 * 10**4 = 250000. rateRange = 25 << 8 = 0x1900
+        uint16 rateRange = 0x1900;
+        uint256 minRate = 25 * 10 ** 4;
+        uint256 rate = InterestMath.getBorrowRateByReserves(marginState, rateRange, borrowReserve, mirrorReserve);
+        uint256 useLevel = (mirrorReserve * 1e6) / borrowReserve;
+        uint256 expectedRate = minRate + (useLevel * marginState.mLow() / 100);
+        assertEq(rate, expectedRate, "Rate should start from minRate");
+        assertTrue(rate > marginState.rateBase(), "Rate should be higher than base rate");
+        rate = InterestMath.getBorrowRateByReserves(marginState, 0, borrowReserve, mirrorReserve);
+        expectedRate = marginState.rateBase() + (useLevel * marginState.mLow() / 100);
+        assertEq(rate, expectedRate, "Rate should start from base rate when no rateRange is provided");
+    }
+
+    function test_getBorrowRateByReserves_withHighRate() public view {
+        uint256 borrowReserve = 100e18;
+        uint256 mirrorReserve = 95e18; // high utilization
+        // maxRate component = 30 -> 30 * 10**4 = 300000. rateRange = 30 = 0x001e
+        uint16 rateRange = 0x001e;
+        uint256 maxRate = 30 * 10 ** 4;
+        uint256 rate = InterestMath.getBorrowRateByReserves(marginState, rateRange, borrowReserve, mirrorReserve);
+        assertEq(rate, maxRate, "Rate should be capped at maxRate");
+    }
+
+    function test_getBorrowRateByReserves_withLowAndHighRate() public view {
+        uint256 borrowReserve = 100e18;
+        uint256 mirrorReserve = 95e18; // high utilization
+        // minRate = 25, maxRate = 30. rateRange = (25 << 8) | 30 = 0x191e
+        uint16 rateRange = 0x191e;
+        uint256 maxRate = 30 * 10 ** 4;
+        uint256 rate = InterestMath.getBorrowRateByReserves(marginState, rateRange, borrowReserve, mirrorReserve);
+        assertEq(rate, maxRate, "Rate should be capped at maxRate when starting from minRate");
+        rate = InterestMath.getBorrowRateByReserves(marginState, 0, borrowReserve, mirrorReserve);
+        assertGt(rate, maxRate, "Rate should be higher than maxRate when no rateRange is provided");
     }
 }

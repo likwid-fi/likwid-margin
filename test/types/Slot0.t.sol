@@ -60,4 +60,26 @@ contract Slot0Test is Test {
         slot0 = slot0.setInsuranceFundPercentage(insuranceFundPercentage);
         assertEq(slot0.insuranceFundPercentage(), insuranceFundPercentage);
     }
+
+    function testSetAndGetRateRange() public {
+        uint8 low = 1; //1%
+        uint8 high = 100; //100%
+        uint16 rateRange = (uint16(low) << 8) | uint16(high);
+        slot0 = slot0.setRateRange(rateRange);
+        assertEq(slot0.rateRange(), rateRange);
+        uint256 activeRangeLow = slot0.rateRange() >> 8;
+        uint256 activeRangeHigh = slot0.rateRange() & 0x00FF;
+        assertEq(activeRangeLow, low);
+        assertEq(activeRangeHigh, high);
+
+        low = 111; //111%
+        high = 0; //0%
+        rateRange = (uint16(low) << 8) | uint16(high);
+        slot0 = slot0.setRateRange(rateRange);
+        assertEq(slot0.rateRange(), rateRange);
+        activeRangeLow = slot0.rateRange() >> 8;
+        activeRangeHigh = slot0.rateRange() & 0x00FF;
+        assertEq(activeRangeLow, low);
+        assertEq(activeRangeHigh, high);
+    }
 }

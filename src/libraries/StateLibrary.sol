@@ -70,7 +70,8 @@ library StateLibrary {
             uint24 protocolFee,
             uint24 lpFee,
             uint24 marginFee,
-            uint8 insuranceFundPercentage
+            uint8 insuranceFundPercentage,
+            uint16 rateRange
         )
     {
         bytes32 stateSlot = _getPoolStateSlot(poolId);
@@ -85,6 +86,7 @@ library StateLibrary {
         uint24 defaultProtocolFee = uint24(value >> 160);
         protocolFee = slot0.protocolFee(defaultProtocolFee);
         insuranceFundPercentage = slot0.insuranceFundPercentage();
+        rateRange = slot0.rateRange();
     }
 
     /**

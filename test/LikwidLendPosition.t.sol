@@ -77,7 +77,7 @@ contract LikwidLendPositionTest is Test {
         token1.approve(address(marginPositionManager), type(uint256).max);
 
         uint24 fee = 3000; // 0.3%
-        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee, marginFee: 3000});
+        key = PoolKey({currency0: currency0, currency1: currency1, fee: fee, marginFee: 3000, rateRange: 0});
         vault.initialize(key);
 
         uint256 amount0ToAdd = 1000e18;
@@ -86,7 +86,9 @@ contract LikwidLendPositionTest is Test {
         token1.mint(address(this), amount1ToAdd);
         pairPositionManager.addLiquidity(key, address(this), amount0ToAdd, amount1ToAdd, 0, 0, 10000);
 
-        keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee, marginFee: 3000});
+        keyNative = PoolKey({
+            currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee, marginFee: 3000, rateRange: 0
+        });
         vault.initialize(keyNative);
         token1.mint(address(this), amount1ToAdd);
         pairPositionManager.addLiquidity{value: amount0ToAdd}(
@@ -969,7 +971,7 @@ contract LikwidLendPositionTest is Test {
         uint256 tokenId = lendPositionManager.addLending(key, false, address(this), amount, 0);
 
         PoolId poolId = lendPositionManager.poolIds(tokenId);
-        (Currency c0, Currency c1, uint24 fee, uint24 marginFee) = lendPositionManager.poolKeys(poolId);
+        (Currency c0, Currency c1, uint24 fee, uint24 marginFee,) = lendPositionManager.poolKeys(poolId);
 
         assertEq(Currency.unwrap(c0), Currency.unwrap(key.currency0), "Currency0 should match");
         assertEq(Currency.unwrap(c1), Currency.unwrap(key.currency1), "Currency1 should match");

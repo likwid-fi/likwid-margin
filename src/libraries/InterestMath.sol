@@ -16,12 +16,17 @@ library InterestMath {
     using FeeLibrary for uint24;
     using PerLibrary for uint256;
 
-    function getBorrowRateByReserves(MarginState marginState, uint256 borrowReserve, uint256 mirrorReserve)
-        internal
-        pure
-        returns (uint256 rate)
-    {
+    function getBorrowRateByReserves(
+        MarginState marginState,
+        uint16 rateRange,
+        uint256 borrowReserve,
+        uint256 mirrorReserve
+    ) internal pure returns (uint256 rate) {
+        uint256 minRate = uint256(rateRange >> 8) * 10 ** 4;
         rate = marginState.rateBase();
+        if (minRate > 0) {
+            rate = minRate;
+        }
         if (mirrorReserve == 0) {
             return rate;
         }
@@ -34,11 +39,16 @@ library InterestMath {
             rate += uint256(useLevel - marginState.useMiddleLevel()) * marginState.mMiddle() / 100;
             useLevel = marginState.useMiddleLevel();
         }
-        return rate + useLevel * marginState.mLow() / 100;
+        rate = rate + useLevel * marginState.mLow() / 100;
+        uint256 maxRate = uint256(uint8(rateRange)) * 10 ** 4;
+        if (maxRate > 0 && rate > maxRate) {
+            rate = maxRate;
+        }
     }
 
     function getBorrowRateCumulativeLast(
         uint256 timeElapsed,
+        uint16 rateRange,
         uint256 rate0CumulativeBefore,
         uint256 rate1CumulativeBefore,
         MarginState marginState,
@@ -50,10 +60,10 @@ library InterestMath {
         }
         (uint256 realReserve0, uint256 realReserve1) = realReserves.reserves();
         (uint256 mirrorReserve0, uint256 mirrorReserve1) = mirrorReserve.reserves();
-        uint256 rate0 = getBorrowRateByReserves(marginState, realReserve0 + mirrorReserve0, mirrorReserve0);
+        uint256 rate0 = getBorrowRateByReserves(marginState, rateRange, realReserve0 + mirrorReserve0, mirrorReserve0);
         uint256 rate0LastYear = PerLibrary.YEAR_TRILLION_SECONDS + rate0 * timeElapsed * PerLibrary.ONE_MILLION;
         rate0CumulativeLast = Math.mulDiv(rate0CumulativeBefore, rate0LastYear, PerLibrary.YEAR_TRILLION_SECONDS);
-        uint256 rate1 = getBorrowRateByReserves(marginState, realReserve1 + mirrorReserve1, mirrorReserve1);
+        uint256 rate1 = getBorrowRateByReserves(marginState, rateRange, realReserve1 + mirrorReserve1, mirrorReserve1);
         uint256 rate1LastYear = PerLibrary.YEAR_TRILLION_SECONDS + rate1 * timeElapsed * PerLibrary.ONE_MILLION;
         rate1CumulativeLast = Math.mulDiv(rate1CumulativeBefore, rate1LastYear, PerLibrary.YEAR_TRILLION_SECONDS);
     }

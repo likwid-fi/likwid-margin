@@ -39,6 +39,8 @@ contract LikwidHelper is Owned {
         uint24 lpFee;
         uint24 marginFee;
         uint24 protocolFee;
+        uint8 minRate;
+        uint8 maxRate;
         uint128 realReserve0;
         uint128 realReserve1;
         uint128 mirrorReserve0;
@@ -66,6 +68,7 @@ contract LikwidHelper is Owned {
         stateInfo.lpFee = state.lpFee;
         stateInfo.marginFee = state.marginFee;
         stateInfo.protocolFee = state.protocolFee;
+
         (uint128 realReserve0, uint128 realReserve1) = state.realReserves.reserves();
         stateInfo.realReserve0 = realReserve0;
         stateInfo.realReserve1 = realReserve1;
@@ -93,6 +96,13 @@ contract LikwidHelper is Owned {
         stateInfo.borrow1CumulativeLast = state.borrow1CumulativeLast;
         stateInfo.deposit0CumulativeLast = state.deposit0CumulativeLast;
         stateInfo.deposit1CumulativeLast = state.deposit1CumulativeLast;
+        uint16 rateRange = _getRateRange(poolId);
+        stateInfo.minRate = uint8(rateRange >> 8);
+        stateInfo.maxRate = uint8(rateRange);
+    }
+
+    function _getRateRange(PoolId poolId) internal view returns (uint16 rateRange) {
+        (,,,,,, rateRange) = StateLibrary.getSlot0(vault, poolId);
     }
 
     function getAmountOut(PoolId poolId, bool zeroForOne, uint256 amountIn, bool dynamicFee)
@@ -125,7 +135,7 @@ contract LikwidHelper is Owned {
         }
     }
 
-    function _getBorrowRate(PoolState memory state, uint256 inputAmount, bool marginForOne)
+    function _getBorrowRate(PoolState memory state, uint16 rateRange, uint256 inputAmount, bool marginForOne)
         internal
         pure
         returns (uint256)
@@ -141,12 +151,12 @@ contract LikwidHelper is Owned {
             mirrorReserve = mirrorReserve1;
             borrowReserve = mirrorReserve1 + realReserve1 + inputAmount;
         }
-        return InterestMath.getBorrowRateByReserves(state.marginState, borrowReserve, mirrorReserve);
+        return InterestMath.getBorrowRateByReserves(state.marginState, rateRange, borrowReserve, mirrorReserve);
     }
 
     function getBorrowRate(PoolId poolId, bool marginForOne) external view returns (uint256) {
         PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
-        return _getBorrowRate(state, 0, marginForOne);
+        return _getBorrowRate(state, _getRateRange(poolId), 0, marginForOne);
     }
 
     function getPoolFees(PoolId poolId, bool zeroForOne, uint256 amountIn, uint256 amountOut)
@@ -218,7 +228,7 @@ contract LikwidHelper is Owned {
         PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
         (uint128 mirrorReserve0, uint128 mirrorReserve1) = _state.mirrorReserves.reserves();
         uint256 mirrorReserve = borrowForOne ? mirrorReserve1 : mirrorReserve0;
-        uint256 borrowRate = _getBorrowRate(_state, inputAmount, !borrowForOne);
+        uint256 borrowRate = _getBorrowRate(_state, _getRateRange(poolId), inputAmount, !borrowForOne);
         (uint256 reserve0, uint256 reserve1) = _state.pairReserves.reserves();
         (uint256 lendReserve0, uint256 lendReserve1) = _state.lendReserves.reserves();
         uint256 flowReserve = borrowForOne ? reserve1 : reserve0;
@@ -234,8 +244,12 @@ contract LikwidHelper is Owned {
         (uint256 realReserve0, uint256 realReserve1) = _state.realReserves.reserves();
         (uint256 mirrorReserve0, uint256 mirrorReserve1) = _state.mirrorReserves.reserves();
         rate = borrowForOne
-            ? InterestMath.getBorrowRateByReserves(_state.marginState, realReserve1 + mirrorReserve1, mirrorReserve1)
-            : InterestMath.getBorrowRateByReserves(_state.marginState, realReserve0 + mirrorReserve0, mirrorReserve0);
+            ? InterestMath.getBorrowRateByReserves(
+                _state.marginState, _getRateRange(poolId), realReserve1 + mirrorReserve1, mirrorReserve1
+            )
+            : InterestMath.getBorrowRateByReserves(
+                _state.marginState, _getRateRange(poolId), realReserve0 + mirrorReserve0, mirrorReserve0
+            );
     }
 
     function getStageLiquidities(PoolId poolId) external view returns (uint128[][] memory liquidities) {
