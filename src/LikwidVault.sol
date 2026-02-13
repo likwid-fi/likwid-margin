@@ -247,6 +247,17 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         }
 
         _appendPoolBalanceDelta(key, msg.sender, marginDelta);
+
+        emit MarginBalance(
+            id,
+            uint8(params.action),
+            pool.realReserves,
+            pool.mirrorReserves,
+            pool.pairReserves,
+            pool.lendReserves,
+            pool.protocolInterestReserves,
+            pool.insuranceFunds
+        );
     }
 
     /// @inheritdoc IVault
