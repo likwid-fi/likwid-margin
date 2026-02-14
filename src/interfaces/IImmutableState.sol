@@ -5,6 +5,8 @@ import {IVault} from "./IVault.sol";
 
 /// @title Interface for ImmutableState
 interface IImmutableState {
+    error NotVault();
+
     /// @notice The vault contract
     function vault() external view returns (IVault);
 }

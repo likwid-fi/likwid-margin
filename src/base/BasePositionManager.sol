@@ -8,17 +8,16 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 // Local
 import {IBasePositionManager} from "../interfaces/IBasePositionManager.sol";
-import {ImmutableState} from "./ImmutableState.sol";
+import {SafeCallback} from "./SafeCallback.sol";
 import {PoolKey} from "../types/PoolKey.sol";
 import {BalanceDelta} from "../types/BalanceDelta.sol";
 import {PoolId} from "../types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "../types/Currency.sol";
 import {IVault} from "../interfaces/IVault.sol";
-import {IUnlockCallback} from "../interfaces/callback/IUnlockCallback.sol";
 import {CustomRevert} from "../libraries/CustomRevert.sol";
 import {CurrencyPoolLibrary} from "../libraries/CurrencyPoolLibrary.sol";
 
-abstract contract BasePositionManager is IBasePositionManager, ImmutableState, IUnlockCallback, ERC721, Owned {
+abstract contract BasePositionManager is IBasePositionManager, SafeCallback, ERC721, Owned {
     using CurrencyPoolLibrary for Currency;
     using CustomRevert for bytes4;
 
@@ -28,7 +27,7 @@ abstract contract BasePositionManager is IBasePositionManager, ImmutableState, I
     mapping(PoolId poolId => PoolKey poolKey) public poolKeys;
 
     constructor(string memory name_, string memory symbol_, address initialOwner, IVault _vault)
-        ImmutableState(_vault)
+        SafeCallback(_vault)
         Owned(initialOwner)
         ERC721(name_, symbol_)
     {}
@@ -40,16 +39,6 @@ abstract contract BasePositionManager is IBasePositionManager, ImmutableState, I
 
     function _ensure(uint256 deadline) internal view {
         require(deadline == 0 || deadline >= block.timestamp, "EXPIRED");
-    }
-
-    /// @notice Only allow calls from the LikwidVault contract
-    modifier onlyVault() {
-        _onlyVault();
-        _;
-    }
-
-    function _onlyVault() internal view {
-        if (msg.sender != address(vault)) revert NotVault();
     }
 
     function _requireAuth(address spender, uint256 tokenId) internal view {
@@ -114,12 +103,5 @@ abstract contract BasePositionManager is IBasePositionManager, ImmutableState, I
                 MismatchedPoolKey.selector.revertWith();
             }
         }
-    }
-
-    function _unlockCallback(bytes calldata data) internal virtual returns (bytes memory) {}
-
-    /// @inheritdoc IUnlockCallback
-    function unlockCallback(bytes calldata data) external onlyVault returns (bytes memory) {
-        return _unlockCallback(data);
     }
 }

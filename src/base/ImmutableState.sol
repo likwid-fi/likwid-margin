@@ -10,6 +10,16 @@ contract ImmutableState is IImmutableState {
     /// @inheritdoc IImmutableState
     IVault public immutable vault;
 
+    /// @notice Only allow calls from the LikwidVault contract
+    modifier onlyVault() {
+        _onlyVault();
+        _;
+    }
+
+    function _onlyVault() internal view {
+        if (msg.sender != address(vault)) revert NotVault();
+    }
+
     constructor(IVault _vault) {
         vault = _vault;
     }

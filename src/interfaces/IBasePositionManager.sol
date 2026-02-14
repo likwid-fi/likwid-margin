@@ -7,8 +7,6 @@ import {IImmutableState} from "./IImmutableState.sol";
 interface IBasePositionManager is IImmutableState {
     error NotOwner();
 
-    error NotVault();
-
     error InvalidCallback();
 
     error PriceSlippageTooHigh();
