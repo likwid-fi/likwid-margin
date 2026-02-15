@@ -109,6 +109,26 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
         bytes32 salt
     );
 
+    /// @notice Emitted when margin balance is modified
+    /// @param id The abi encoded hash of the pool key struct for the pool that was modified
+    /// @param marginType The type of margin operation
+    /// @param realReserves The real reserves of the pool
+    /// @param mirrorReserves The mirror reserves of the pool
+    /// @param pairReserves The pair reserves of the pool
+    /// @param lendReserves The lend reserves of the pool
+    /// @param protocolInterestReserves The protocol interest reserves of the pool
+    /// @param insuranceFunds The insurance funds of the pool
+    event MarginBalance(
+        PoolId indexed id,
+        uint8 marginType,
+        Reserves realReserves,
+        Reserves mirrorReserves,
+        Reserves pairReserves,
+        Reserves lendReserves,
+        Reserves protocolInterestReserves,
+        InsuranceFunds insuranceFunds
+    );
+
     /// @notice Emitted when interest is updated for a pool
     /// @param id The abi encoded hash of the pool key struct for the pool that was modified
     /// @param realReserves The real reserves of the pool

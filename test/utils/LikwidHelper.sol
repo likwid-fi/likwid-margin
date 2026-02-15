@@ -295,7 +295,7 @@ contract LikwidHelper is Owned {
         uint256 level = _position.marginLevel(
             _state.truncatedReserves, _position.borrowCumulativeLast, _position.depositCumulativeLast
         );
-        liquidated = level < manager.marginLevels().liquidateLevel();
+        liquidated = level <= manager.marginLevels().liquidateLevel();
     }
 
     // ******************** OWNER CALL ********************

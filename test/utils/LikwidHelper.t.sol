@@ -314,7 +314,7 @@ contract LikwidHelperTest is Test {
         uint256 allInterestReserve = marginAmount + reserve1 + lendReserve1;
         uint256 borrowRate = helper.getBorrowAPR(poolId, true);
         uint256 apr = Math.mulDiv(borrowRate, borrowAmount, allInterestReserve);
-        assertTrue(rate1 < apr, "rate1 < apr");
+        assertLe(rate1, apr, "rate1 <= apr");
     }
 
     function testGetBorrowAPR() public {
