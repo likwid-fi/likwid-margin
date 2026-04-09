@@ -20,7 +20,6 @@ import {IMarginPositionManager} from "../../src/interfaces/IMarginPositionManage
 import {IMarginBase} from "../../src/interfaces/IMarginBase.sol";
 import {MarginState} from "../../src/types/MarginState.sol";
 import {InsuranceFunds} from "../../src/types/InsuranceFunds.sol";
-import {StageMath} from "../../src/libraries/StageMath.sol";
 import {Math} from "../../src/libraries/Math.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
 import {CurrentStateLibrary} from "../../src/libraries/CurrentStateLibrary.sol";
@@ -37,7 +36,7 @@ contract LikwidHelper is Owned, IUnlockCallback, IERC721Receiver, ERC721 {
     using StageMath for uint256;
     using CurrencyPoolLibrary for Currency;
 
-    IVault public vault;
+    IVault public immutable vault;
 
     constructor(address initialOwner, IVault _vault) Owned(initialOwner) ERC721("Likwid Lock Receipt", "LLR") {
         vault = _vault;
@@ -308,17 +307,11 @@ contract LikwidHelper is Owned, IUnlockCallback, IERC721Receiver, ERC721 {
         liquidated = level <= manager.marginLevels().liquidateLevel();
     }
 
-    // ******************** OWNER CALL ********************
-
-    function setVault(IVault _vault) external onlyOwner {
-        vault = _vault;
-    }
-
     // ******************** VAULT CALL ********************
 
     error NotVault();
-    error InvalidCallback();
     error InsufficientNative();
+    error CurrenciesOutOfOrder();
 
     modifier ensure(uint256 deadline) {
         _ensure(deadline);
@@ -339,18 +332,9 @@ contract LikwidHelper is Owned, IUnlockCallback, IERC721Receiver, ERC721 {
         if (msg.sender != address(vault)) revert NotVault();
     }
 
-    enum Actions {
-        DONATE
-    }
-
     /// @inheritdoc IUnlockCallback
     function unlockCallback(bytes calldata data) external onlyVault returns (bytes memory) {
-        (Actions action, bytes memory params) = abi.decode(data, (Actions, bytes));
-        if (action == Actions.DONATE) {
-            return _handleDonate(params);
-        } else {
-            revert InvalidCallback();
-        }
+        return _handleDonate(data);
     }
 
     function donate(PoolKey memory key, uint256 amount0, uint256 amount1, uint256 deadline)
@@ -358,6 +342,10 @@ contract LikwidHelper is Owned, IUnlockCallback, IERC721Receiver, ERC721 {
         payable
         ensure(deadline)
     {
+        // Enforce canonical PoolKey ordering: currency0 < currency1. This
+        // also implies currency1 cannot be the native sentinel (address(0)),
+        // so msg.value can only ever be tied to currency0.
+        if (!(key.currency0 < key.currency1)) revert CurrenciesOutOfOrder();
         if (CurrencyLibrary.isAddressZero(key.currency0)) {
             if (msg.value != amount0) {
                 revert InsufficientNative();
@@ -366,8 +354,7 @@ contract LikwidHelper is Owned, IUnlockCallback, IERC721Receiver, ERC721 {
             revert InsufficientNative();
         }
         bytes memory callbackData = abi.encode(msg.sender, key, amount0, amount1);
-        bytes memory data = abi.encode(Actions.DONATE, callbackData);
-        vault.unlock(data);
+        vault.unlock(callbackData);
     }
 
     function _handleDonate(bytes memory _data) internal returns (bytes memory) {
@@ -408,10 +395,19 @@ contract LikwidHelper is Owned, IUnlockCallback, IERC721Receiver, ERC721 {
     ///         record is deleted (nftContract == address(0)).
     mapping(uint256 => NFTLock) private _nftLocks;
 
+    /// @notice (nftContract, tokenId) => lockId of an active lock, or 0 if
+    ///         the underlying NFT is not currently part of any lock. Used by
+    ///         {rescueNFT} to prevent the owner from pulling out NFTs that
+    ///         belong to a live lock receipt.
+    mapping(address => mapping(uint256 => uint256)) private _lockedBy;
+
     error InvalidLockDuration();
+    error InvalidNFTContract();
     error LockNotFound();
     error LockNotExpired();
     error NotLockOwner();
+    error UnderlyingAlreadyLocked();
+    error UnderlyingStillLocked();
 
     event NFTLocked(
         uint256 indexed lockId,
@@ -423,6 +419,8 @@ contract LikwidHelper is Owned, IUnlockCallback, IERC721Receiver, ERC721 {
     );
 
     event NFTUnlocked(uint256 indexed lockId, address indexed owner, address indexed nftContract, uint256 tokenId);
+
+    event NFTRescued(address indexed nftContract, uint256 indexed tokenId, address indexed to);
 
     /// @notice Lock an ERC721 token in this contract for `lockDuration` seconds.
     ///         The caller must own the token and have approved this contract
@@ -437,19 +435,35 @@ contract LikwidHelper is Owned, IUnlockCallback, IERC721Receiver, ERC721 {
     ///         receipt token id).
     function lockNFT(address nftContract, uint256 tokenId, uint64 lockDuration) external returns (uint256 lockId) {
         if (lockDuration == 0) revert InvalidLockDuration();
+        if (nftContract == address(0)) revert InvalidNFTContract();
+        // Reject double-locking the same underlying NFT. For honest ERC721
+        // contracts this can never be reached (helper already holds the
+        // token), but it also closes the door on a malicious / quirky
+        // ERC721 that re-enters lockNFT from inside its own
+        // safeTransferFrom and would otherwise overwrite the _lockedBy
+        // back-reference and confuse {rescueNFT}.
+        if (_lockedBy[nftContract][tokenId] != 0) revert UnderlyingAlreadyLocked();
 
         lockId = nextLockId++;
         uint64 lockedAt = uint64(block.timestamp);
-        uint64 unlockAt = lockedAt + lockDuration;
+        uint64 unlockAt;
+        unchecked {
+            unlockAt = lockedAt + lockDuration;
+        }
+        if (unlockAt < lockedAt) revert InvalidLockDuration();
 
         _nftLocks[lockId] =
             NFTLock({nftContract: nftContract, tokenId: tokenId, lockedAt: lockedAt, unlockAt: unlockAt});
-
-        // Mint the receipt NFT to the locker. We use _mint (not _safeMint)
-        // to avoid imposing an IERC721Receiver requirement on the caller.
-        _mint(msg.sender, lockId);
+        _lockedBy[nftContract][tokenId] = lockId;
 
         IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenId);
+
+        // Mint the receipt NFT to the locker. We use _mint (not _safeMint)
+        // to avoid imposing an IERC721Receiver requirement on the caller —
+        // this mirrors {unlockNFT} which also uses plain `transferFrom` to
+        // return the underlying NFT, so non-receiver contracts can fully
+        // participate in the lock/unlock lifecycle.
+        _mint(msg.sender, lockId);
 
         emit NFTLocked(lockId, msg.sender, nftContract, tokenId, lockedAt, unlockAt);
     }
@@ -464,23 +478,53 @@ contract LikwidHelper is Owned, IUnlockCallback, IERC721Receiver, ERC721 {
         if (block.timestamp < lockInfo.unlockAt) revert LockNotExpired();
 
         delete _nftLocks[lockId];
+        delete _lockedBy[lockInfo.nftContract][lockInfo.tokenId];
         _burn(lockId);
 
-        IERC721(lockInfo.nftContract).safeTransferFrom(address(this), msg.sender, lockInfo.tokenId);
+        // Use plain transferFrom (not safeTransferFrom) so that receipt
+        // holders that do not implement IERC721Receiver can still unlock.
+        // The receipt itself is a standard ERC721, so it can already be moved
+        // around with transferFrom; refusing to return the underlying via
+        // safeTransferFrom would otherwise strand assets.
+        IERC721(lockInfo.nftContract).transferFrom(address(this), msg.sender, lockInfo.tokenId);
 
         emit NFTUnlocked(lockId, msg.sender, lockInfo.nftContract, lockInfo.tokenId);
     }
 
-    /// @notice Return the full record for a given lock id.
+    /// @notice Owner-only rescue for NFTs that were transferred to this
+    ///         contract outside of {lockNFT} (e.g. accidental direct
+    ///         `safeTransferFrom`). Cannot be used to pull out NFTs that
+    ///         currently back an active lock receipt.
+    /// @param nftContract The ERC721 contract.
+    /// @param tokenId The token id to rescue.
+    /// @param to Recipient of the rescued NFT.
+    function rescueNFT(address nftContract, uint256 tokenId, address to) external onlyOwner {
+        if (_lockedBy[nftContract][tokenId] != 0) revert UnderlyingStillLocked();
+        IERC721(nftContract).safeTransferFrom(address(this), to, tokenId);
+        emit NFTRescued(nftContract, tokenId, to);
+    }
+
+    /// @notice Whether the given lock id refers to an active lock record.
+    ///         Returns false for ids that were never minted or have already
+    ///         been released. Use this to disambiguate the "lock doesn't
+    ///         exist" case from {getRemainingLockTime} returning 0.
+    function lockExists(uint256 lockId) public view returns (bool) {
+        return _nftLocks[lockId].nftContract != address(0);
+    }
+
+    /// @notice Return the full record for a given lock id. For ids that do
+    ///         not correspond to an active lock, the returned struct is
+    ///         zero-initialized (in particular `nftContract == address(0)`).
     function getNFTLock(uint256 lockId) external view returns (NFTLock memory) {
         return _nftLocks[lockId];
     }
 
     /// @notice Return the remaining seconds until a lock can be released.
-    ///         Returns 0 once the lock is already releasable.
+    ///         Returns 0 both when the lock is already releasable and when
+    ///         the given lock id does not exist — use {lockExists} to tell
+    ///         the two cases apart.
     function getRemainingLockTime(uint256 lockId) external view returns (uint64 remaining) {
         NFTLock memory lockInfo = _nftLocks[lockId];
-        if (lockInfo.nftContract == address(0)) revert LockNotFound();
         if (block.timestamp >= lockInfo.unlockAt) {
             return 0;
         }

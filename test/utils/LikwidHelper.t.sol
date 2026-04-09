@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {MockERC721} from "solmate/src/test/utils/mocks/MockERC721.sol";
+import {ReentrantLockNFT} from "./ReentrantLockNFT.sol";
 
 import {LikwidVault} from "../../src/LikwidVault.sol";
 import {LikwidMarginPosition} from "../../src/LikwidMarginPosition.sol";
@@ -436,6 +437,15 @@ contract LikwidHelperTest is Test {
         helper.donate{value: 1}(key, donationAmount, 0, 10000);
     }
 
+    function test_RevertIf_HelperDonateCurrenciesOutOfOrder() public {
+        // Construct a PoolKey with the currencies swapped (currency0 > currency1).
+        PoolKey memory badKey =
+            PoolKey({currency0: currency1, currency1: currency0, fee: 3000, marginFee: 3000});
+
+        vm.expectRevert(LikwidHelper.CurrenciesOutOfOrder.selector);
+        helper.donate(badKey, 0, 0, 10000);
+    }
+
     function test_RevertIf_HelperDonateNativeValueMismatch() public {
         uint256 donationAmount = 1e18;
         vm.deal(address(this), donationAmount);
@@ -446,8 +456,7 @@ contract LikwidHelperTest is Test {
     }
 
     function test_RevertIf_UnlockCallbackNotVault() public {
-        bytes memory params = abi.encode(address(this), key, uint256(0), uint256(0));
-        bytes memory data = abi.encode(LikwidHelper.Actions.DONATE, params);
+        bytes memory data = abi.encode(address(this), key, uint256(0), uint256(0));
 
         vm.expectRevert(LikwidHelper.NotVault.selector);
         helper.unlockCallback(data);
@@ -579,9 +588,8 @@ contract LikwidHelperTest is Test {
         helper.unlockNFT(123456);
     }
 
-    function test_RevertIf_GetRemainingLockTimeLockNotFound() public {
-        vm.expectRevert(LikwidHelper.LockNotFound.selector);
-        helper.getRemainingLockTime(8888);
+    function testGetRemainingLockTimeUnknownLockReturnsZero() public view {
+        assertEq(helper.getRemainingLockTime(8888), 0);
     }
 
     function testGetRemainingLockTimeShrinks() public {
@@ -700,5 +708,143 @@ contract LikwidHelperTest is Test {
 
         assertEq(lockId2, lockId + 1);
         assertEq(nft.ownerOf(tokenId), address(helper));
+    }
+
+    function testRescueDirectlyDepositedNFT() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        address rescueTo = makeAddr("rescueTo");
+        uint256 tokenId = 555;
+
+        // Alice mints and accidentally safe-transfers the NFT directly to the
+        // helper, bypassing lockNFT.
+        nft.mint(alice, tokenId);
+        vm.prank(alice);
+        nft.safeTransferFrom(alice, address(helper), tokenId);
+        assertEq(nft.ownerOf(tokenId), address(helper));
+
+        // Owner (this contract) rescues it.
+        helper.rescueNFT(address(nft), tokenId, rescueTo);
+        assertEq(nft.ownerOf(tokenId), rescueTo, "NFT should be rescued to recipient");
+    }
+
+    function test_RevertIf_RescueNFTNotOwner() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        uint256 tokenId = 1;
+        nft.mint(alice, tokenId);
+        vm.prank(alice);
+        nft.safeTransferFrom(alice, address(helper), tokenId);
+
+        // Non-owner cannot rescue.
+        vm.prank(alice);
+        vm.expectRevert("UNAUTHORIZED");
+        helper.rescueNFT(address(nft), tokenId, alice);
+    }
+
+    function test_RevertIf_RescueNFTStillLocked() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        uint256 tokenId = 7;
+        _mintAndApproveNFT(nft, alice, tokenId);
+
+        // Alice properly locks the NFT.
+        vm.prank(alice);
+        helper.lockNFT(address(nft), tokenId, 1 days);
+
+        // Owner cannot rescue an actively-locked NFT.
+        vm.expectRevert(LikwidHelper.UnderlyingStillLocked.selector);
+        helper.rescueNFT(address(nft), tokenId, address(this));
+
+        // Underlying NFT is still held by helper.
+        assertEq(nft.ownerOf(tokenId), address(helper));
+    }
+
+    function test_RevertIf_LockNFTDurationOverflow() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        _mintAndApproveNFT(nft, alice, 1);
+
+        // Make `block.timestamp + lockDuration` overflow uint64.
+        vm.warp(100);
+        uint64 hugeDuration = type(uint64).max - 50; // 100 + (max-50) = max + 50 → overflow
+
+        vm.prank(alice);
+        vm.expectRevert(LikwidHelper.InvalidLockDuration.selector);
+        helper.lockNFT(address(nft), 1, hugeDuration);
+    }
+
+    function testLockExistsAndQueryConsistency() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        _mintAndApproveNFT(nft, alice, 1);
+
+        // Unknown id: lockExists==false, getRemainingLockTime==0, getNFTLock zero struct.
+        assertFalse(helper.lockExists(9999));
+        assertEq(helper.getRemainingLockTime(9999), 0);
+        assertEq(helper.getNFTLock(9999).nftContract, address(0));
+
+        vm.prank(alice);
+        uint256 lockId = helper.lockNFT(address(nft), 1, 1 days);
+
+        // Active lock: lockExists==true, remaining > 0, struct populated.
+        assertTrue(helper.lockExists(lockId));
+        assertGt(helper.getRemainingLockTime(lockId), 0);
+        assertEq(helper.getNFTLock(lockId).nftContract, address(nft));
+
+        // After expiry but before unlock: still exists, remaining == 0.
+        vm.warp(block.timestamp + 2 days);
+        assertTrue(helper.lockExists(lockId));
+        assertEq(helper.getRemainingLockTime(lockId), 0);
+
+        // After unlock: lockExists==false again.
+        vm.prank(alice);
+        helper.unlockNFT(lockId);
+        assertFalse(helper.lockExists(lockId));
+        assertEq(helper.getRemainingLockTime(lockId), 0);
+        assertEq(helper.getNFTLock(lockId).nftContract, address(0));
+    }
+
+    function test_RevertIf_LockNFTReentrantDoubleLock() public {
+        // A malicious ERC721 that re-enters helper.lockNFT from inside its
+        // own safeTransferFrom should be rejected by the new
+        // _lockedBy guard. Without the guard, the inner call would be
+        // able to overwrite _lockedBy[nft][tokenId] with a second lockId
+        // and confuse rescueNFT later.
+        ReentrantLockNFT nft = new ReentrantLockNFT();
+        address alice = makeAddr("alice");
+        uint256 tokenId = 1;
+        nft.mint(alice, tokenId);
+        vm.prank(alice);
+        nft.approve(address(helper), tokenId);
+
+        nft.setTarget(address(helper));
+        nft.setReenter(true);
+
+        vm.prank(alice);
+        vm.expectRevert(LikwidHelper.UnderlyingAlreadyLocked.selector);
+        helper.lockNFT(address(nft), tokenId, 1 days);
+    }
+
+    function testRescueAfterUnlockAllowed() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        uint256 tokenId = 9;
+        _mintAndApproveNFT(nft, alice, tokenId);
+
+        vm.prank(alice);
+        uint256 lockId = helper.lockNFT(address(nft), tokenId, 1 days);
+
+        // Alice unlocks normally — _lockedBy should be cleared.
+        vm.warp(block.timestamp + 2 days);
+        vm.prank(alice);
+        helper.unlockNFT(lockId);
+        assertEq(nft.ownerOf(tokenId), alice);
+
+        // Alice re-deposits accidentally (not via lockNFT) and owner rescues.
+        vm.prank(alice);
+        nft.safeTransferFrom(alice, address(helper), tokenId);
+        helper.rescueNFT(address(nft), tokenId, alice);
+        assertEq(nft.ownerOf(tokenId), alice);
     }
 }
