@@ -5,9 +5,13 @@ pragma solidity ^0.8.20;
 import {Owned} from "solmate/src/auth/Owned.sol";
 
 import {PoolState} from "../../src/types/PoolState.sol";
+import {PoolKey} from "../../src/types/PoolKey.sol";
 import {PoolId} from "../../src/types/PoolId.sol";
+import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
+import {Currency, CurrencyLibrary} from "../../src/types/Currency.sol";
 import {MarginLevels} from "../../src/types/MarginLevels.sol";
 import {IVault} from "../../src/interfaces/IVault.sol";
+import {IUnlockCallback} from "../../src/interfaces/callback/IUnlockCallback.sol";
 import {IMarginPositionManager} from "../../src/interfaces/IMarginPositionManager.sol";
 import {IMarginBase} from "../../src/interfaces/IMarginBase.sol";
 import {MarginState} from "../../src/types/MarginState.sol";
@@ -16,16 +20,18 @@ import {StageMath} from "../../src/libraries/StageMath.sol";
 import {Math} from "../../src/libraries/Math.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
 import {CurrentStateLibrary} from "../../src/libraries/CurrentStateLibrary.sol";
+import {CurrencyPoolLibrary} from "../../src/libraries/CurrencyPoolLibrary.sol";
 import {PerLibrary} from "../../src/libraries/PerLibrary.sol";
 import {SwapMath} from "../../src/libraries/SwapMath.sol";
 import {StageMath} from "../../src/libraries/StageMath.sol";
 import {InterestMath} from "../../src/libraries/InterestMath.sol";
 import {MarginPosition} from "../../src/libraries/MarginPosition.sol";
 
-contract LikwidHelper is Owned {
+contract LikwidHelper is Owned, IUnlockCallback {
     using MarginPosition for MarginPosition.State;
     using PerLibrary for uint256;
     using StageMath for uint256;
+    using CurrencyPoolLibrary for Currency;
 
     IVault public vault;
 
@@ -302,5 +308,77 @@ contract LikwidHelper is Owned {
 
     function setVault(IVault _vault) external onlyOwner {
         vault = _vault;
+    }
+
+    // ******************** VAULT CALL ********************
+
+    error NotVault();
+    error InvalidCallback();
+    error InsufficientNative();
+
+    modifier ensure(uint256 deadline) {
+        _ensure(deadline);
+        _;
+    }
+
+    function _ensure(uint256 deadline) internal view {
+        require(deadline == 0 || deadline >= block.timestamp, "EXPIRED");
+    }
+
+    /// @notice Only allow calls from the LikwidVault contract
+    modifier onlyVault() {
+        _onlyVault();
+        _;
+    }
+
+    function _onlyVault() internal view {
+        if (msg.sender != address(vault)) revert NotVault();
+    }
+
+    enum Actions {
+        DONATE
+    }
+
+    /// @inheritdoc IUnlockCallback
+    function unlockCallback(bytes calldata data) external onlyVault returns (bytes memory) {
+        (Actions action, bytes memory params) = abi.decode(data, (Actions, bytes));
+        if (action == Actions.DONATE) {
+            return _handleDonate(params);
+        } else {
+            revert InvalidCallback();
+        }
+    }
+
+    function donate(PoolKey memory key, uint256 amount0, uint256 amount1, uint256 deadline)
+        external
+        payable
+        ensure(deadline)
+    {
+        if (CurrencyLibrary.isAddressZero(key.currency0)) {
+            if (msg.value != amount0) {
+                revert InsufficientNative();
+            }
+        } else if (msg.value != 0) {
+            revert InsufficientNative();
+        }
+        bytes memory callbackData = abi.encode(msg.sender, key, amount0, amount1);
+        bytes memory data = abi.encode(Actions.DONATE, callbackData);
+        vault.unlock(data);
+    }
+
+    function _handleDonate(bytes memory _data) internal returns (bytes memory) {
+        (address sender, PoolKey memory key, uint256 amount0, uint256 amount1) =
+            abi.decode(_data, (address, PoolKey, uint256, uint256));
+
+        (BalanceDelta delta) = vault.donate(key, amount0, amount1);
+
+        if (delta.amount0() < 0) {
+            key.currency0.settle(vault, sender, amount0, false);
+        }
+        if (delta.amount1() < 0) {
+            key.currency1.settle(vault, sender, amount1, false);
+        }
+
+        return abi.encode(amount0, amount1);
     }
 }

@@ -7,6 +7,7 @@ import {LikwidHelper} from "../test/utils/LikwidHelper.sol";
 
 contract DeployHelperScript is Script {
     address constant CREATE2_DEPLOYER = address(0x4e59b44847b379578588920cA78FbF26c0B4956C);
+    address constant VAULT = address(0x065d449ec9D139740343990B7E1CF05fA830e4Ba);
 
     error ManagerNotExist();
 
@@ -22,7 +23,7 @@ contract DeployHelperScript is Script {
         address sender = msg.sender;
         console.log("sender:", sender);
 
-        IVault vault = IVault(0x0373b133bCb5bc9211CA6b3F027B4D8f4079C635);
+        IVault vault = IVault(VAULT);
         console.log("vault:", address(vault));
 
         helper = new LikwidHelper(owner, vault);

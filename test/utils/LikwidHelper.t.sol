@@ -14,8 +14,10 @@ import {PoolKey} from "../../src/types/PoolKey.sol";
 import {PoolId} from "../../src/types/PoolId.sol";
 import {FeeTypes} from "../../src/types/FeeTypes.sol";
 import {PoolState} from "../../src/types/PoolState.sol";
-import {Currency} from "../../src/types/Currency.sol";
+import {Currency, CurrencyLibrary} from "../../src/types/Currency.sol";
+import {InsuranceFunds} from "../../src/types/InsuranceFunds.sol";
 import {MarginLevels} from "../../src/types/MarginLevels.sol";
+import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
 import {MarginPosition} from "../../src/libraries/MarginPosition.sol";
 import {SwapMath} from "../../src/libraries/SwapMath.sol";
 import {InterestMath} from "../../src/libraries/InterestMath.sol";
@@ -34,10 +36,13 @@ contract LikwidHelperTest is Test {
     LikwidHelper public helper;
     PoolId public poolId;
     PoolKey public key;
+    PoolKey public keyNative;
     MockERC20 token0;
     MockERC20 token1;
     Currency currency0;
     Currency currency1;
+
+    receive() external payable {}
 
     function setUp() public {
         vault = new LikwidVault(address(this));
@@ -70,11 +75,16 @@ contract LikwidHelperTest is Test {
         token1.approve(address(marginPositionManager), type(uint256).max);
         token0.approve(address(pairPositionManager), type(uint256).max);
         token1.approve(address(pairPositionManager), type(uint256).max);
+        token0.approve(address(helper), type(uint256).max);
+        token1.approve(address(helper), type(uint256).max);
 
         uint24 fee = 3000; // 0.3%
         key = PoolKey({currency0: currency0, currency1: currency1, fee: fee, marginFee: 3000});
         vault.initialize(key);
         poolId = key.toId();
+        keyNative =
+            PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee, marginFee: 3000});
+        vault.initialize(keyNative);
         uint256 amount0ToAdd = 10e18;
         uint256 amount1ToAdd = 20e18;
         token0.mint(address(this), amount0ToAdd);
@@ -340,5 +350,106 @@ contract LikwidHelperTest is Test {
         uint256 rate1 = helper.getBorrowAPR(poolId, true);
         assertTrue(rate0 < rate1);
         assertTrue(rate0 == state.marginState.rateBase());
+    }
+
+    function testHelperDonateCurrency0() public {
+        uint256 donationAmount = 1e18;
+        token0.mint(address(this), donationAmount);
+
+        helper.donate(key, donationAmount, 0, 10000);
+
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, poolId);
+        assertEq(uint128(insuranceFunds.amount0()), donationAmount, "currency0 insurance fund should match donation");
+        assertEq(uint128(insuranceFunds.amount1()), 0, "currency1 insurance fund should be untouched");
+    }
+
+    function testHelperDonateCurrency1() public {
+        uint256 donationAmount = 2e18;
+        token1.mint(address(this), donationAmount);
+
+        helper.donate(key, 0, donationAmount, 10000);
+
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, poolId);
+        assertEq(uint128(insuranceFunds.amount0()), 0, "currency0 insurance fund should be untouched");
+        assertEq(uint128(insuranceFunds.amount1()), donationAmount, "currency1 insurance fund should match donation");
+    }
+
+    function testHelperDonateBothCurrencies() public {
+        uint256 donationAmount0 = 1e18;
+        uint256 donationAmount1 = 3e18;
+        token0.mint(address(this), donationAmount0);
+        token1.mint(address(this), donationAmount1);
+
+        helper.donate(key, donationAmount0, donationAmount1, 0);
+
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, poolId);
+        assertEq(uint128(insuranceFunds.amount0()), donationAmount0, "currency0 insurance fund should match donation");
+        assertEq(uint128(insuranceFunds.amount1()), donationAmount1, "currency1 insurance fund should match donation");
+    }
+
+    function testHelperDonateZeroAmounts() public {
+        helper.donate(key, 0, 0, 10000);
+
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, poolId);
+        assertEq(uint128(insuranceFunds.amount0()), 0, "currency0 insurance fund should be 0");
+        assertEq(uint128(insuranceFunds.amount1()), 0, "currency1 insurance fund should be 0");
+    }
+
+    function testHelperDonateNative() public {
+        // Add liquidity to the native pool first.
+        uint256 nativeAmount0 = 5e18;
+        uint256 nativeAmount1 = 5e18;
+        token1.mint(address(this), nativeAmount1);
+        vm.deal(address(this), nativeAmount0);
+        pairPositionManager.addLiquidity{value: nativeAmount0}(
+            keyNative, address(this), nativeAmount0, nativeAmount1, 0, 0, 10000
+        );
+
+        // Donate native currency0 + token1 via helper.
+        uint256 donationNative = 1e18;
+        uint256 donationToken1 = 2e18;
+        token1.mint(address(this), donationToken1);
+        vm.deal(address(this), donationNative);
+
+        helper.donate{value: donationNative}(keyNative, donationNative, donationToken1, 10000);
+
+        InsuranceFunds insuranceFunds = StateLibrary.getInsuranceFunds(vault, keyNative.toId());
+        assertEq(uint128(insuranceFunds.amount0()), donationNative, "native insurance fund should match donation");
+        assertEq(uint128(insuranceFunds.amount1()), donationToken1, "token1 insurance fund should match donation");
+    }
+
+    function test_RevertIf_HelperDonateExpired() public {
+        uint256 donationAmount = 1e18;
+        token0.mint(address(this), donationAmount);
+
+        vm.warp(100);
+        vm.expectRevert("EXPIRED");
+        helper.donate(key, donationAmount, 0, block.timestamp - 1);
+    }
+
+    function test_RevertIf_HelperDonateNonNativeWithValue() public {
+        uint256 donationAmount = 1e18;
+        token0.mint(address(this), donationAmount);
+        vm.deal(address(this), 1);
+
+        vm.expectRevert(LikwidHelper.InsufficientNative.selector);
+        helper.donate{value: 1}(key, donationAmount, 0, 10000);
+    }
+
+    function test_RevertIf_HelperDonateNativeValueMismatch() public {
+        uint256 donationAmount = 1e18;
+        vm.deal(address(this), donationAmount);
+
+        // Sending less native than amount0 must revert.
+        vm.expectRevert(LikwidHelper.InsufficientNative.selector);
+        helper.donate{value: donationAmount - 1}(keyNative, donationAmount, 0, 10000);
+    }
+
+    function test_RevertIf_UnlockCallbackNotVault() public {
+        bytes memory params = abi.encode(address(this), key, uint256(0), uint256(0));
+        bytes memory data = abi.encode(LikwidHelper.Actions.DONATE, params);
+
+        vm.expectRevert(LikwidHelper.NotVault.selector);
+        helper.unlockCallback(data);
     }
 }
