@@ -4,6 +4,10 @@ pragma solidity ^0.8.20;
 // Solmate
 import {Owned} from "solmate/src/auth/Owned.sol";
 
+import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+
 import {PoolState} from "../../src/types/PoolState.sol";
 import {PoolKey} from "../../src/types/PoolKey.sol";
 import {PoolId} from "../../src/types/PoolId.sol";
@@ -27,7 +31,7 @@ import {StageMath} from "../../src/libraries/StageMath.sol";
 import {InterestMath} from "../../src/libraries/InterestMath.sol";
 import {MarginPosition} from "../../src/libraries/MarginPosition.sol";
 
-contract LikwidHelper is Owned, IUnlockCallback {
+contract LikwidHelper is Owned, IUnlockCallback, IERC721Receiver, ERC721 {
     using MarginPosition for MarginPosition.State;
     using PerLibrary for uint256;
     using StageMath for uint256;
@@ -35,7 +39,7 @@ contract LikwidHelper is Owned, IUnlockCallback {
 
     IVault public vault;
 
-    constructor(address initialOwner, IVault _vault) Owned(initialOwner) {
+    constructor(address initialOwner, IVault _vault) Owned(initialOwner) ERC721("Likwid Lock Receipt", "LLR") {
         vault = _vault;
     }
 
@@ -380,5 +384,111 @@ contract LikwidHelper is Owned, IUnlockCallback {
         }
 
         return abi.encode(amount0, amount1);
+    }
+
+    // ******************** NFT LOCK ********************
+
+    /// @dev The lock receipt is itself an ERC721 token minted by this contract.
+    ///      The owner of the receipt (lockId) is, by definition, the owner of
+    ///      the lock — so the receipt can be freely transferred and the new
+    ///      receipt holder gains the right to release the underlying NFT
+    ///      after expiry.
+    struct NFTLock {
+        address nftContract;
+        uint256 tokenId;
+        uint64 lockedAt;
+        uint64 unlockAt;
+    }
+
+    /// @notice Auto-incrementing identifier for NFT locks. Each id corresponds
+    ///         to an ERC721 receipt minted by this contract.
+    uint256 public nextLockId = 1;
+
+    /// @notice Lock id => lock record. A lock is considered released once the
+    ///         record is deleted (nftContract == address(0)).
+    mapping(uint256 => NFTLock) private _nftLocks;
+
+    error InvalidLockDuration();
+    error LockNotFound();
+    error LockNotExpired();
+    error NotLockOwner();
+
+    event NFTLocked(
+        uint256 indexed lockId,
+        address indexed owner,
+        address indexed nftContract,
+        uint256 tokenId,
+        uint64 lockedAt,
+        uint64 unlockAt
+    );
+
+    event NFTUnlocked(uint256 indexed lockId, address indexed owner, address indexed nftContract, uint256 tokenId);
+
+    /// @notice Lock an ERC721 token in this contract for `lockDuration` seconds.
+    ///         The caller must own the token and have approved this contract
+    ///         to transfer it. A receipt NFT (this contract's own ERC721 with
+    ///         id == lockId) is minted to the caller; whoever holds that
+    ///         receipt may call {unlockNFT} after expiry to retrieve the
+    ///         underlying token.
+    /// @param nftContract The ERC721 contract address.
+    /// @param tokenId The token id to lock.
+    /// @param lockDuration Number of seconds the token will remain locked.
+    /// @return lockId Identifier of the newly created lock record (also the
+    ///         receipt token id).
+    function lockNFT(address nftContract, uint256 tokenId, uint64 lockDuration) external returns (uint256 lockId) {
+        if (lockDuration == 0) revert InvalidLockDuration();
+
+        lockId = nextLockId++;
+        uint64 lockedAt = uint64(block.timestamp);
+        uint64 unlockAt = lockedAt + lockDuration;
+
+        _nftLocks[lockId] =
+            NFTLock({nftContract: nftContract, tokenId: tokenId, lockedAt: lockedAt, unlockAt: unlockAt});
+
+        // Mint the receipt NFT to the locker. We use _mint (not _safeMint)
+        // to avoid imposing an IERC721Receiver requirement on the caller.
+        _mint(msg.sender, lockId);
+
+        IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenId);
+
+        emit NFTLocked(lockId, msg.sender, nftContract, tokenId, lockedAt, unlockAt);
+    }
+
+    /// @notice Release a previously locked NFT after its unlock time. The
+    ///         caller must currently hold the receipt NFT.
+    /// @param lockId The lock identifier returned by {lockNFT}.
+    function unlockNFT(uint256 lockId) external {
+        NFTLock memory lockInfo = _nftLocks[lockId];
+        if (lockInfo.nftContract == address(0)) revert LockNotFound();
+        if (msg.sender != _ownerOf(lockId)) revert NotLockOwner();
+        if (block.timestamp < lockInfo.unlockAt) revert LockNotExpired();
+
+        delete _nftLocks[lockId];
+        _burn(lockId);
+
+        IERC721(lockInfo.nftContract).safeTransferFrom(address(this), msg.sender, lockInfo.tokenId);
+
+        emit NFTUnlocked(lockId, msg.sender, lockInfo.nftContract, lockInfo.tokenId);
+    }
+
+    /// @notice Return the full record for a given lock id.
+    function getNFTLock(uint256 lockId) external view returns (NFTLock memory) {
+        return _nftLocks[lockId];
+    }
+
+    /// @notice Return the remaining seconds until a lock can be released.
+    ///         Returns 0 once the lock is already releasable.
+    function getRemainingLockTime(uint256 lockId) external view returns (uint64 remaining) {
+        NFTLock memory lockInfo = _nftLocks[lockId];
+        if (lockInfo.nftContract == address(0)) revert LockNotFound();
+        if (block.timestamp >= lockInfo.unlockAt) {
+            return 0;
+        }
+        remaining = lockInfo.unlockAt - uint64(block.timestamp);
+    }
+
+    /// @inheritdoc IERC721Receiver
+    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
+        return IERC721Receiver.onERC721Received.selector;
     }
 }

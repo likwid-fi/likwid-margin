@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
+import {MockERC721} from "solmate/src/test/utils/mocks/MockERC721.sol";
 
 import {LikwidVault} from "../../src/LikwidVault.sol";
 import {LikwidMarginPosition} from "../../src/LikwidMarginPosition.sol";
@@ -82,8 +83,7 @@ contract LikwidHelperTest is Test {
         key = PoolKey({currency0: currency0, currency1: currency1, fee: fee, marginFee: 3000});
         vault.initialize(key);
         poolId = key.toId();
-        keyNative =
-            PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee, marginFee: 3000});
+        keyNative = PoolKey({currency0: CurrencyLibrary.ADDRESS_ZERO, currency1: currency1, fee: fee, marginFee: 3000});
         vault.initialize(keyNative);
         uint256 amount0ToAdd = 10e18;
         uint256 amount1ToAdd = 20e18;
@@ -451,5 +451,254 @@ contract LikwidHelperTest is Test {
 
         vm.expectRevert(LikwidHelper.NotVault.selector);
         helper.unlockCallback(data);
+    }
+
+    // ******************** NFT LOCK TESTS ********************
+
+    function _mintAndApproveNFT(MockERC721 nft, address owner, uint256 tokenId) internal {
+        nft.mint(owner, tokenId);
+        vm.prank(owner);
+        nft.approve(address(helper), tokenId);
+    }
+
+    function testLockNFT() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        uint256 tokenId = 42;
+        _mintAndApproveNFT(nft, alice, tokenId);
+
+        uint64 lockDuration = 7 days;
+        uint64 expectedLockedAt = uint64(block.timestamp);
+        uint64 expectedUnlockAt = expectedLockedAt + lockDuration;
+
+        vm.prank(alice);
+        uint256 lockId = helper.lockNFT(address(nft), tokenId, lockDuration);
+
+        assertEq(lockId, 1, "first lockId should be 1");
+        assertEq(helper.nextLockId(), 2, "nextLockId should be incremented");
+        assertEq(nft.ownerOf(tokenId), address(helper), "helper should hold the NFT");
+
+        LikwidHelper.NFTLock memory info = helper.getNFTLock(lockId);
+        assertEq(info.nftContract, address(nft));
+        assertEq(info.tokenId, tokenId);
+        assertEq(info.lockedAt, expectedLockedAt);
+        assertEq(info.unlockAt, expectedUnlockAt);
+
+        // The receipt NFT (lockId) should be owned by alice.
+        assertEq(helper.ownerOf(lockId), alice, "alice should hold the receipt NFT");
+        assertEq(helper.getRemainingLockTime(lockId), lockDuration);
+    }
+
+    function testLockNFTAssignsIncreasingIds() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        _mintAndApproveNFT(nft, alice, 1);
+        _mintAndApproveNFT(nft, alice, 2);
+
+        vm.startPrank(alice);
+        uint256 lockId1 = helper.lockNFT(address(nft), 1, 1 days);
+        uint256 lockId2 = helper.lockNFT(address(nft), 2, 1 days);
+        vm.stopPrank();
+
+        assertEq(lockId1, 1);
+        assertEq(lockId2, 2);
+        assertEq(helper.nextLockId(), 3);
+    }
+
+    function testUnlockNFTAfterExpiry() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        uint256 tokenId = 99;
+        _mintAndApproveNFT(nft, alice, tokenId);
+
+        uint64 lockDuration = 3 days;
+        vm.prank(alice);
+        uint256 lockId = helper.lockNFT(address(nft), tokenId, lockDuration);
+
+        // Fast-forward past unlock time.
+        vm.warp(block.timestamp + lockDuration + 1);
+
+        assertEq(helper.getRemainingLockTime(lockId), 0, "remaining time should be 0 after expiry");
+
+        vm.prank(alice);
+        helper.unlockNFT(lockId);
+
+        assertEq(nft.ownerOf(tokenId), alice, "alice should get NFT back");
+
+        // Lock record should be deleted and receipt NFT burned.
+        LikwidHelper.NFTLock memory info = helper.getNFTLock(lockId);
+        assertEq(info.nftContract, address(0));
+        assertEq(info.unlockAt, 0);
+        vm.expectRevert();
+        helper.ownerOf(lockId);
+    }
+
+    function test_RevertIf_LockNFTDurationZero() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        _mintAndApproveNFT(nft, alice, 1);
+
+        vm.prank(alice);
+        vm.expectRevert(LikwidHelper.InvalidLockDuration.selector);
+        helper.lockNFT(address(nft), 1, 0);
+    }
+
+    function test_RevertIf_UnlockNFTBeforeExpiry() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        uint256 tokenId = 5;
+        _mintAndApproveNFT(nft, alice, tokenId);
+
+        vm.prank(alice);
+        uint256 lockId = helper.lockNFT(address(nft), tokenId, 1 days);
+
+        vm.prank(alice);
+        vm.expectRevert(LikwidHelper.LockNotExpired.selector);
+        helper.unlockNFT(lockId);
+    }
+
+    function test_RevertIf_UnlockNFTByNonOwner() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        address bob = makeAddr("bob");
+        uint256 tokenId = 7;
+        _mintAndApproveNFT(nft, alice, tokenId);
+
+        vm.prank(alice);
+        uint256 lockId = helper.lockNFT(address(nft), tokenId, 1 days);
+
+        vm.warp(block.timestamp + 2 days);
+
+        vm.prank(bob);
+        vm.expectRevert(LikwidHelper.NotLockOwner.selector);
+        helper.unlockNFT(lockId);
+    }
+
+    function test_RevertIf_UnlockNFTLockNotFound() public {
+        vm.expectRevert(LikwidHelper.LockNotFound.selector);
+        helper.unlockNFT(123456);
+    }
+
+    function test_RevertIf_GetRemainingLockTimeLockNotFound() public {
+        vm.expectRevert(LikwidHelper.LockNotFound.selector);
+        helper.getRemainingLockTime(8888);
+    }
+
+    function testGetRemainingLockTimeShrinks() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        _mintAndApproveNFT(nft, alice, 1);
+
+        uint64 lockDuration = 10 days;
+        vm.prank(alice);
+        uint256 lockId = helper.lockNFT(address(nft), 1, lockDuration);
+
+        assertEq(helper.getRemainingLockTime(lockId), lockDuration);
+
+        vm.warp(block.timestamp + 4 days);
+        assertEq(helper.getRemainingLockTime(lockId), lockDuration - 4 days);
+
+        vm.warp(block.timestamp + 6 days);
+        assertEq(helper.getRemainingLockTime(lockId), 0);
+    }
+
+    function testLockAndUnlockNFTLongDuration() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        uint256 tokenId = 900;
+        _mintAndApproveNFT(nft, alice, tokenId);
+
+        uint64 lockDuration = 900 days;
+        uint64 expectedLockedAt = uint64(block.timestamp);
+        uint64 expectedUnlockAt = expectedLockedAt + lockDuration;
+
+        // Lock for 900 days.
+        vm.prank(alice);
+        uint256 lockId = helper.lockNFT(address(nft), tokenId, lockDuration);
+
+        assertEq(nft.ownerOf(tokenId), address(helper), "helper should hold the NFT");
+        LikwidHelper.NFTLock memory info = helper.getNFTLock(lockId);
+        assertEq(info.unlockAt, expectedUnlockAt);
+        assertEq(helper.ownerOf(lockId), alice, "alice should hold the receipt NFT");
+        assertEq(helper.getRemainingLockTime(lockId), lockDuration);
+
+        // Halfway through (450 days) — still locked, cannot release.
+        vm.warp(block.timestamp + 450 days);
+        assertEq(helper.getRemainingLockTime(lockId), 450 days);
+        vm.prank(alice);
+        vm.expectRevert(LikwidHelper.LockNotExpired.selector);
+        helper.unlockNFT(lockId);
+
+        // One second before unlock — still locked.
+        vm.warp(expectedUnlockAt - 1);
+        assertEq(helper.getRemainingLockTime(lockId), 1);
+        vm.prank(alice);
+        vm.expectRevert(LikwidHelper.LockNotExpired.selector);
+        helper.unlockNFT(lockId);
+
+        // Exactly at unlockAt — releasable.
+        vm.warp(expectedUnlockAt);
+        assertEq(helper.getRemainingLockTime(lockId), 0);
+
+        vm.prank(alice);
+        helper.unlockNFT(lockId);
+
+        assertEq(nft.ownerOf(tokenId), alice, "alice should get NFT back after 900 days");
+        LikwidHelper.NFTLock memory cleared = helper.getNFTLock(lockId);
+        assertEq(cleared.nftContract, address(0), "lock record should be cleared");
+        assertEq(cleared.unlockAt, 0);
+        vm.expectRevert();
+        helper.ownerOf(lockId);
+    }
+
+    function testTransferReceiptTransfersUnlockRight() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        address bob = makeAddr("bob");
+        uint256 tokenId = 11;
+        _mintAndApproveNFT(nft, alice, tokenId);
+
+        vm.prank(alice);
+        uint256 lockId = helper.lockNFT(address(nft), tokenId, 1 days);
+
+        // Alice transfers the receipt NFT to Bob.
+        vm.prank(alice);
+        helper.transferFrom(alice, bob, lockId);
+        assertEq(helper.ownerOf(lockId), bob, "bob should now hold the receipt");
+
+        vm.warp(block.timestamp + 2 days);
+
+        // Alice (no longer the receipt owner) cannot unlock.
+        vm.prank(alice);
+        vm.expectRevert(LikwidHelper.NotLockOwner.selector);
+        helper.unlockNFT(lockId);
+
+        // Bob can unlock and receives the underlying NFT.
+        vm.prank(bob);
+        helper.unlockNFT(lockId);
+        assertEq(nft.ownerOf(tokenId), bob, "bob should receive the underlying NFT");
+    }
+
+    function testRelockAfterUnlock() public {
+        MockERC721 nft = new MockERC721("MockNFT", "MNFT");
+        address alice = makeAddr("alice");
+        uint256 tokenId = 1;
+        _mintAndApproveNFT(nft, alice, tokenId);
+
+        vm.prank(alice);
+        uint256 lockId = helper.lockNFT(address(nft), tokenId, 1 days);
+
+        vm.warp(block.timestamp + 2 days);
+        vm.prank(alice);
+        helper.unlockNFT(lockId);
+
+        // Re-approve and lock again — should get a new lock id.
+        vm.prank(alice);
+        nft.approve(address(helper), tokenId);
+        vm.prank(alice);
+        uint256 lockId2 = helper.lockNFT(address(nft), tokenId, 2 days);
+
+        assertEq(lockId2, lockId + 1);
+        assertEq(nft.ownerOf(tokenId), address(helper));
     }
 }
