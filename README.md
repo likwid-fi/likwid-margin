@@ -1,3 +1,7 @@
+## Likwid Margin
+
+Likwid Margin is a decentralized margin and liquidity protocol. The protocol can be deployed on EVM-compatible networks, including Ethereum, Base, and BNB Smart Chain (BSC).
+
 ## License
 
 Likwid Margin licensed under the Business Source License 1.1 (`BUSL-1.1`), see [BUSL_LICENSE](https://github.com/likwid-fi/likwid-margin/tree/main/licenses/BUSL_LICENSE), and the MIT License (`MIT`), see [MIT_LICENSE](https://github.com/likwid-fi/likwid-margin/tree/main/licenses/MIT_LICENSE). Each file in Likwid Margin states the applicable license type in the header.
