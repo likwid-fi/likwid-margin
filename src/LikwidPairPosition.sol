@@ -215,7 +215,11 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
         return abi.encode(swapFee, feeAmount, amount0, amount1);
     }
 
-    function donate(PoolId poolId, uint256 amount0, uint256 amount1, uint256 deadline) external ensure(deadline) {
+    function donate(PoolId poolId, uint256 amount0, uint256 amount1, uint256 deadline)
+        external
+        payable
+        ensure(deadline)
+    {
         PoolKey memory key = poolKeys[poolId];
         bytes memory callbackData = abi.encode(msg.sender, key, amount0, amount1);
         bytes memory data = abi.encode(Actions.DONATE, callbackData);

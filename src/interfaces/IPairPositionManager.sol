@@ -117,5 +117,5 @@ interface IPairPositionManager is IERC721 {
     /// @param amount0 The amount of token0 to donate
     /// @param amount1 The amount of token1 to donate
     /// @param deadline Deadline for the transaction
-    function donate(PoolId poolId, uint256 amount0, uint256 amount1, uint256 deadline) external;
+    function donate(PoolId poolId, uint256 amount0, uint256 amount1, uint256 deadline) external payable;
 }
