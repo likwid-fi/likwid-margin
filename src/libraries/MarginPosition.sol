@@ -102,7 +102,7 @@ library MarginPosition {
             positionValue = marginAmount + marginTotal;
 
             // margin or borrow
-            if (borrowAmount > 0) {
+            if (marginAmount + marginTotal > 0 && borrowAmount > 0) {
                 // A position can only be used for either borrow(leverage==0) or margin(leverage>0), but not both.
                 if ((marginTotal > 0 && marginWithoutFee == 0) || (marginTotal == 0 && marginWithoutFee > 0)) {
                     // when margin, marginWithoutFee should >0
