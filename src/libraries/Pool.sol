@@ -696,6 +696,12 @@ library Pool {
         self.mirrorReserves = _mirrorReserves;
         self.pairReserves = _pairReserves;
         self.lendReserves = _lendReserves;
+        if (lendAdd0 > 0) {
+            self.deposit0CumulativeLast = Math.mulDiv(self.deposit0CumulativeLast, lendR0 + lendAdd0, lendR0);
+        }
+        if (lendAdd1 > 0) {
+            self.deposit1CumulativeLast = Math.mulDiv(self.deposit1CumulativeLast, lendR1 + lendAdd1, lendR1);
+        }
 
         self.insuranceFundUpperLimit = _insuranceFundUpperLimit;
         self.insuranceFunds = _insuranceFunds;
