@@ -5,11 +5,13 @@ import {Vm} from "forge-std/Vm.sol";
 import {Test} from "forge-std/Test.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
-import {LikwidVault} from "../src/LikwidVault.sol";
+import {LikwidVault} from "../src/core/LikwidVault.sol";
+import {LikwidMarginCore} from "../src/core/LikwidMarginCore.sol";
 import {LikwidMarginPosition} from "../src/LikwidMarginPosition.sol";
 import {LikwidPairPosition} from "../src/LikwidPairPosition.sol";
 import {LikwidHelper} from "./utils/LikwidHelper.sol";
 import {IMarginPositionManager} from "../src/interfaces/IMarginPositionManager.sol";
+import {IMarginCore} from "../src/interfaces/IMarginCore.sol";
 import {IVault} from "../src/interfaces/IVault.sol";
 import {IUnlockCallback} from "../src/interfaces/callback/IUnlockCallback.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
@@ -33,6 +35,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
     event MarginFeeChanged(uint24 oldMarginFee, uint24 newMarginFee);
 
     LikwidVault vault;
+    LikwidMarginCore marginCore;
     LikwidMarginPosition marginPositionManager;
     LikwidPairPosition pairPositionManager;
     LikwidHelper helper;
@@ -52,9 +55,11 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
     function setUp() public {
         vault = new LikwidVault(address(this));
-        marginPositionManager = new LikwidMarginPosition(address(this), vault);
+        marginCore = new LikwidMarginCore(address(this), vault);
+        marginPositionManager = new LikwidMarginPosition(address(this), vault, marginCore);
         pairPositionManager = new LikwidPairPosition(address(this), vault);
         helper = new LikwidHelper(address(this), vault);
+        helper.setPositionManager(marginPositionManager);
 
         address tokenA = address(new MockERC20("TokenA", "TKNA", 18));
         address tokenB = address(new MockERC20("TokenB", "TKNB", 18));
@@ -70,10 +75,12 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         currency0 = Currency.wrap(address(token0));
         currency1 = Currency.wrap(address(token1));
 
-        vault.setMarginController(address(marginPositionManager));
+        vault.setMarginController(address(marginCore));
 
         token0.approve(address(vault), type(uint256).max);
         token1.approve(address(vault), type(uint256).max);
+        token0.approve(address(marginCore), type(uint256).max);
+        token1.approve(address(marginCore), type(uint256).max);
         token0.approve(address(marginPositionManager), type(uint256).max);
         token1.approve(address(marginPositionManager), type(uint256).max);
         token0.approve(address(pairPositionManager), type(uint256).max);
@@ -187,8 +194,8 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         token1.mint(liquidator, 100e18);
         token0.approve(address(vault), type(uint256).max);
         token1.approve(address(vault), type(uint256).max);
-        token0.approve(address(marginPositionManager), type(uint256).max);
-        token1.approve(address(marginPositionManager), type(uint256).max);
+        token0.approve(address(marginCore), type(uint256).max);
+        token1.approve(address(marginCore), type(uint256).max);
     }
 
     function _createNativeLiquidator() internal {
@@ -196,16 +203,33 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         vm.startPrank(liquidator);
         token1.mint(liquidator, 100e18);
         token1.approve(address(vault), type(uint256).max);
-        token1.approve(address(marginPositionManager), type(uint256).max);
+        token1.approve(address(marginCore), type(uint256).max);
+    }
+
+    function _liquidateBurn(uint256 tokenId) internal returns (uint256 profit) {
+        profit = marginCore.liquidateBurn(
+            _poolKeyOf(tokenId), address(marginPositionManager), bytes32(tokenId), address(this), 0
+        );
+    }
+
+    function _liquidateCall(uint256 tokenId) internal returns (uint256 profit, uint256 repayAmount) {
+        (profit, repayAmount) = marginCore.liquidateCall(
+            _poolKeyOf(tokenId), address(marginPositionManager), bytes32(tokenId), address(this), 0
+        );
+    }
+
+    function _poolKeyOf(uint256 tokenId) internal view returns (PoolKey memory k) {
+        (k.currency0, k.currency1, k.fee, k.marginFee) =
+            marginPositionManager.poolKeys(marginPositionManager.poolIds(tokenId));
     }
 
     function _liquidateAndVerify(uint256 tokenId, bool useBurn) internal returns (uint256 profit) {
         _createLiquidator();
 
         if (useBurn) {
-            profit = marginPositionManager.liquidateBurn(tokenId, 0);
+            profit = _liquidateBurn(tokenId);
         } else {
-            (profit,) = marginPositionManager.liquidateCall(tokenId, 0);
+            (profit,) = _liquidateCall(tokenId);
         }
         vm.stopPrank();
 
@@ -221,14 +245,14 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         Vm.Log[] memory entries = vm.getRecordedLogs();
 
         bytes32 eventSignature = keccak256(
-            "LiquidateBurn(bytes32,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"
+            "LiquidateBurn(bytes32,address,bytes32,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"
         );
 
         for (uint256 i = 0; i < entries.length; i++) {
             if (entries[i].topics[0] == eventSignature) {
                 (,,,,,,,,, lostAmount, fundAmount) = abi.decode(
                     entries[i].data,
-                    (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)
+                    (address, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)
                 );
 
                 return (lostAmount, fundAmount);
@@ -241,14 +265,14 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         Vm.Log[] memory entries = vm.getRecordedLogs();
 
         bytes32 eventSignature = keccak256(
-            "LiquidateCall(bytes32,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"
+            "LiquidateCall(bytes32,address,bytes32,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"
         );
 
         for (uint256 i = 0; i < entries.length; i++) {
             if (entries[i].topics[0] == eventSignature) {
                 (,,,,,,,,, lostAmount, fundAmount) = abi.decode(
                     entries[i].data,
-                    (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)
+                    (address, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)
                 );
 
                 return (lostAmount, fundAmount);
@@ -554,7 +578,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         _createLiquidator();
         vm.recordLogs();
-        (uint256 profit,) = marginPositionManager.liquidateCall(tokenId, 0);
+        (uint256 profit,) = _liquidateCall(tokenId);
         (lostAmount, fundAmount) = _getLiquidateCallValues();
         vm.stopPrank();
 
@@ -664,7 +688,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         _createLiquidator();
         vm.recordLogs();
-        uint256 profit = marginPositionManager.liquidateBurn(tokenId, 0);
+        uint256 profit = _liquidateBurn(tokenId);
         (uint256 lostAmount, uint256 fundAmount) = _getLiquidateBurnValues();
         vm.stopPrank();
 
@@ -710,7 +734,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         _createLiquidator();
         vm.recordLogs();
-        uint256 profit = marginPositionManager.liquidateBurn(tokenId, 0);
+        uint256 profit = _liquidateBurn(tokenId);
         (uint256 lostAmount, uint256 fundAmount) = _getLiquidateBurnValues();
         vm.stopPrank();
 
@@ -751,7 +775,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         assertTrue(helper.checkMarginPositionLiquidate(tokenId));
 
         _createLiquidator();
-        uint256 profit = marginPositionManager.liquidateBurn(tokenId, 0);
+        uint256 profit = _liquidateBurn(tokenId);
         vm.stopPrank();
 
         assertTrue(profit > 0);
@@ -771,11 +795,11 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         assertFalse(helper.checkMarginPositionLiquidate(tokenId));
 
-        vm.expectRevert(IMarginPositionManager.PositionNotLiquidated.selector);
-        marginPositionManager.liquidateCall(tokenId, 0);
+        vm.expectRevert(IMarginCore.PositionNotLiquidated.selector);
+        marginCore.liquidateCall(key, address(marginPositionManager), bytes32(tokenId), address(this), 0);
 
-        vm.expectRevert(IMarginPositionManager.PositionNotLiquidated.selector);
-        marginPositionManager.liquidateBurn(tokenId, 0);
+        vm.expectRevert(IMarginCore.PositionNotLiquidated.selector);
+        marginCore.liquidateBurn(key, address(marginPositionManager), bytes32(tokenId), address(this), 0);
     }
 
     // ==================== Parameter and Fuzz Tests ====================
@@ -825,7 +849,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         newMarginLevels = newMarginLevels.setLiquidateLevel(1050000);
         newMarginLevels = newMarginLevels.setLiquidationRatio(950000);
         newMarginLevels = newMarginLevels.setCallerProfit(10000);
-        marginPositionManager.setMarginLevel(MarginLevels.unwrap(newMarginLevels));
+        marginCore.setMarginLevel(MarginLevels.unwrap(newMarginLevels));
 
         (uint256 tokenId, uint256 borrowAmount) = _createPosition(false, 5, DEFAULT_MARGIN_AMOUNT);
 
@@ -852,7 +876,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         IMarginPositionManager.CreateParams memory params = _createDefaultParams(false, 5, uint128(marginAmount));
 
-        vm.expectRevert(IMarginPositionManager.ReservesNotEnough.selector);
+        vm.expectRevert(IMarginCore.ReservesNotEnough.selector);
         marginPositionManager.addMargin(key, params);
     }
 
@@ -869,7 +893,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             deadline: block.timestamp
         });
 
-        vm.expectRevert(IMarginPositionManager.BorrowTooMuch.selector);
+        vm.expectRevert(IMarginCore.BorrowTooMuch.selector);
         marginPositionManager.addMargin(key, params);
     }
 
@@ -878,7 +902,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         IMarginPositionManager.CreateParams memory params = _createDefaultParams(false, 2, DEFAULT_MARGIN_AMOUNT);
 
-        vm.expectRevert(IMarginPositionManager.LowFeePoolMarginBanned.selector);
+        vm.expectRevert(IMarginCore.LowFeePoolMarginBanned.selector);
         marginPositionManager.addMargin(keyLowFee, params);
     }
 
@@ -929,7 +953,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
     function testClose_Fail_InsufficientCloseReceived() public {
         (uint256 tokenId,) = _createPosition(false, 2, DEFAULT_MARGIN_AMOUNT);
 
-        vm.expectRevert(IMarginPositionManager.InsufficientCloseReceived.selector);
+        vm.expectRevert(IMarginCore.InsufficientCloseReceived.selector);
         marginPositionManager.close(tokenId, 1_000_000, 1e18, block.timestamp);
     }
 
@@ -937,7 +961,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         (uint256 tokenId,) = _createPosition(false, 4, DEFAULT_MARGIN_AMOUNT);
 
         int128 modifyAmount = -0.08e18;
-        vm.expectRevert(IMarginPositionManager.InvalidLevel.selector);
+        vm.expectRevert(IMarginCore.InvalidLevel.selector);
         marginPositionManager.modify(tokenId, modifyAmount, block.timestamp);
     }
 
@@ -945,7 +969,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         (uint256 tokenId,) = _createPosition(false, 2, 0.2e18);
 
         int128 modifyAmount = -0.05e18;
-        vm.expectRevert(IMarginPositionManager.InvalidLevel.selector);
+        vm.expectRevert(IMarginCore.InvalidLevel.selector);
         marginPositionManager.modify(tokenId, modifyAmount, block.timestamp);
 
         skip(1000);
@@ -956,7 +980,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
     // ==================== Admin Function Tests ====================
 
     function testSetMarginLevel() public {
-        MarginLevels oldLevels = marginPositionManager.marginLevels();
+        MarginLevels oldLevels = marginCore.marginLevels();
         MarginLevels newMarginLevels;
         newMarginLevels = newMarginLevels.setMinMarginLevel(1200000);
         newMarginLevels = newMarginLevels.setMinBorrowLevel(1500000);
@@ -966,9 +990,9 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         vm.expectEmit(true, true, true, true);
         emit MarginLevelChanged(MarginLevels.unwrap(oldLevels), MarginLevels.unwrap(newMarginLevels));
-        marginPositionManager.setMarginLevel(MarginLevels.unwrap(newMarginLevels));
+        marginCore.setMarginLevel(MarginLevels.unwrap(newMarginLevels));
 
-        assertEq(MarginLevels.unwrap(marginPositionManager.marginLevels()), MarginLevels.unwrap(newMarginLevels));
+        assertEq(MarginLevels.unwrap(marginCore.marginLevels()), MarginLevels.unwrap(newMarginLevels));
     }
 
     function testSetMarginLevel_Fail_NotOwner() public {
@@ -980,7 +1004,7 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         address notOwner = makeAddr("notOwner");
         vm.startPrank(notOwner);
         vm.expectRevert(bytes("UNAUTHORIZED"));
-        marginPositionManager.setMarginLevel(newLevels);
+        marginCore.setMarginLevel(newLevels);
         vm.stopPrank();
     }
 
@@ -989,8 +1013,8 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         newMarginLevels = newMarginLevels.setMinMarginLevel(1100000);
         newMarginLevels = newMarginLevels.setLiquidateLevel(1200000);
 
-        vm.expectRevert(IMarginPositionManager.InvalidLevel.selector);
-        marginPositionManager.setMarginLevel(MarginLevels.unwrap(newMarginLevels));
+        vm.expectRevert(IMarginCore.InvalidLevel.selector);
+        marginCore.setMarginLevel(MarginLevels.unwrap(newMarginLevels));
     }
 
     // ==================== Additional Edge Case Tests ====================

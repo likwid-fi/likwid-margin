@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
-import {LikwidVault} from "../src/LikwidVault.sol";
+import {LikwidVault} from "../src/core/LikwidVault.sol";
 import {LikwidPairPosition} from "../src/LikwidPairPosition.sol";
 import {IPairPositionManager} from "../src/interfaces/IPairPositionManager.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";

@@ -83,6 +83,21 @@ library MarginPosition {
         level = marginLevel(self, pairReserves, 0, 0);
     }
 
+    /// @notice Accrues a position's stored amounts to the given cumulative indices.
+    /// @dev Single source of truth for the accrual formula and its rounding directions
+    /// (debt rounds up, in the protocol's favour); callers that report or liquidate a
+    /// position must use this so their views cannot diverge. The caller must ensure the
+    /// position's stored cumulatives are non-zero (i.e. the position is not empty).
+    function accrue(State memory self, uint256 borrowCumulativeLast, uint256 depositCumulativeLast)
+        internal
+        pure
+        returns (uint256 marginAmount, uint256 marginTotal, uint256 debtAmount)
+    {
+        marginAmount = Math.mulDiv(self.marginAmount, depositCumulativeLast, self.depositCumulativeLast);
+        marginTotal = Math.mulDiv(self.marginTotal, depositCumulativeLast, self.depositCumulativeLast);
+        debtAmount = Math.mulDivRoundingUp(self.debtAmount, borrowCumulativeLast, self.borrowCumulativeLast);
+    }
+
     function update(
         State storage self,
         uint256 borrowCumulativeLast,

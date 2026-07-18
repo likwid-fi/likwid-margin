@@ -5,7 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
-import {LikwidVault} from "../src/LikwidVault.sol";
+import {LikwidVault} from "../src/core/LikwidVault.sol";
+import {LikwidMarginCore} from "../src/core/LikwidMarginCore.sol";
 import {LikwidLendPosition} from "../src/LikwidLendPosition.sol";
 import {LikwidPairPosition} from "../src/LikwidPairPosition.sol";
 import {LikwidMarginPosition} from "../src/LikwidMarginPosition.sol";
@@ -27,6 +28,7 @@ contract LikwidLendPositionTest is Test {
     LikwidVault vault;
     LikwidLendPosition lendPositionManager;
     LikwidPairPosition pairPositionManager;
+    LikwidMarginCore marginCore;
     LikwidMarginPosition marginPositionManager;
     PoolKey key;
     PoolKey keyNative;
@@ -42,12 +44,13 @@ contract LikwidLendPositionTest is Test {
 
         // Deploy Vault and Position Manager
         vault = new LikwidVault(address(this));
+        marginCore = new LikwidMarginCore(address(this), vault);
         lendPositionManager = new LikwidLendPosition(address(this), vault);
         pairPositionManager = new LikwidPairPosition(address(this), vault);
-        marginPositionManager = new LikwidMarginPosition(address(this), vault);
+        marginPositionManager = new LikwidMarginPosition(address(this), vault, marginCore);
 
         // The test contract is the vault's controller to settle balances
-        vault.setMarginController(address(marginPositionManager));
+        vault.setMarginController(address(marginCore));
 
         // Deploy mock tokens
         address tokenA = address(new MockERC20("TokenA", "TKNA", 18));

@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 import {MarginBase} from "../src/base/MarginBase.sol";
-import {LikwidVault} from "../src/LikwidVault.sol";
+import {LikwidVault} from "../src/core/LikwidVault.sol";
 import {IVault} from "../src/interfaces/IVault.sol";
 import {IUnlockCallback} from "../src/interfaces/callback/IUnlockCallback.sol";
 import {FeeTypes} from "../src/types/FeeTypes.sol";

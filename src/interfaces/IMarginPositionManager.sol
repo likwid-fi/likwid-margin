@@ -1,200 +1,18 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {PoolId} from "../types/PoolId.sol";
 import {PoolKey} from "../types/PoolKey.sol";
-import {Reserves} from "../types/Reserves.sol";
-import {MarginLevels} from "../types/MarginLevels.sol";
 import {IBasePositionManager} from "./IBasePositionManager.sol";
+import {IMarginCore} from "./IMarginCore.sol";
 import {MarginPosition} from "../libraries/MarginPosition.sol";
 
+/// @title IMarginPositionManager
+/// @notice Thin NFT wrapper around the margin core: each tokenId maps to a core position
+/// owned by this contract with salt = bytes32(tokenId). Risk parameters and liquidation
+/// live on the margin core.
 interface IMarginPositionManager is IBasePositionManager {
-    /// @notice Thrown when the provided level is invalid
-    error InvalidLevel();
-
-    /// @notice Thrown when the received borrow amount is insufficient
-    error InsufficientBorrowReceived();
-
-    /// @notice Thrown when the received close amount is insufficient
-    error InsufficientCloseReceived();
-
-    /// @notice Thrown when the received amount is insufficient
-    error InsufficientReceived();
-
-    /// @notice Thrown when the position is already liquidated
-    error PositionLiquidated();
-
-    /// @notice Thrown when the position is not liquidated
-    error PositionNotLiquidated();
-
-    /// @notice Thrown when the mirror amount is too high
-    error MirrorTooMuch();
-
-    /// @notice Thrown when the borrow amount is too high
-    error BorrowTooMuch();
-
-    /// @notice Thrown when the reserves are not enough
-    error ReservesNotEnough();
-
-    /// @notice Thrown when margin is banned for low fee pools
-    error LowFeePoolMarginBanned();
-
-    /// @notice Thrown when the margin is below the minimum required
-    error MarginBelowMinimum();
-
-    /// @notice Thrown when the leverage exceeds the maximum allowed
-    error ExceedMaxLeverage();
-
-    /// @notice Thrown when the borrow amount exceeds the maximum allowed
-    error ExceedBorrowAmountMax();
-
-    /// @notice Emitted when the margin level is changed
-    /// @param oldLevel The old margin level
-    /// @param newLevel The new margin level
-    event MarginLevelChanged(bytes32 oldLevel, bytes32 newLevel);
-
-    /// @notice Emitted when the margin fee is changed
-    /// @param oldFee The old margin fee
-    /// @param newFee The new margin fee
-    event MarginFeeChanged(uint24 oldFee, uint24 newFee);
-
-    /// @notice Emitted when a margin position is created or increased
-    /// @param poolId The ID of the pool
-    /// @param owner The owner of the position
-    /// @param tokenId The ID of the position token
-    /// @param marginAmount The amount of margin added
-    /// @param marginTotal The total margin of the position
-    /// @param debtAmount The total debt of the position
-    /// @param marginForOne Whether the margin is for currency1
-    event Margin(
-        PoolId indexed poolId,
-        address indexed owner,
-        uint256 tokenId,
-        uint256 marginAmount,
-        uint256 marginTotal,
-        uint256 debtAmount,
-        bool marginForOne
-    );
-
-    /// @notice Emitted when a margin position is repaid
-    /// @param poolId The ID of the pool
-    /// @param sender The address of the repayer
-    /// @param tokenId The ID of the position token
-    /// @param marginAmount The amount of margin in the position
-    /// @param marginTotal The total margin of the position
-    /// @param debtAmount The total debt of the position
-    /// @param releaseAmount The amount of margin released
-    /// @param repayAmount The amount of debt repaid
-    event Repay(
-        PoolId indexed poolId,
-        address indexed sender,
-        uint256 tokenId,
-        uint256 marginAmount,
-        uint256 marginTotal,
-        uint256 debtAmount,
-        uint256 releaseAmount,
-        uint256 repayAmount
-    );
-
-    /// @notice Emitted when a margin position is closed
-    /// @param poolId The ID of the pool
-    /// @param sender The address of the closer
-    /// @param tokenId The ID of the position token
-    /// @param marginAmount The amount of margin in the position
-    /// @param marginTotal The total margin of the position
-    /// @param debtAmount The total debt of the position
-    /// @param releaseAmount The amount of margin released
-    /// @param repayAmount The amount of debt repaid
-    /// @param closeAmount The amount received after closing
-    event Close(
-        PoolId indexed poolId,
-        address indexed sender,
-        uint256 tokenId,
-        uint256 marginAmount,
-        uint256 marginTotal,
-        uint256 debtAmount,
-        uint256 releaseAmount,
-        uint256 repayAmount,
-        uint256 closeAmount
-    );
-
-    /// @notice Emitted when a margin position is modified
-    /// @param poolId The ID of the pool
-    /// @param sender The address of the modifier
-    /// @param tokenId The ID of the position token
-    /// @param marginAmount The amount of margin in the position
-    /// @param marginTotal The total margin of the position
-    /// @param debtAmount The total debt of the position
-    /// @param changeAmount The amount of change in the position
-    event Modify(
-        PoolId indexed poolId,
-        address indexed sender,
-        uint256 tokenId,
-        uint256 marginAmount,
-        uint256 marginTotal,
-        uint256 debtAmount,
-        int256 changeAmount
-    );
-
-    /// @notice Emitted when a margin position is liquidated by burning
-    /// @param poolId The ID of the pool
-    /// @param sender The address of the liquidator
-    /// @param tokenId The ID of the position token
-    /// @param marginAmount The amount of margin in the position
-    /// @param marginTotal The total margin of the position
-    /// @param debtAmount The total debt of the position
-    /// @param truncatedReserves The truncated reserves of the pool
-    /// @param pairReserves The pair reserves of the pool
-    /// @param releaseAmount The amount of margin released
-    /// @param repayAmount The amount of debt repaid
-    /// @param profitAmount The profit from the liquidation
-    /// @param lostAmount The loss from the liquidation
-    /// @param fundAmount The amount added to the insurance fund
-    event LiquidateBurn(
-        PoolId indexed poolId,
-        address indexed sender,
-        uint256 tokenId,
-        uint256 marginAmount,
-        uint256 marginTotal,
-        uint256 debtAmount,
-        Reserves truncatedReserves,
-        Reserves pairReserves,
-        uint256 releaseAmount,
-        uint256 repayAmount,
-        uint256 profitAmount,
-        uint256 lostAmount,
-        uint256 fundAmount
-    );
-
-    /// @notice Emitted when a margin position is liquidated by calling
-    /// @param poolId The ID of the pool
-    /// @param sender The address of the liquidator
-    /// @param tokenId The ID of the position token
-    /// @param marginAmount The amount of margin in the position
-    /// @param marginTotal The total margin of the position
-    /// @param debtAmount The total debt of the position
-    /// @param truncatedReserves The truncated reserves of the pool
-    /// @param pairReserves The pair reserves of the pool
-    /// @param releaseAmount The amount of margin released
-    /// @param repayAmount The amount of debt repaid
-    /// @param needRepayAmount The amount of debt that needs to be repaid
-    /// @param lostAmount The loss from the liquidation
-    /// @param fundAmount The amount added to the insurance fund
-    event LiquidateCall(
-        PoolId indexed poolId,
-        address indexed sender,
-        uint256 tokenId,
-        uint256 marginAmount,
-        uint256 marginTotal,
-        uint256 debtAmount,
-        Reserves truncatedReserves,
-        Reserves pairReserves,
-        uint256 releaseAmount,
-        uint256 repayAmount,
-        uint256 needRepayAmount,
-        uint256 lostAmount,
-        uint256 fundAmount
-    );
+    /// @notice Gets the margin core this manager forwards to
+    function marginCore() external view returns (IMarginCore);
 
     /// @notice Gets the state of a position
     /// @param tokenId The ID of the position token
@@ -265,29 +83,9 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @param deadline Deadline for the transaction
     function close(uint256 tokenId, uint24 closeMillionth, uint256 closeAmountMin, uint256 deadline) external;
 
-    /// @notice Liquidates a position by burning the position token.
-    /// @param tokenId The ID of the position to liquidate.
-    /// @param deadline The deadline for the liquidation.
-    /// @return profit The profit from the liquidation.
-    function liquidateBurn(uint256 tokenId, uint256 deadline) external returns (uint256 profit);
-
-    /// @notice Liquidates a position by making a call.
-    /// @param tokenId The ID of the position to liquidate.
-    /// @param deadline The deadline for the liquidation.
-    /// @return profit The profit from the liquidation.
-    /// @return repayAmount The amount repaid.
-    function liquidateCall(uint256 tokenId, uint256 deadline)
-        external
-        payable
-        returns (uint256 profit, uint256 repayAmount);
-
     /// @notice Modify the margin position
     /// @param tokenId The id of position
     /// @param changeAmount The amount to modify
     /// @param deadline Deadline for the transaction
     function modify(uint256 tokenId, int128 changeAmount, uint256 deadline) external payable;
-
-    /// @notice Gets the margin levels
-    /// @return marginLevel The margin levels
-    function marginLevels() external view returns (MarginLevels marginLevel);
 }

@@ -9,6 +9,7 @@ import {PoolId} from "../../src/types/PoolId.sol";
 import {MarginLevels} from "../../src/types/MarginLevels.sol";
 import {IVault} from "../../src/interfaces/IVault.sol";
 import {IMarginPositionManager} from "../../src/interfaces/IMarginPositionManager.sol";
+import {IMarginCore} from "../../src/interfaces/IMarginCore.sol";
 import {IMarginBase} from "../../src/interfaces/IMarginBase.sol";
 import {MarginState} from "../../src/types/MarginState.sol";
 import {InsuranceFunds} from "../../src/types/InsuranceFunds.sol";
@@ -28,9 +29,15 @@ contract LikwidHelper is Owned {
     using StageMath for uint256;
 
     IVault public vault;
+    IMarginPositionManager public positionManager;
 
     constructor(address initialOwner, IVault _vault) Owned(initialOwner) {
         vault = _vault;
+    }
+
+    /// @notice The margin core, which is the vault's margin controller
+    function marginCore() public view returns (IMarginCore) {
+        return IMarginCore(vault.marginController());
     }
 
     struct PoolStateInfo {
@@ -162,12 +169,12 @@ contract LikwidHelper is Owned {
         _marginFee = state.marginFee;
     }
 
-    function _getMaxDecrease(
-        IMarginPositionManager manager,
-        PoolState memory _state,
-        MarginPosition.State memory _position
-    ) internal view returns (uint256 maxAmount) {
-        MarginLevels marginLevels = manager.marginLevels();
+    function _getMaxDecrease(PoolState memory _state, MarginPosition.State memory _position)
+        internal
+        view
+        returns (uint256 maxAmount)
+    {
+        MarginLevels marginLevels = marginCore().marginLevels();
         uint24 minBorrowLevel = marginLevels.minBorrowLevel();
         (uint128 pairReserve0, uint128 pairReserve1) = _state.pairReserves.reserves();
         (uint256 reserveBorrow, uint256 reserveMargin) =
@@ -188,21 +195,21 @@ contract LikwidHelper is Owned {
     }
 
     function getMaxDecrease(uint256 tokenId) external view returns (uint256 maxAmount) {
-        IMarginPositionManager manager = IMarginPositionManager(vault.marginController());
+        IMarginPositionManager manager = positionManager;
         MarginPosition.State memory _position = manager.getPositionState(tokenId);
         PoolId poolId = manager.poolIds(tokenId);
         PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
-        maxAmount = _getMaxDecrease(manager, _state, _position);
+        maxAmount = _getMaxDecrease(_state, _position);
     }
 
     function minMarginLevels() external view returns (uint24 minMarginLevel, uint24 minBorrowLevel) {
-        MarginLevels marginLevels = IMarginPositionManager(vault.marginController()).marginLevels();
+        MarginLevels marginLevels = marginCore().marginLevels();
         minMarginLevel = marginLevels.minMarginLevel();
         minBorrowLevel = marginLevels.minBorrowLevel();
     }
 
     function getLiquidateRepayAmount(uint256 tokenId) external view returns (uint256 repayAmount) {
-        IMarginPositionManager manager = IMarginPositionManager(vault.marginController());
+        IMarginPositionManager manager = positionManager;
         MarginPosition.State memory _position = manager.getPositionState(tokenId);
         PoolId poolId = manager.poolIds(tokenId);
         PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
@@ -210,7 +217,7 @@ contract LikwidHelper is Owned {
         (uint256 reserveBorrow, uint256 reserveMargin) =
             _position.marginForOne ? (pairReserve0, pairReserve1) : (pairReserve1, pairReserve0);
         repayAmount = Math.mulDiv(reserveBorrow, _position.marginAmount + _position.marginTotal, reserveMargin);
-        MarginLevels marginLevels = manager.marginLevels();
+        MarginLevels marginLevels = marginCore().marginLevels();
         repayAmount = repayAmount.mulDivMillion(marginLevels.liquidationRatio());
     }
 
@@ -288,19 +295,23 @@ contract LikwidHelper is Owned {
     }
 
     function checkMarginPositionLiquidate(uint256 tokenId) external view returns (bool liquidated) {
-        IMarginPositionManager manager = IMarginPositionManager(vault.marginController());
+        IMarginPositionManager manager = positionManager;
         MarginPosition.State memory _position = manager.getPositionState(tokenId);
         PoolId poolId = manager.poolIds(tokenId);
         PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
         uint256 level = _position.marginLevel(
             _state.truncatedReserves, _position.borrowCumulativeLast, _position.depositCumulativeLast
         );
-        liquidated = level <= manager.marginLevels().liquidateLevel();
+        liquidated = level <= marginCore().marginLevels().liquidateLevel();
     }
 
     // ******************** OWNER CALL ********************
 
     function setVault(IVault _vault) external onlyOwner {
         vault = _vault;
+    }
+
+    function setPositionManager(IMarginPositionManager _positionManager) external onlyOwner {
+        positionManager = _positionManager;
     }
 }

@@ -5,7 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 
-import {LikwidVault} from "../../src/LikwidVault.sol";
+import {LikwidVault} from "../../src/core/LikwidVault.sol";
+import {LikwidMarginCore} from "../../src/core/LikwidMarginCore.sol";
 import {LikwidMarginPosition} from "../../src/LikwidMarginPosition.sol";
 import {LikwidPairPosition} from "../../src/LikwidPairPosition.sol";
 import {LikwidHelper} from "../utils/LikwidHelper.sol";
@@ -27,6 +28,7 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
     event MarginLevelChanged(bytes32 oldMarginLevel, bytes32 newMarginLevel);
 
     LikwidVault vault;
+    LikwidMarginCore marginCore;
     LikwidMarginPosition marginPositionManager;
     LikwidPairPosition pairPositionManager;
     LikwidHelper helper;
@@ -61,9 +63,11 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
 
     function setUp() public {
         vault = new LikwidVault(address(this));
-        marginPositionManager = new LikwidMarginPosition(address(this), vault);
+        marginCore = new LikwidMarginCore(address(this), vault);
+        marginPositionManager = new LikwidMarginPosition(address(this), vault, marginCore);
         pairPositionManager = new LikwidPairPosition(address(this), vault);
         helper = new LikwidHelper(address(this), vault);
+        helper.setPositionManager(marginPositionManager);
 
         (address tokenA, address tokenB) = _createTokens();
 
@@ -78,10 +82,12 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
         currency0 = Currency.wrap(address(token0));
         currency1 = Currency.wrap(address(token1));
 
-        vault.setMarginController(address(marginPositionManager));
+        vault.setMarginController(address(marginCore));
 
         token0.approve(address(vault), type(uint256).max);
         token1.approve(address(vault), type(uint256).max);
+        token0.approve(address(marginCore), type(uint256).max);
+        token1.approve(address(marginCore), type(uint256).max);
         token0.approve(address(marginPositionManager), type(uint256).max);
         token1.approve(address(marginPositionManager), type(uint256).max);
         token0.approve(address(pairPositionManager), type(uint256).max);
@@ -337,8 +343,8 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
             address liquidator = makeAddr("liquidator");
             vm.startPrank(liquidator);
             token1.mint(liquidator, 100e18);
-            token1.approve(address(marginPositionManager), 100e18);
-            (uint256 profit,) = marginPositionManager.liquidateCall(tokenId, 0);
+            token1.approve(address(marginCore), 100e18);
+            (uint256 profit,) = _liquidateCall(tokenId);
             vm.stopPrank();
 
             assertTrue(profit > 0, "Liquidator should profit");
@@ -358,8 +364,8 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
             address liquidator = makeAddr("liquidator");
             vm.startPrank(liquidator);
             token0.mint(liquidator, 100e18);
-            token0.approve(address(marginPositionManager), 100e18);
-            (uint256 profit,) = marginPositionManager.liquidateCall(tokenId, 0);
+            token0.approve(address(marginCore), 100e18);
+            (uint256 profit,) = _liquidateCall(tokenId);
             vm.stopPrank();
 
             assertTrue(profit > 0, "Liquidator should profit");
@@ -381,7 +387,7 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
 
             address liquidator = makeAddr("liquidator");
             vm.startPrank(liquidator);
-            uint256 profit = marginPositionManager.liquidateBurn(tokenId, 0);
+            uint256 profit = _liquidateBurn(tokenId);
             vm.stopPrank();
 
             assertTrue(profit > 0, "Liquidator should profit from burn");
@@ -400,7 +406,7 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
 
             address liquidator = makeAddr("liquidator");
             vm.startPrank(liquidator);
-            uint256 profit = marginPositionManager.liquidateBurn(tokenId, 0);
+            uint256 profit = _liquidateBurn(tokenId);
             vm.stopPrank();
 
             assertTrue(profit > 0, "Liquidator should profit from burn");
@@ -411,7 +417,7 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
     }
 
     function testSetMarginLevel() public {
-        MarginLevels oldLevels = marginPositionManager.marginLevels();
+        MarginLevels oldLevels = marginCore.marginLevels();
         MarginLevels newMarginLevels;
         newMarginLevels = newMarginLevels.setMinMarginLevel(1200000);
         newMarginLevels = newMarginLevels.setMinBorrowLevel(1500000);
@@ -421,12 +427,29 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
 
         vm.expectEmit(true, true, true, true);
         emit MarginLevelChanged(MarginLevels.unwrap(oldLevels), MarginLevels.unwrap(newMarginLevels));
-        marginPositionManager.setMarginLevel(MarginLevels.unwrap(newMarginLevels));
+        marginCore.setMarginLevel(MarginLevels.unwrap(newMarginLevels));
 
         assertEq(
-            MarginLevels.unwrap(marginPositionManager.marginLevels()),
+            MarginLevels.unwrap(marginCore.marginLevels()),
             MarginLevels.unwrap(newMarginLevels),
             "Margin levels should be updated"
+        );
+    }
+
+    function _poolKeyOf(uint256 tokenId) internal view returns (PoolKey memory k) {
+        (k.currency0, k.currency1, k.fee, k.marginFee) =
+            marginPositionManager.poolKeys(marginPositionManager.poolIds(tokenId));
+    }
+
+    function _liquidateBurn(uint256 tokenId) internal returns (uint256 profit) {
+        profit = marginCore.liquidateBurn(
+            _poolKeyOf(tokenId), address(marginPositionManager), bytes32(tokenId), address(this), 0
+        );
+    }
+
+    function _liquidateCall(uint256 tokenId) internal returns (uint256 profit, uint256 repayAmount) {
+        (profit, repayAmount) = marginCore.liquidateCall(
+            _poolKeyOf(tokenId), address(marginPositionManager), bytes32(tokenId), address(this), 0
         );
     }
 

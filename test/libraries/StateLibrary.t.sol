@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {LikwidVault} from "../../src/LikwidVault.sol";
+import {LikwidVault} from "../../src/core/LikwidVault.sol";
 import {IVault} from "../../src/interfaces/IVault.sol";
 import {IUnlockCallback} from "../../src/interfaces/callback/IUnlockCallback.sol";
 import {MarginState} from "../../src/types/MarginState.sol";

@@ -4,7 +4,8 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
-import {LikwidVault} from "../../src/LikwidVault.sol";
+import {LikwidVault} from "../../src/core/LikwidVault.sol";
+import {LikwidMarginCore} from "../../src/core/LikwidMarginCore.sol";
 import {LikwidMarginPosition} from "../../src/LikwidMarginPosition.sol";
 import {LikwidPairPosition} from "../../src/LikwidPairPosition.sol";
 import {LikwidHelper} from "./LikwidHelper.sol";
@@ -29,6 +30,7 @@ contract LikwidHelperTest is Test {
     using ProtocolFeeLibrary for uint24;
 
     LikwidVault vault;
+    LikwidMarginCore marginCore;
     LikwidMarginPosition marginPositionManager;
     LikwidPairPosition pairPositionManager;
     LikwidHelper public helper;
@@ -41,10 +43,12 @@ contract LikwidHelperTest is Test {
 
     function setUp() public {
         vault = new LikwidVault(address(this));
-        marginPositionManager = new LikwidMarginPosition(address(this), vault);
+        marginCore = new LikwidMarginCore(address(this), vault);
+        marginPositionManager = new LikwidMarginPosition(address(this), vault, marginCore);
         pairPositionManager = new LikwidPairPosition(address(this), vault);
         helper = new LikwidHelper(address(this), vault);
-        vault.setMarginController(address(marginPositionManager));
+        helper.setPositionManager(marginPositionManager);
+        vault.setMarginController(address(marginCore));
         // Deploy mock tokens
         address tokenA = address(new MockERC20("TokenA", "TKNA", 18));
         address tokenB = address(new MockERC20("TokenB", "TKNB", 18));
@@ -235,7 +239,7 @@ contract LikwidHelperTest is Test {
         (uint256 reserveBorrow, uint256 reserveMargin) =
             pos.marginForOne ? (pairReserve0, pairReserve1) : (pairReserve1, pairReserve0);
 
-        MarginLevels marginLevels = marginPositionManager.marginLevels();
+        MarginLevels marginLevels = marginCore.marginLevels();
         uint24 minBorrowLevel = marginLevels.minBorrowLevel();
 
         uint256 maxDecrease = helper.getMaxDecrease(tokenId);
@@ -248,7 +252,7 @@ contract LikwidHelperTest is Test {
     }
 
     function testMinMarginLevels() public view {
-        MarginLevels marginLevels = marginPositionManager.marginLevels();
+        MarginLevels marginLevels = marginCore.marginLevels();
         (uint24 minMarginLevel, uint24 minBorrowLevel) = helper.minMarginLevels();
         assertEq(minMarginLevel, marginLevels.minMarginLevel());
         assertEq(minBorrowLevel, marginLevels.minBorrowLevel());
@@ -281,7 +285,7 @@ contract LikwidHelperTest is Test {
 
         uint256 repayAmount = helper.getLiquidateRepayAmount(tokenId);
         uint256 expectedRepay = Math.mulDiv(reserveBorrow, pos.marginAmount + pos.marginTotal, reserveMargin);
-        MarginLevels marginLevels = marginPositionManager.marginLevels();
+        MarginLevels marginLevels = marginCore.marginLevels();
         expectedRepay = expectedRepay.mulDivMillion(marginLevels.liquidationRatio());
         assertEq(repayAmount, expectedRepay);
     }

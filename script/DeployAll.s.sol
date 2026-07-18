@@ -2,7 +2,8 @@
 pragma solidity ^0.8.19;
 
 import {Script, console} from "forge-std/Script.sol";
-import {LikwidVault} from "../src/LikwidVault.sol";
+import {LikwidVault} from "../src/core/LikwidVault.sol";
+import {LikwidMarginCore} from "../src/core/LikwidMarginCore.sol";
 import {LikwidLendPosition} from "../src/LikwidLendPosition.sol";
 import {LikwidMarginPosition} from "../src/LikwidMarginPosition.sol";
 import {LikwidPairPosition} from "../src/LikwidPairPosition.sol";
@@ -14,6 +15,7 @@ contract DeployAllScript is Script {
     error ManagerNotExist();
 
     LikwidVault vault;
+    LikwidMarginCore marginCore;
     LikwidLendPosition lendPosition;
     LikwidMarginPosition marginPosition;
     LikwidPairPosition pairPosition;
@@ -32,14 +34,16 @@ contract DeployAllScript is Script {
 
         vault = new LikwidVault(sender);
         console.log("vault:", address(vault));
+        marginCore = new LikwidMarginCore(owner, vault);
+        console.log("marginCore:", address(marginCore));
         lendPosition = new LikwidLendPosition(owner, vault);
         console.log("lendPosition:", address(lendPosition));
-        marginPosition = new LikwidMarginPosition(owner, vault);
+        marginPosition = new LikwidMarginPosition(owner, vault, marginCore);
         console.log("marginPosition:", address(marginPosition));
         pairPosition = new LikwidPairPosition(owner, vault);
         console.log("pairPosition:", address(pairPosition));
 
-        vault.setMarginController(address(marginPosition));
+        vault.setMarginController(address(marginCore));
         vault.setProtocolFeeController(protocolFeeController);
         if (owner != sender) {
             vault.transferOwnership(owner);

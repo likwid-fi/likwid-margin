@@ -2,24 +2,24 @@
 // Likwid Contracts
 pragma solidity 0.8.28;
 
-import {Currency, CurrencyLibrary} from "./types/Currency.sol";
-import {PoolKey} from "./types/PoolKey.sol";
-import {MarginBalanceDelta} from "./types/MarginBalanceDelta.sol";
-import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "./types/BalanceDelta.sol";
-import {PoolId} from "./types/PoolId.sol";
-import {FeeTypes} from "./types/FeeTypes.sol";
-import {MarginActions} from "./types/MarginActions.sol";
-import {IVault} from "./interfaces/IVault.sol";
-import {IUnlockCallback} from "./interfaces/callback/IUnlockCallback.sol";
-import {SafeCast} from "./libraries/SafeCast.sol";
-import {CurrencyGuard} from "./libraries/CurrencyGuard.sol";
-import {Pool} from "./libraries/Pool.sol";
-import {ERC6909Claims} from "./base/ERC6909Claims.sol";
-import {NoDelegateCall} from "./base/NoDelegateCall.sol";
-import {ProtocolFees} from "./base/ProtocolFees.sol";
-import {Extsload} from "./base/Extsload.sol";
-import {Exttload} from "./base/Exttload.sol";
-import {CustomRevert} from "./libraries/CustomRevert.sol";
+import {Currency, CurrencyLibrary} from "../types/Currency.sol";
+import {PoolKey} from "../types/PoolKey.sol";
+import {MarginBalanceDelta} from "../types/MarginBalanceDelta.sol";
+import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "../types/BalanceDelta.sol";
+import {PoolId} from "../types/PoolId.sol";
+import {FeeTypes} from "../types/FeeTypes.sol";
+import {MarginActions} from "../types/MarginActions.sol";
+import {IVault} from "../interfaces/IVault.sol";
+import {IUnlockCallback} from "../interfaces/callback/IUnlockCallback.sol";
+import {SafeCast} from "../libraries/SafeCast.sol";
+import {CurrencyGuard} from "../libraries/CurrencyGuard.sol";
+import {Pool} from "../libraries/Pool.sol";
+import {ERC6909Claims} from "../base/ERC6909Claims.sol";
+import {NoDelegateCall} from "../base/NoDelegateCall.sol";
+import {ProtocolFees} from "../base/ProtocolFees.sol";
+import {Extsload} from "../base/Extsload.sol";
+import {Exttload} from "../base/Exttload.sol";
+import {CustomRevert} from "../libraries/CustomRevert.sol";
 
 /// @title Likwid vault
 /// @notice Holds the property for all likwid pools
