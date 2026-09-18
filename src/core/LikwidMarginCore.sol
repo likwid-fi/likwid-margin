@@ -12,6 +12,7 @@ import {IVault} from "../interfaces/IVault.sol";
 import {CurrencyPoolLibrary} from "../libraries/CurrencyPoolLibrary.sol";
 import {CustomRevert} from "../libraries/CustomRevert.sol";
 import {FeeLibrary} from "../libraries/FeeLibrary.sol";
+import {FixedPoint96} from "../libraries/FixedPoint96.sol";
 import {MarginPosition} from "../libraries/MarginPosition.sol";
 import {Math} from "../libraries/Math.sol";
 import {PerLibrary} from "../libraries/PerLibrary.sol";
@@ -26,7 +27,7 @@ import {Currency, CurrencyLibrary} from "../types/Currency.sol";
 import {MarginLevels, MarginLevelsLibrary} from "../types/MarginLevels.sol";
 import {PoolId} from "../types/PoolId.sol";
 import {PoolKey} from "../types/PoolKey.sol";
-import {Reserves} from "../types/Reserves.sol";
+import {Reserves, toReserves} from "../types/Reserves.sol";
 import {PoolState} from "../types/PoolState.sol";
 import {MarginBalanceDelta} from "../types/MarginBalanceDelta.sol";
 
@@ -49,6 +50,10 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
     uint24 constant MARGIN_MINIMUM_RATIO = 10000000; // 1/1000_0000
 
     mapping(PoolId poolId => mapping(bytes32 positionKey => MarginPosition.State)) private positions;
+    /// @dev Debt of all borrow-mode (leverage == 0) positions per pool and direction, in shares of the
+    /// pool's borrow cumulative index. Borrow mode never trades against the pair, so the pair price
+    /// alone cannot tell how much collateral is already queued up behind the same liquidity.
+    mapping(PoolId poolId => mapping(bool marginForOne => uint256 shares)) private borrowModeDebtShares;
     MarginLevels public marginLevels;
 
     constructor(address initialOwner, IVault _vault) SafeCallback(_vault) Owned(initialOwner) {
@@ -106,6 +111,7 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
             DirectionMismatch.selector.revertWith();
         }
 
+        uint256 sharesBefore = _borrowModeShares(position);
         MarginBalanceDelta memory balanceDelta;
         balanceDelta.action = MarginActions.MARGIN;
         balanceDelta.marginForOne = position.marginForOne;
@@ -120,8 +126,9 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
                 _executeAddLeverage(params, poolState, position, balanceDelta);
         } else {
             minLevel = marginLevels.minBorrowLevel();
-            borrowAmount = _executeAddCollateralAndBorrow(params, poolState, position, balanceDelta, minLevel);
+            borrowAmount = _executeAddCollateralAndBorrow(poolId, params, poolState, position, balanceDelta, minLevel);
         }
+        _syncBorrowModeShares(poolId, position, sharesBefore);
         if (params.borrowAmountMax > 0 && borrowAmount > params.borrowAmountMax) {
             ExceedBorrowAmountMax.selector.revertWith();
         }
@@ -129,7 +136,7 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
 
         delta = vault.marginBalance(key, balanceDelta);
         _takePositives(key, delta, params.recipient);
-        _checkMinLevelAfterOp(poolId, position, minLevel);
+        _checkMinLevelAfterOp(poolId, position, minLevel, params.leverage == 0);
 
         emit Margin(
             poolId,
@@ -187,15 +194,25 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
     }
 
     function _executeAddCollateralAndBorrow(
+        PoolId poolId,
         IMarginCore.MarginParams memory params,
         PoolState memory poolState,
         MarginPosition.State storage position,
         MarginBalanceDelta memory delta,
         uint256 minBorrowLevel
     ) internal returns (uint256 borrowAmount) {
-        (uint256 borrowMaxAmount,) = SwapMath.getAmountOut(
-            poolState.pairReserves, poolState.lpFee, !position.marginForOne, params.marginAmount
+        (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
+            _getPoolCumulativeValues(poolState, position.marginForOne);
+        // Borrowing leaves pairReserves untouched, so value the collateral on reserves that already
+        // price in every other borrow-mode debt; otherwise N split positions each borrow at spot.
+        Reserves stressedReserves = _stressedReserves(
+            poolState.pairReserves,
+            position.marginForOne,
+            _otherBorrowModeDebt(poolId, position, borrowCumulativeLast),
+            minBorrowLevel
         );
+        (uint256 borrowMaxAmount,) =
+            SwapMath.getAmountOut(stressedReserves, poolState.lpFee, !position.marginForOne, params.marginAmount);
         if (minBorrowLevel > PerLibrary.ONE_MILLION) {
             borrowMaxAmount = Math.mulDiv(borrowMaxAmount, PerLibrary.ONE_MILLION, minBorrowLevel);
         }
@@ -203,8 +220,6 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
         borrowMaxAmount = Math.min(borrowMaxAmount, borrowRealReserves * 20 / 100);
         borrowAmount = params.borrowAmount == type(uint256).max ? borrowMaxAmount : params.borrowAmount;
         if (borrowAmount > borrowMaxAmount) BorrowTooMuch.selector.revertWith();
-        (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
-            _getPoolCumulativeValues(poolState, position.marginForOne);
 
         uint256 borrowMirrorReserves = poolState.mirrorReserves.reserve01(!position.marginForOne) + borrowAmount;
         borrowRealReserves -= borrowAmount;
@@ -212,9 +227,7 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
             MirrorTooMuch.selector.revertWith();
         }
 
-        position.update(
-            borrowCumulativeLast, depositCumulativeLast, params.marginAmount.toInt128(), 0, borrowAmount, 0
-        );
+        position.update(borrowCumulativeLast, depositCumulativeLast, params.marginAmount.toInt128(), 0, borrowAmount, 0);
 
         int128 amount = -params.marginAmount.toInt128();
 
@@ -235,8 +248,10 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
         (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
             _getPoolCumulativeValues(poolState, position.marginForOne);
 
+        uint256 sharesBefore = _borrowModeShares(position);
         (releaseAmount, realRepayAmount) =
             position.update(borrowCumulativeLast, depositCumulativeLast, 0, 0, 0, repayAmount);
+        _syncBorrowModeShares(poolId, position, sharesBefore);
 
         MarginBalanceDelta memory balanceDelta;
         balanceDelta.lendDelta = _toPoolDelta(position.marginForOne, 0, releaseAmount.toInt128());
@@ -248,7 +263,7 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
 
         delta = vault.marginBalance(key, balanceDelta);
         _takePositives(key, delta, recipient);
-        _checkMinLevelAfterOp(poolId, position, marginLevels.liquidateLevel());
+        _checkMinLevelAfterOp(poolId, position, marginLevels.liquidateLevel(), false);
 
         emit Repay(
             poolId,
@@ -282,6 +297,7 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
         uint256 repayAmount;
         uint256 lostAmount;
         uint256 swapFeeAmount;
+        uint256 sharesBefore = _borrowModeShares(position);
         (releaseAmount, repayAmount, closeAmount, lostAmount, swapFeeAmount) = position.close(
             poolState.pairReserves,
             poolState.truncatedReserves,
@@ -291,6 +307,7 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
             0,
             closeMillionth
         );
+        _syncBorrowModeShares(poolId, position, sharesBefore);
         if (lostAmount > 0 || (closeAmountMin > 0 && closeAmount < closeAmountMin)) {
             InsufficientCloseReceived.selector.revertWith();
         }
@@ -307,7 +324,7 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
 
         delta = vault.marginBalance(key, balanceDelta);
         _takePositives(key, delta, recipient);
-        _checkMinLevelAfterOp(poolId, position, liquidateLevel);
+        _checkMinLevelAfterOp(poolId, position, liquidateLevel, false);
 
         emit Close(
             poolId,
@@ -334,7 +351,9 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
         (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
             _getPoolCumulativeValues(poolState, position.marginForOne);
 
+        uint256 sharesBefore = _borrowModeShares(position);
         position.update(borrowCumulativeLast, depositCumulativeLast, changeAmount, 0, 0, 0);
+        _syncBorrowModeShares(poolId, position, sharesBefore);
 
         MarginBalanceDelta memory balanceDelta;
         int128 amount = -changeAmount.toInt128();
@@ -347,17 +366,11 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
         _takePositives(key, delta, recipient);
 
         if (changeAmount < 0) {
-            _checkMinLevelAfterOp(poolId, position, marginLevels.minBorrowLevel());
+            _checkMinLevelAfterOp(poolId, position, marginLevels.minBorrowLevel(), true);
         }
 
         emit Modify(
-            poolId,
-            msg.sender,
-            salt,
-            position.marginAmount,
-            position.marginTotal,
-            position.debtAmount,
-            changeAmount
+            poolId, msg.sender, salt, position.marginAmount, position.marginTotal, position.debtAmount, changeAmount
         );
     }
 
@@ -426,7 +439,9 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
             _getPoolCumulativeValues(poolState, position.marginForOne);
 
         uint256 releaseAmount;
+        uint256 sharesBefore = _borrowModeShares(position);
         (releaseAmount, repayAmount) = position.update(borrowCumulativeLast, depositCumulativeLast, 0, 0, 0, debtAmount);
+        _syncBorrowModeShares(poolId, position, sharesBefore);
         if (profit != releaseAmount) {
             InsufficientReceived.selector.revertWith();
         }
@@ -441,9 +456,8 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
         MarginBalanceDelta memory balanceDelta;
         balanceDelta.lendDelta = _toPoolDelta(position.marginForOne, 0, releaseAmount.toInt128());
         balanceDelta.mirrorDelta = _toPoolDelta(position.marginForOne, debtAmount.toInt128(), 0);
-        balanceDelta.fundsDelta = _toPoolDelta(
-            position.marginForOne, lostAmount > 0 ? -lostAmount.toInt128() : fundAmount.toInt128(), 0
-        );
+        balanceDelta.fundsDelta =
+            _toPoolDelta(position.marginForOne, lostAmount > 0 ? -lostAmount.toInt128() : fundAmount.toInt128(), 0);
         balanceDelta.action = MarginActions.LIQUIDATE_CALL;
         balanceDelta.marginForOne = position.marginForOne;
         balanceDelta.marginDelta =
@@ -501,6 +515,7 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
             (uint256 borrowCumulativeLast, uint256 depositCumulativeLast) =
                 _getPoolCumulativeValues(poolState, position.marginForOne);
 
+            uint256 sharesBefore = _borrowModeShares(position);
             (releaseAmount, repayAmount, closeAmount, lostAmount, swapFeeAmount) = position.close(
                 pairReserves,
                 truncatedReserves,
@@ -510,6 +525,7 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
                 profit,
                 uint24(PerLibrary.ONE_MILLION)
             );
+            _syncBorrowModeShares(poolId, position, sharesBefore);
             MarginBalanceDelta memory balanceDelta;
             balanceDelta.swapFeeAmount = swapFeeAmount;
 
@@ -674,18 +690,85 @@ contract LikwidMarginCore is IMarginCore, SafeCallback, Owned {
     }
 
     /// @dev Checks the position level against the pool state as updated by the margin balance.
-    function _checkMinLevelAfterOp(PoolId poolId, MarginPosition.State memory position, uint256 minLevel)
-        internal
-        view
-    {
+    /// @param priceInOtherDebt Set for operations that add risk to a borrow-mode position (borrowing,
+    /// withdrawing collateral): the level is then taken on reserves stressed by all other
+    /// borrow-mode debt. Risk-reducing operations must stay available and pass false.
+    function _checkMinLevelAfterOp(
+        PoolId poolId,
+        MarginPosition.State memory position,
+        uint256 minLevel,
+        bool priceInOtherDebt
+    ) internal view {
         Reserves pairReserves = StateLibrary.getPairReserves(vault, poolId);
         Reserves truncatedReserves = StateLibrary.getTruncatedReserves(vault, poolId);
+        if (priceInOtherDebt && position.marginTotal == 0 && position.debtAmount > 0) {
+            // the position was just updated, so its borrowCumulativeLast is the pool's current index
+            uint256 otherDebt = _otherBorrowModeDebt(poolId, position, position.borrowCumulativeLast);
+            uint256 minBorrowLevel = marginLevels.minBorrowLevel();
+            pairReserves = _stressedReserves(pairReserves, position.marginForOne, otherDebt, minBorrowLevel);
+            truncatedReserves = _stressedReserves(truncatedReserves, position.marginForOne, otherDebt, minBorrowLevel);
+        }
         uint256 pairLevel = position.marginLevel(pairReserves);
         uint256 truncatedLevel = position.marginLevel(truncatedReserves);
         uint256 level = Math.min(pairLevel, truncatedLevel);
         if (level < minLevel) {
             InvalidLevel.selector.revertWith();
         }
+    }
+
+    /// @inheritdoc IMarginCore
+    function borrowModeDebt(PoolId poolId, bool marginForOne) external view returns (uint256) {
+        uint256 shares = borrowModeDebtShares[poolId][marginForOne];
+        if (shares == 0) return 0;
+        PoolState memory state = CurrentStateLibrary.getState(vault, poolId);
+        (uint256 borrowCumulativeLast,) = _getPoolCumulativeValues(state, marginForOne);
+        return Math.mulDivRoundingUp(shares, borrowCumulativeLast, FixedPoint96.Q96);
+    }
+
+    /// @dev A position's contribution to borrowModeDebtShares. A pure function of the stored state,
+    /// so what is removed before an operation always equals what the previous operation added.
+    function _borrowModeShares(MarginPosition.State memory position) private pure returns (uint256) {
+        if (position.marginTotal != 0 || position.debtAmount == 0) return 0;
+        return Math.mulDivRoundingUp(position.debtAmount, FixedPoint96.Q96, position.borrowCumulativeLast);
+    }
+
+    function _syncBorrowModeShares(PoolId poolId, MarginPosition.State memory position, uint256 sharesBefore) private {
+        uint256 sharesAfter = _borrowModeShares(position);
+        if (sharesAfter != sharesBefore) {
+            borrowModeDebtShares[poolId][position.marginForOne] =
+                borrowModeDebtShares[poolId][position.marginForOne] - sharesBefore + sharesAfter;
+        }
+    }
+
+    /// @dev Borrow-mode debt of every position but the given one, accrued to borrowCumulativeLast.
+    /// The position's stored state must be the one currently counted in borrowModeDebtShares.
+    function _otherBorrowModeDebt(PoolId poolId, MarginPosition.State memory position, uint256 borrowCumulativeLast)
+        private
+        view
+        returns (uint256)
+    {
+        uint256 otherShares = borrowModeDebtShares[poolId][position.marginForOne] - _borrowModeShares(position);
+        return Math.mulDivRoundingUp(otherShares, borrowCumulativeLast, FixedPoint96.Q96);
+    }
+
+    /// @dev Reserves as if `otherDebt`, at minBorrowLevel, had already been bought back from the pair
+    /// with collateral (constant product, no fee). Valuing a borrow-mode position on these reserves
+    /// makes N split positions worth exactly one merged position.
+    function _stressedReserves(Reserves reserves, bool marginForOne, uint256 otherDebt, uint256 minBorrowLevel)
+        private
+        pure
+        returns (Reserves)
+    {
+        if (otherDebt == 0) return reserves;
+        (uint128 reserve0, uint128 reserve1) = reserves.reserves();
+        (uint256 reserveBorrow, uint256 reserveMargin) = marginForOne ? (reserve0, reserve1) : (reserve1, reserve0);
+        uint256 consumed = Math.mulDivRoundingUp(otherDebt, minBorrowLevel, PerLibrary.ONE_MILLION);
+        if (consumed >= reserveBorrow) BorrowTooMuch.selector.revertWith();
+        uint256 stressedBorrow = reserveBorrow - consumed;
+        uint128 stressedMargin = Math.mulDivRoundingUp(reserveMargin, reserveBorrow, stressedBorrow).toUint128();
+        return marginForOne
+            ? toReserves(uint128(stressedBorrow), stressedMargin)
+            : toReserves(stressedMargin, uint128(stressedBorrow));
     }
 
     receive() external payable {}

@@ -248,6 +248,10 @@ interface IMarginCore {
     /// @notice The stored direction of a position (raw, no interest accrual)
     function positionMarginForOne(PoolId poolId, address owner, bytes32 salt) external view returns (bool);
 
+    /// @notice Outstanding debt, accrued to now, of all borrow-mode (leverage == 0) positions of a
+    /// pool direction. New borrows and collateral withdrawals are valued net of this debt.
+    function borrowModeDebt(PoolId poolId, bool marginForOne) external view returns (uint256);
+
     /// @notice Whether a position is currently liquidatable
     function checkLiquidate(PoolId poolId, address owner, bytes32 salt)
         external
