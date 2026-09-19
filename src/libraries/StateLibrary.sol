@@ -7,7 +7,6 @@ import {Slot0, Slot0Library} from "../types/Slot0.sol";
 import {Reserves, ReservesLibrary} from "../types/Reserves.sol";
 import {InsuranceFunds} from "../types/InsuranceFunds.sol";
 import {PairPosition} from "./PairPosition.sol";
-import {LendPosition} from "./LendPosition.sol";
 import {PositionLibrary} from "./PositionLibrary.sol";
 import {SafeCast} from "./SafeCast.sol";
 
@@ -47,7 +46,6 @@ library StateLibrary {
     uint256 internal constant INSURANCE_FUND_UPPER_LIMIT_OFFSET = 12;
     uint256 internal constant INSURANCE_FUNDS_OFFSET = 13;
     uint256 internal constant POSITIONS_OFFSET = 14;
-    uint256 internal constant LEND_POSITIONS_OFFSET = 15;
 
     /**
      * @notice Get the unpacked Slot0 of the pool.
@@ -236,23 +234,6 @@ library StateLibrary {
         bytes32[] memory data = vault.extsload(positionSlot, 2);
         _position.liquidity = uint128(uint256(data[0]));
         _position.totalInvestment = uint256(data[1]);
-    }
-
-    function getLendPositionState(IVault vault, PoolId poolId, address owner, bool lendForOne, bytes32 salt)
-        internal
-        view
-        returns (LendPosition.State memory _position)
-    {
-        bytes32 positionKey = owner.calculatePositionKey(lendForOne, salt);
-
-        bytes32 poolStateSlot = _getPoolStateSlot(poolId);
-        bytes32 positionsMappingSlot = bytes32(uint256(poolStateSlot) + LEND_POSITIONS_OFFSET);
-        bytes32 positionSlot = keccak256(abi.encodePacked(positionKey, positionsMappingSlot));
-
-        bytes32[] memory data = vault.extsload(positionSlot, 2);
-        uint256 slot0 = uint256(data[0]);
-        _position.lendAmount = uint128(slot0);
-        _position.depositCumulativeLast = uint256(data[1]);
     }
 
     function getRawStageLiquidities(IVault vault, PoolId poolId) internal view returns (uint256[] memory liquidities) {

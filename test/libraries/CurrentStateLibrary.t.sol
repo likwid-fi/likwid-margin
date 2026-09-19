@@ -69,10 +69,6 @@ contract MockVault is IVault {
         return BalanceDelta.wrap(0);
     }
 
-    function lend(PoolKey calldata, IVault.LendParams calldata) external pure returns (BalanceDelta) {
-        return BalanceDelta.wrap(0);
-    }
-
     function marginBalance(PoolKey calldata, MarginBalanceDelta calldata) external pure returns (BalanceDelta) {
         return BalanceDelta.wrap(0);
     }

@@ -119,11 +119,14 @@ library InterestMath {
                 // Subtract protocol interest from all interest
                 grossAmount -= result.protocolInterest;
 
-                result.pairInterest =
-                    Math.mulDiv(grossAmount, params.pairReserve, params.pairReserve + params.lendReserve);
+                // The lend side rounds down and the pair takes the remainder. Rounding the other way
+                // hands a dust-sized lendReserve at least 1 wei on every update, which multiplies the
+                // deposit cumulative by (lend + 1) / lend each time.
+                uint256 lendingInterest =
+                    Math.mulDiv(grossAmount, params.lendReserve, params.pairReserve + params.lendReserve);
+                result.pairInterest = grossAmount - lendingInterest;
 
-                if (grossAmount > result.pairInterest) {
-                    uint256 lendingInterest = grossAmount - result.pairInterest;
+                if (lendingInterest > 0) {
                     result.newDepositCumulativeLast = Math.mulDiv(
                         params.depositCumulativeLast, params.lendReserve + lendingInterest, params.lendReserve
                     );

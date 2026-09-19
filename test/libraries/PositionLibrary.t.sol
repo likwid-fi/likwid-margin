@@ -34,33 +34,6 @@ contract PositionLibraryTest is Test {
         assertNotEq(positionKey01, expectedKey02);
     }
 
-    function testCalculatePositionKeyWithIsOne01() public pure {
-        address owner = address(0x123);
-        bytes32 salt = keccak256("testSalt");
-        bytes32 positionKey01 = PositionLibrary.calculatePositionKey(owner, false, salt);
-        bytes32 expectedKey01 = keccak256(abi.encodePacked(owner, false, salt));
-        assertEq(positionKey01, expectedKey01, "Position key with false should match expected hash");
-        bytes32 positionKey02 = PositionLibrary.calculatePositionKey(owner, true, salt);
-        bytes32 expectedKey02 = keccak256(abi.encodePacked(owner, true, salt));
-        assertEq(positionKey02, expectedKey02, "Position key with true should match expected hash");
-        assertNotEq(positionKey01, expectedKey02);
-    }
-
-    function testCalculatePositionKeyWithIsOne02() public pure {
-        address owner = address(0x123);
-        uint256 tokenId = 1;
-        bytes32 salt = bytes32(tokenId);
-        bytes32 positionKey01 = PositionLibrary.calculatePositionKey(owner, false, salt);
-        bytes32 expectedKey01 = keccak256(abi.encodePacked(owner, false, salt));
-        assertEq(positionKey01, expectedKey01, "Position key with false should match expected hash");
-        tokenId = 2;
-        salt = bytes32(tokenId);
-        bytes32 positionKey02 = PositionLibrary.calculatePositionKey(owner, true, salt);
-        bytes32 expectedKey02 = keccak256(abi.encodePacked(owner, true, salt));
-        assertEq(positionKey02, expectedKey02, "Position key with true should match expected hash");
-        assertNotEq(positionKey01, expectedKey02);
-    }
-
     function testCalculatePositionKey_differentOwners() public pure {
         address owner1 = address(0x123);
         address owner2 = address(0x456);
@@ -82,32 +55,12 @@ contract PositionLibraryTest is Test {
         assertEq(positionKey, expectedKey, "Zero address should work correctly");
     }
 
-    function testCalculatePositionKeyWithIsOne_differentFlags() public pure {
-        address owner = address(0x123);
-        bytes32 salt = keccak256("testSalt");
-
-        bytes32 keyFalse = PositionLibrary.calculatePositionKey(owner, false, salt);
-        bytes32 keyTrue = PositionLibrary.calculatePositionKey(owner, true, salt);
-
-        assertNotEq(keyFalse, keyTrue, "Different isForOne flags should produce different keys");
-    }
-
     function testCalculatePositionKey_consistency() public pure {
         address owner = address(0x123);
         bytes32 salt = keccak256("testSalt");
 
         bytes32 key1 = owner.calculatePositionKey(salt);
         bytes32 key2 = owner.calculatePositionKey(salt);
-
-        assertEq(key1, key2, "Same inputs should produce same key");
-    }
-
-    function testCalculatePositionKeyWithIsOne_consistency() public pure {
-        address owner = address(0x123);
-        bytes32 salt = keccak256("testSalt");
-
-        bytes32 key1 = PositionLibrary.calculatePositionKey(owner, true, salt);
-        bytes32 key2 = PositionLibrary.calculatePositionKey(owner, true, salt);
 
         assertEq(key1, key2, "Same inputs should produce same key");
     }

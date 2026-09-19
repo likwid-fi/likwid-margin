@@ -23,36 +23,4 @@ library PositionLibrary {
             positionKey := keccak256(0x0c, 0x34)
         }
     }
-
-    function calculatePositionKey(address owner, bool isForOne, bytes32 salt)
-        internal
-        pure
-        returns (bytes32 positionKey)
-    {
-        assembly ("memory-safe") {
-            // abi.encodePacked(owner, isForOne, salt) is 53 bytes:
-            // | owner (20 bytes) | isForOne (1 byte) | salt (32 bytes) |
-
-            // We construct the first 32 bytes of the packed data:
-            // | owner (20 bytes) | isForOne (1 byte) | salt (first 11 bytes) |
-            // Shift owner left by 12 bytes (96 bits) to align it to the start of the word.
-            let word1 := shl(96, owner)
-            // Shift isForOne left by 11 bytes (88 bits) to place it right after the owner.
-            word1 := or(word1, shl(88, isForOne))
-            // Take the top 11 bytes (88 bits) of the salt and place them after isForOne.
-            word1 := or(word1, shr(168, salt))
-
-            // We construct the second 32 bytes of the packed data:
-            // | salt (last 21 bytes) | padding (11 bytes) |
-            // Shift the salt left by 88 bits to get the last 21 bytes at the start of the word.
-            let word2 := shl(88, salt)
-
-            // Use the scratch space (0x00-0x3f) to store the arguments to hash.
-            mstore(0x00, word1)
-            mstore(0x20, word2)
-
-            // Hash the 53 bytes of packed data
-            positionKey := keccak256(0x00, 0x35)
-        }
-    }
 }

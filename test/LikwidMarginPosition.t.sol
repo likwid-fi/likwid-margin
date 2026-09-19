@@ -120,7 +120,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             marginForOne: marginForOne,
             leverage: leverage,
             marginAmount: marginAmount,
-            borrowAmount: 0,
             borrowAmountMax: 0,
             recipient: address(this),
             deadline: block.timestamp
@@ -171,9 +170,8 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             token1.mint(address(this), swapAmount);
         }
 
-        IVault.SwapParams memory swapParams = IVault.SwapParams({
-            zeroForOne: zeroForOne, amountSpecified: -int256(swapAmount), useMirror: false, salt: bytes32(0)
-        });
+        IVault.SwapParams memory swapParams =
+            IVault.SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(swapAmount)});
         bytes memory innerParams = abi.encode(key, swapParams);
         bytes memory data = abi.encode(this.swap_callback.selector, innerParams);
         vault.unlock(data);
@@ -780,7 +778,9 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
     // ==================== Parameter and Fuzz Tests ====================
 
-    function testFuzz_AddMargin_NoLeverage(uint256 marginAmount) public {
+    /// Collateral-only borrowing (leverage == 0) was removed: it never traded against the pair, so
+    /// split positions could each borrow at the same untouched spot price.
+    function testFuzz_AddMargin_Fail_ZeroLeverage(uint256 marginAmount) public {
         marginAmount = bound(marginAmount, 0.0001 ether, 1 ether);
         token0.mint(address(this), marginAmount);
 
@@ -788,34 +788,82 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             marginForOne: false,
             leverage: 0,
             marginAmount: uint128(marginAmount),
-            borrowAmount: 1000,
-            borrowAmountMax: 1000,
-            recipient: address(this),
-            deadline: block.timestamp
-        });
-
-        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
-        assertTrue(tokenId > 0);
-        assertEq(borrowAmount, 1000);
-    }
-
-    function testFuzz_AddMargin_MaxBorrowAmount(uint256 marginAmount) public {
-        marginAmount = bound(marginAmount, 0.0001 ether, 1 ether);
-        token0.mint(address(this), marginAmount);
-
-        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
-            marginForOne: false,
-            leverage: 0,
-            marginAmount: uint128(marginAmount),
-            borrowAmount: type(uint256).max,
             borrowAmountMax: 0,
             recipient: address(this),
             deadline: block.timestamp
         });
 
-        (uint256 tokenId, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
-        assertTrue(tokenId > 0);
-        assertGt(borrowAmount, 1000);
+        vm.expectRevert(IMarginPositionManager.InvalidLeverage.selector);
+        marginPositionManager.addMargin(key, params);
+    }
+
+    // ---- guards on the leverage path that remains ----
+
+    function testAddMargin_Fail_ExceedMaxLeverage() public {
+        token0.mint(address(this), DEFAULT_MARGIN_AMOUNT);
+        IMarginPositionManager.CreateParams memory params = _createDefaultParams(false, 6, DEFAULT_MARGIN_AMOUNT);
+        vm.expectRevert(IMarginPositionManager.ExceedMaxLeverage.selector);
+        marginPositionManager.addMargin(key, params);
+    }
+
+    function testAddMargin_Fail_MarginBelowMinimum() public {
+        // pair reserve0 is 10e18, so the minimum margin is 10e18 / 1e7 = 1e12
+        uint128 marginAmount = 1e12 - 1;
+        token0.mint(address(this), marginAmount);
+        IMarginPositionManager.CreateParams memory params = _createDefaultParams(false, 2, marginAmount);
+        vm.expectRevert(IMarginPositionManager.MarginBelowMinimum.selector);
+        marginPositionManager.addMargin(key, params);
+
+        // exactly at the minimum is accepted
+        token0.mint(address(this), 1);
+        params = _createDefaultParams(false, 2, 1e12);
+        marginPositionManager.addMargin(key, params);
+    }
+
+    /// borrowAmountMax is the caller's slippage bound on the debt the pool derives.
+    function testAddMargin_Fail_ExceedBorrowAmountMax() public {
+        token0.mint(address(this), DEFAULT_MARGIN_AMOUNT);
+        IMarginPositionManager.CreateParams memory params = _createDefaultParams(false, 2, DEFAULT_MARGIN_AMOUNT);
+        params.borrowAmountMax = 1;
+        vm.expectRevert(IMarginPositionManager.ExceedBorrowAmountMax.selector);
+        marginPositionManager.addMargin(key, params);
+    }
+
+    function testAddMargin_BorrowAmountMaxRespected() public {
+        token0.mint(address(this), 2 * DEFAULT_MARGIN_AMOUNT);
+        IMarginPositionManager.CreateParams memory params = _createDefaultParams(false, 2, DEFAULT_MARGIN_AMOUNT);
+        (, uint256 borrowAmount,) = marginPositionManager.addMargin(key, params);
+
+        // the same trade again moves along the curve and needs more debt than the first one
+        params.borrowAmountMax = borrowAmount;
+        vm.expectRevert(IMarginPositionManager.ExceedBorrowAmountMax.selector);
+        marginPositionManager.addMargin(key, params);
+    }
+
+    /// No more than 80% of a currency may be lent out. Pair 10 token0 / 20 token1: buying 8 token0 of
+    /// leveraged margin costs more than 80 token1 of debt against 20 real token1.
+    function testAddMargin_Fail_MirrorTooMuch() public {
+        uint128 marginAmount = 1.6e18;
+        token0.mint(address(this), marginAmount);
+        IMarginPositionManager.CreateParams memory params = _createDefaultParams(false, 5, marginAmount);
+        vm.expectRevert(IMarginPositionManager.MirrorTooMuch.selector);
+        marginPositionManager.addMargin(key, params);
+    }
+
+    function testMargin_Fail_ZeroLeverage_OnExistingPosition() public {
+        (uint256 tokenId,) = _createPosition(false, 2, DEFAULT_MARGIN_AMOUNT);
+        token0.mint(address(this), DEFAULT_MARGIN_AMOUNT);
+
+        IMarginPositionManager.MarginParams memory marginParams = IMarginPositionManager.MarginParams({
+            tokenId: tokenId,
+            leverage: 0,
+            marginAmount: DEFAULT_MARGIN_AMOUNT,
+            borrowAmountMax: 0,
+            deadline: block.timestamp
+        });
+
+        vm.expectRevert(IMarginPositionManager.InvalidLeverage.selector);
+        marginPositionManager.margin(marginParams);
     }
 
     function testAddMargin_MaxLeverage() public {
@@ -856,23 +904,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         marginPositionManager.addMargin(key, params);
     }
 
-    function testAddMargin_Fail_BorrowTooMuch() public {
-        token0.mint(address(this), DEFAULT_MARGIN_AMOUNT);
-
-        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
-            marginForOne: false,
-            leverage: 0,
-            marginAmount: DEFAULT_MARGIN_AMOUNT,
-            borrowAmount: 1e18,
-            borrowAmountMax: 1e18,
-            recipient: address(this),
-            deadline: block.timestamp
-        });
-
-        vm.expectRevert(IMarginPositionManager.BorrowTooMuch.selector);
-        marginPositionManager.addMargin(key, params);
-    }
-
     function testAddMargin_Fail_LowFeePool() public {
         token0.mint(address(this), DEFAULT_MARGIN_AMOUNT);
 
@@ -880,50 +911,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
 
         vm.expectRevert(IMarginPositionManager.LowFeePoolMarginBanned.selector);
         marginPositionManager.addMargin(keyLowFee, params);
-    }
-
-    function testAddMargin_Fail_ChangeMarginAction_BorrowToMargin() public {
-        token0.mint(address(this), DEFAULT_MARGIN_AMOUNT);
-
-        IMarginPositionManager.CreateParams memory params = IMarginPositionManager.CreateParams({
-            marginForOne: false,
-            leverage: 0,
-            marginAmount: DEFAULT_MARGIN_AMOUNT,
-            borrowAmount: DEFAULT_MARGIN_AMOUNT,
-            borrowAmountMax: DEFAULT_MARGIN_AMOUNT,
-            recipient: address(this),
-            deadline: block.timestamp
-        });
-
-        (uint256 tokenId,,) = marginPositionManager.addMargin(key, params);
-
-        IMarginPositionManager.MarginParams memory marginParams = IMarginPositionManager.MarginParams({
-            tokenId: tokenId,
-            leverage: 1,
-            marginAmount: DEFAULT_MARGIN_AMOUNT,
-            borrowAmount: DEFAULT_MARGIN_AMOUNT,
-            borrowAmountMax: DEFAULT_MARGIN_AMOUNT,
-            deadline: block.timestamp
-        });
-
-        vm.expectRevert(MarginPosition.ChangeMarginAction.selector);
-        marginPositionManager.margin(marginParams);
-    }
-
-    function testAddMargin_Fail_ChangeMarginAction_MarginToBorrow() public {
-        (uint256 tokenId,) = _createPosition(false, 2, DEFAULT_MARGIN_AMOUNT);
-
-        IMarginPositionManager.MarginParams memory marginParams = IMarginPositionManager.MarginParams({
-            tokenId: tokenId,
-            leverage: 0,
-            marginAmount: DEFAULT_MARGIN_AMOUNT,
-            borrowAmount: DEFAULT_MARGIN_AMOUNT,
-            borrowAmountMax: DEFAULT_MARGIN_AMOUNT,
-            deadline: block.timestamp
-        });
-
-        vm.expectRevert(MarginPosition.ChangeMarginAction.selector);
-        marginPositionManager.margin(marginParams);
     }
 
     function testClose_Fail_InsufficientCloseReceived() public {
@@ -939,6 +926,25 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
         int128 modifyAmount = -0.08e18;
         vm.expectRevert(IMarginPositionManager.InvalidLevel.selector);
         marginPositionManager.modify(tokenId, modifyAmount, block.timestamp);
+    }
+
+    /// The level check runs inside the unlock, before any token or native transfer reaches the caller:
+    /// a withdrawal that fails the check must revert without ever handing control to the owner.
+    function testModify_Fail_LevelCheckedBeforeNativePayout() public {
+        (uint256 tokenId,) = _createNativePosition(false, 4, DEFAULT_MARGIN_AMOUNT);
+
+        vm.expectCall(address(this), bytes(""), 0);
+        vm.expectRevert(IMarginPositionManager.InvalidLevel.selector);
+        marginPositionManager.modify(tokenId, -0.08e18, block.timestamp);
+    }
+
+    function testModify_NativePayoutStillDelivered() public {
+        (uint256 tokenId,) = _createNativePosition(false, 2, 0.2e18);
+        skip(1000);
+
+        uint256 balanceBefore = address(this).balance;
+        marginPositionManager.modify(tokenId, -0.01e18, block.timestamp);
+        assertEq(address(this).balance - balanceBefore, 0.01e18);
     }
 
     function testModify_Fail_InvalidLevel() public {
@@ -1026,7 +1032,6 @@ contract LikwidMarginPositionTest is Test, IUnlockCallback {
             marginForOne: false,
             leverage: 2,
             marginAmount: 0.01e18,
-            borrowAmount: 0,
             borrowAmountMax: 0,
             recipient: address(this),
             deadline: 0

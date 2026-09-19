@@ -101,7 +101,7 @@ contract MarginPositionTest is Test {
 
     function testMarginLevelReservesNotPositive() public {
         // Setup position with debt
-        wrapper.update(1e18, 1e18, 100e18, 0, 50e18, 0);
+        wrapper.update(1e18, 1e18, 50e18, 50e18, 50e18, 0);
 
         Reserves zeroReserves = toReserves(0, 0);
 
@@ -157,6 +157,17 @@ contract MarginPositionTest is Test {
         assertEq(position.debtAmount, borrowAmount, "Debt amount should be set");
     }
 
+    /// Debt can only be taken on together with leveraged margin; collateral-only borrowing is gone.
+    function testUpdateBorrowWithoutLeveragedMarginReverts() public {
+        vm.expectRevert(MarginPosition.ChangeMarginAction.selector);
+        wrapper.update(1e18, 1e18, 100e18, 0, 50e18, 0);
+
+        // also on a position that already holds leveraged margin
+        wrapper.update(1e18, 1e18, 100e18, 100e18, 50e18, 0);
+        vm.expectRevert(MarginPosition.ChangeMarginAction.selector);
+        wrapper.update(1e18, 1e18, 100e18, 0, 50e18, 0);
+    }
+
     function testUpdateRepay() public {
         // Setup position with debt
         uint256 borrowCumulativeLast = 1e18;
@@ -181,8 +192,8 @@ contract MarginPositionTest is Test {
         uint256 depositCumulativeLast = 1e18;
 
         // Setup a position that won't be liquidated when closing fully
-        // marginAmount = 200e18, marginTotal = 0 (borrow mode), debt = 100e18
-        wrapper.update(borrowCumulativeLast, depositCumulativeLast, 200e18, 0, 100e18, 0);
+        // marginAmount = 100e18, marginTotal = 100e18 (leveraged), debt = 100e18
+        wrapper.update(borrowCumulativeLast, depositCumulativeLast, 100e18, 100e18, 100e18, 0);
         wrapper.setMarginForOne(false);
 
         // Close 100% - this should work since positionValue (200e18) > debt (100e18)
@@ -278,7 +289,7 @@ contract MarginPositionTest is Test {
         uint256 borrowCumulativeLast = 1e18;
         uint256 depositCumulativeLast = 1e18;
 
-        wrapper.update(borrowCumulativeLast, depositCumulativeLast, 10e18, 0, 100e18, 0);
+        wrapper.update(borrowCumulativeLast, depositCumulativeLast, 5e18, 5e18, 100e18, 0);
         wrapper.setMarginForOne(false);
 
         // Try to close with insufficient value

@@ -105,7 +105,6 @@ contract LikwidMarginRouterTest is Test, IUnlockCallback {
             marginForOne: marginForOne,
             leverage: leverage,
             marginAmount: uint128(marginAmount),
-            borrowAmount: 0,
             borrowAmountMax: 0,
             recipient: address(0), // ignored by the router
             deadline: block.timestamp
@@ -202,43 +201,28 @@ contract LikwidMarginRouterTest is Test, IUnlockCallback {
         _assertRouterEmpty();
     }
 
-    /// @dev Regression: a collateral-only position (leverage == 0, borrowAmount == 0) has debtAmount == 0
-    ///      but is NOT empty. A second margin() must add to it, not mint a duplicate.
-    function test_margin_addsToZeroDebtCollateralPosition() public {
+    /// @dev Collateral-only positions (leverage == 0) are no longer supported by the position manager:
+    ///      the router must surface the revert and leave no mapping NFT or funds behind.
+    function test_margin_zeroLeverage_reverts() public {
+        uint256 m1 = _marginAmount(key, false);
         IMarginPositionManager.CreateParams memory p = IMarginPositionManager.CreateParams({
             marginForOne: false,
-            leverage: 0, // borrow mode
-            marginAmount: 0,
-            borrowAmount: 0, // no borrow -> zero debt
+            leverage: 0,
+            marginAmount: uint128(m1),
             borrowAmountMax: 0,
             recipient: address(0),
             deadline: block.timestamp
         });
 
-        uint256 m1 = _marginAmount(key, false);
         token0.mint(user, m1);
         vm.startPrank(user);
         token0.approve(address(router), m1);
-        p.marginAmount = uint128(m1);
-        (uint256 id1,,) = router.margin(key, p, user);
+        vm.expectRevert(IMarginPositionManager.InvalidLeverage.selector);
+        router.margin(key, p, user);
         vm.stopPrank();
 
-        MarginPosition.State memory s = marginPositionManager.getPositionState(id1);
-        assertEq(s.debtAmount, 0, "no debt");
-        assertGt(s.marginAmount, 0, "has collateral");
-        assertEq(router.positionOf(user, key.toId(), false), id1);
-
-        uint256 m2 = _marginAmount(key, false);
-        token0.mint(user, m2);
-        vm.startPrank(user);
-        token0.approve(address(router), m2);
-        p.marginAmount = uint128(m2);
-        (uint256 id2,,) = router.margin(key, p, user);
-        vm.stopPrank();
-
-        assertEq(id2, id1, "added to existing zero-debt position, not duplicated");
-        assertEq(router.balanceOf(user), 1, "no duplicate mapping NFT");
-        assertGt(marginPositionManager.getPositionState(id1).marginAmount, s.marginAmount, "collateral grew");
+        assertEq(router.balanceOf(user), 0, "no mapping NFT minted");
+        assertEq(router.positionOf(user, key.toId(), false), 0, "no position recorded");
         _assertRouterEmpty();
     }
 
@@ -658,10 +642,10 @@ contract LikwidMarginRouterTest is Test, IUnlockCallback {
         IVault.SwapParams memory swapParams;
         if (marginForOne) {
             token1.mint(address(this), swapAmount);
-            swapParams = IVault.SwapParams({zeroForOne: false, amountSpecified: -int256(swapAmount), useMirror: false, salt: bytes32(0)});
+            swapParams = IVault.SwapParams({zeroForOne: false, amountSpecified: -int256(swapAmount)});
         } else {
             token0.mint(address(this), swapAmount);
-            swapParams = IVault.SwapParams({zeroForOne: true, amountSpecified: -int256(swapAmount), useMirror: false, salt: bytes32(0)});
+            swapParams = IVault.SwapParams({zeroForOne: true, amountSpecified: -int256(swapAmount)});
         }
         bytes memory inner = abi.encode(key, swapParams);
         bytes memory data = abi.encode(this.swap_callback.selector, inner);
@@ -672,7 +656,8 @@ contract LikwidMarginRouterTest is Test, IUnlockCallback {
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
         (bytes4 selector, bytes memory params) = abi.decode(data, (bytes4, bytes));
         if (selector == this.swap_callback.selector) {
-            (PoolKey memory _key, IVault.SwapParams memory swapParams) = abi.decode(params, (PoolKey, IVault.SwapParams));
+            (PoolKey memory _key, IVault.SwapParams memory swapParams) =
+                abi.decode(params, (PoolKey, IVault.SwapParams));
             (BalanceDelta delta,,) = vault.swap(_key, swapParams);
             int256 a0 = delta.amount0();
             int256 a1 = delta.amount1();

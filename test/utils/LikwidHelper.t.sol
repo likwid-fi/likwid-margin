@@ -229,7 +229,6 @@ contract LikwidHelperTest is Test {
             marginForOne: false, // margin with token0, borrow token1
             leverage: 2,
             marginAmount: uint128(marginAmount),
-            borrowAmount: 0,
             borrowAmountMax: 0,
             recipient: address(this),
             deadline: block.timestamp
@@ -273,7 +272,6 @@ contract LikwidHelperTest is Test {
             marginForOne: false, // margin with token0, borrow token1
             leverage: 2,
             marginAmount: uint128(marginAmount),
-            borrowAmount: 0,
             borrowAmountMax: 0,
             recipient: address(this),
             deadline: block.timestamp
@@ -305,7 +303,6 @@ contract LikwidHelperTest is Test {
             marginForOne: false, // margin with token0, borrow token1
             leverage: 2,
             marginAmount: uint128(marginAmount),
-            borrowAmount: 0,
             borrowAmountMax: 0,
             recipient: address(this),
             deadline: block.timestamp
@@ -336,7 +333,6 @@ contract LikwidHelperTest is Test {
             marginForOne: false, // margin with token0, borrow token1
             leverage: 2,
             marginAmount: uint128(marginAmount),
-            borrowAmount: 0,
             borrowAmountMax: 0,
             recipient: address(this),
             deadline: block.timestamp

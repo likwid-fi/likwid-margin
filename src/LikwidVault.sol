@@ -5,7 +5,7 @@ pragma solidity 0.8.28;
 import {Currency, CurrencyLibrary} from "./types/Currency.sol";
 import {PoolKey} from "./types/PoolKey.sol";
 import {MarginBalanceDelta} from "./types/MarginBalanceDelta.sol";
-import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "./types/BalanceDelta.sol";
+import {BalanceDelta, BalanceDeltaLibrary} from "./types/BalanceDelta.sol";
 import {PoolId} from "./types/PoolId.sol";
 import {FeeTypes} from "./types/FeeTypes.sol";
 import {MarginActions} from "./types/MarginActions.sol";
@@ -122,32 +122,10 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         Pool.State storage pool = _getAndUpdatePool(key);
         uint256 amountToProtocol;
         (swapDelta, amountToProtocol, swapFee, feeAmount) = pool.swap(
-            Pool.SwapParams({
-                sender: msg.sender,
-                zeroForOne: params.zeroForOne,
-                amountSpecified: params.amountSpecified,
-                useMirror: params.useMirror,
-                salt: params.salt
-            }),
+            Pool.SwapParams({zeroForOne: params.zeroForOne, amountSpecified: params.amountSpecified}),
             defaultProtocolFee
         );
-        if (params.useMirror) {
-            BalanceDelta realDelta;
-            int128 lendAmount;
-            if (params.zeroForOne) {
-                realDelta = toBalanceDelta(swapDelta.amount0(), 0);
-                lendAmount = -swapDelta.amount1();
-            } else {
-                realDelta = toBalanceDelta(0, swapDelta.amount1());
-                lendAmount = -swapDelta.amount0();
-            }
-            _appendPoolBalanceDelta(key, msg.sender, realDelta);
-            uint256 depositCumulativeLast =
-                params.zeroForOne ? pool.deposit1CumulativeLast : pool.deposit0CumulativeLast;
-            emit Lend(id, msg.sender, params.zeroForOne, lendAmount, depositCumulativeLast, params.salt);
-        } else {
-            _appendPoolBalanceDelta(key, msg.sender, swapDelta);
-        }
+        _appendPoolBalanceDelta(key, msg.sender, swapDelta);
 
         Currency feeCurrency = params.zeroForOne ? key.currency0 : key.currency1;
         if (feeAmount > 0 || amountToProtocol > 0) {
@@ -175,28 +153,6 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         _appendPoolBalanceDelta(key, msg.sender, delta);
 
         emit Donate(poolId, msg.sender, amount0, amount1);
-    }
-
-    /// @inheritdoc IVault
-    function lend(PoolKey memory key, IVault.LendParams memory params)
-        external
-        onlyWhenUnlocked
-        noDelegateCall
-        returns (BalanceDelta lendDelta)
-    {
-        if (params.lendAmount == 0) AmountCannotBeZero.selector.revertWith();
-
-        PoolId id = key.toId();
-        Pool.State storage pool = _getAndUpdatePool(key);
-        uint256 depositCumulativeLast;
-        (lendDelta, depositCumulativeLast) = pool.lend(
-            Pool.LendParams({
-                sender: msg.sender, lendForOne: params.lendForOne, lendAmount: params.lendAmount, salt: params.salt
-            })
-        );
-
-        _appendPoolBalanceDelta(key, msg.sender, lendDelta);
-        emit Lend(id, msg.sender, params.lendForOne, params.lendAmount, depositCumulativeLast, params.salt);
     }
 
     /// @inheritdoc IVault

@@ -14,7 +14,6 @@ import {FeeLibrary} from "./FeeLibrary.sol";
 import {FixedPoint96} from "./FixedPoint96.sol";
 import {Math} from "./Math.sol";
 import {PairPosition} from "./PairPosition.sol";
-import {LendPosition} from "./LendPosition.sol";
 import {PerLibrary} from "./PerLibrary.sol";
 import {ProtocolFeeLibrary} from "./ProtocolFeeLibrary.sol";
 import {TimeLibrary} from "./TimeLibrary.sol";
@@ -35,8 +34,6 @@ library Pool {
     using Pool for State;
     using PairPosition for PairPosition.State;
     using PairPosition for mapping(bytes32 => PairPosition.State);
-    using LendPosition for LendPosition.State;
-    using LendPosition for mapping(bytes32 => LendPosition.State);
     using ProtocolFeeLibrary for uint24;
 
     error InvalidFee();
@@ -79,7 +76,6 @@ library Pool {
         InsuranceFunds insuranceFunds;
         /// @notice The positions in the pool, mapped by a hash of the owner's address and a salt.
         mapping(bytes32 positionKey => PairPosition.State) positions;
-        mapping(bytes32 positionKey => LendPosition.State) lendPositions;
     }
 
     struct ModifyLiquidityParams {
@@ -199,14 +195,10 @@ library Pool {
     }
 
     struct SwapParams {
-        address sender;
         // zeroForOne Whether to swap token0 for token1
         bool zeroForOne;
         // The amount to swap, negative for exact input, positive for exact output
         int256 amountSpecified;
-        // Whether to use the mirror reserves for the swap
-        bool useMirror;
-        bytes32 salt;
     }
 
     /// @notice Swaps tokens in the pool
@@ -257,37 +249,11 @@ library Pool {
             protocolFeeDelta = toBalanceDelta(0, amountToProtocol.toInt128());
         }
 
-        ReservesLibrary.UpdateParam[] memory deltaParams;
         swapDelta = toBalanceDelta(amount0Delta, amount1Delta);
-        if (!params.useMirror) {
-            BalanceDelta changeDelta = swapDelta + protocolFeeDelta;
-            deltaParams = new ReservesLibrary.UpdateParam[](2);
-            deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, changeDelta);
-            deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, changeDelta);
-        } else {
-            deltaParams = new ReservesLibrary.UpdateParam[](3);
-            BalanceDelta realDelta;
-            BalanceDelta lendDelta;
-            if (params.zeroForOne) {
-                realDelta = toBalanceDelta(amount0Delta, 0);
-                lendDelta = toBalanceDelta(0, -amount1Delta);
-            } else {
-                realDelta = toBalanceDelta(0, amount1Delta);
-                lendDelta = toBalanceDelta(-amount0Delta, 0);
-            }
-            deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, realDelta + protocolFeeDelta);
-            // pair MIRROR<=>lend MIRROR
-            deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.LEND, lendDelta);
-            deltaParams[2] = ReservesLibrary.UpdateParam(ReservesType.PAIR, swapDelta + protocolFeeDelta);
-            uint256 depositCumulativeLast;
-            if (params.zeroForOne) {
-                depositCumulativeLast = self.deposit1CumulativeLast;
-            } else {
-                depositCumulativeLast = self.deposit0CumulativeLast;
-            }
-            self.lendPositions.get(params.sender, params.zeroForOne, params.salt)
-                .update(params.zeroForOne, depositCumulativeLast, lendDelta);
-        }
+        BalanceDelta changeDelta = swapDelta + protocolFeeDelta;
+        ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](2);
+        deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, changeDelta);
+        deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, changeDelta);
         self.updateReserves(deltaParams);
     }
 
@@ -300,45 +266,6 @@ library Pool {
         ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](1);
         deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, delta);
         self.updateReserves(deltaParams);
-    }
-
-    struct LendParams {
-        address sender;
-        /// False if lend token0,true if lend token1
-        bool lendForOne;
-        /// The amount to lend, negative for deposit, positive for withdraw
-        int128 lendAmount;
-        bytes32 salt;
-    }
-
-    /// @notice Lends tokens to the pool.
-    /// @param self The pool state.
-    /// @param params The parameters for the lending operation.
-    /// @return lendDelta The change in the lender's balance.
-    /// @return depositCumulativeLast The last cumulative deposit rate.
-    function lend(State storage self, LendParams memory params)
-        internal
-        returns (BalanceDelta lendDelta, uint256 depositCumulativeLast)
-    {
-        int128 amount0Delta;
-        int128 amount1Delta;
-
-        if (params.lendForOne) {
-            amount1Delta = params.lendAmount;
-            depositCumulativeLast = self.deposit1CumulativeLast;
-        } else {
-            amount0Delta = params.lendAmount;
-            depositCumulativeLast = self.deposit0CumulativeLast;
-        }
-
-        lendDelta = toBalanceDelta(amount0Delta, amount1Delta);
-        ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](2);
-        deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, lendDelta);
-        deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.LEND, lendDelta);
-        self.updateReserves(deltaParams);
-
-        self.lendPositions.get(params.sender, params.lendForOne, params.salt)
-            .update(params.lendForOne, depositCumulativeLast, lendDelta);
     }
 
     function margin(State storage self, MarginBalanceDelta memory params, uint24 defaultProtocolFee)
@@ -611,15 +538,16 @@ library Pool {
         return self.updateReserves(params, InsuranceFunds.wrap(0));
     }
 
-    function _distributeExcessFunds(
-        int128 currentFund,
-        int128 fundDelta,
-        uint256 limit,
-        uint128 pairReserve,
-        uint128 lendReserve
-    ) private pure returns (int128 newFund, uint128 pairAdd, uint128 lendAdd) {
+    /// @dev Insurance funds above the limit flow back to the pair. Nothing is credited to lendReserves:
+    /// the deposit cumulative only advances with interest, so an amount added there could never be
+    /// claimed by any position. With no pair liquidity the excess simply stays in the fund.
+    function _distributeExcessFunds(int128 currentFund, int128 fundDelta, uint256 limit, uint128 pairReserve)
+        private
+        pure
+        returns (int128 newFund, uint128 pairAdd)
+    {
         newFund = currentFund + fundDelta;
-        if (fundDelta > 0 && newFund > 0) {
+        if (fundDelta > 0 && newFund > 0 && pairReserve > 0) {
             uint128 newFundU = uint128(newFund);
             if (newFundU > limit) {
                 uint256 excess = newFundU - limit;
@@ -627,13 +555,7 @@ library Pool {
                 if (excess > fundDeltaU) {
                     excess = fundDeltaU;
                 }
-
-                uint256 totalReserve = uint256(pairReserve) + uint256(lendReserve);
-                if (totalReserve > 0) {
-                    uint256 pairAddAmount = Math.mulDiv(excess, pairReserve, totalReserve);
-                    pairAdd = pairAddAmount.toUint128();
-                    lendAdd = (excess - pairAddAmount).toUint128();
-                }
+                pairAdd = excess.toUint128();
                 newFund = (newFundU - excess).toInt128();
             }
         }
@@ -667,23 +589,15 @@ library Pool {
         (int128 fundsDelta0, int128 fundsDelta1) = fundsDelta.unpack();
 
         (uint128 pairR0, uint128 pairR1) = _pairReserves.reserves();
-        (uint128 lendR0, uint128 lendR1) = _lendReserves.reserves();
 
         uint128 pairAdd0;
-        uint128 lendAdd0;
-        (insuranceFund0, pairAdd0, lendAdd0) =
-            _distributeExcessFunds(insuranceFund0, fundsDelta0, limit0, pairR0, lendR0);
+        (insuranceFund0, pairAdd0) = _distributeExcessFunds(insuranceFund0, fundsDelta0, limit0, pairR0);
 
         uint128 pairAdd1;
-        uint128 lendAdd1;
-        (insuranceFund1, pairAdd1, lendAdd1) =
-            _distributeExcessFunds(insuranceFund1, fundsDelta1, limit1, pairR1, lendR1);
+        (insuranceFund1, pairAdd1) = _distributeExcessFunds(insuranceFund1, fundsDelta1, limit1, pairR1);
 
         if (pairAdd0 > 0 || pairAdd1 > 0) {
             _pairReserves = _pairReserves + toReserves(pairAdd0, pairAdd1);
-        }
-        if (lendAdd0 > 0 || lendAdd1 > 0) {
-            _lendReserves = _lendReserves + toReserves(lendAdd0, lendAdd1);
         }
 
         _insuranceFunds = toInsuranceFunds(insuranceFund0, insuranceFund1);

@@ -156,9 +156,8 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
     {
         PoolKey memory key = poolKeys[params.poolId];
         int256 amountSpecified = -int256(params.amountIn);
-        IVault.SwapParams memory swapParams = IVault.SwapParams({
-            zeroForOne: params.zeroForOne, amountSpecified: amountSpecified, useMirror: false, salt: bytes32(0)
-        });
+        IVault.SwapParams memory swapParams =
+            IVault.SwapParams({zeroForOne: params.zeroForOne, amountSpecified: amountSpecified});
         uint256 amount0Min = params.zeroForOne ? 0 : params.amountOutMin;
         uint256 amount1Min = params.zeroForOne ? params.amountOutMin : 0;
         bytes memory callbackData = abi.encode(msg.sender, params.to, key, swapParams, amount0Min, amount1Min, 0, 0);
@@ -180,9 +179,8 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
     {
         PoolKey memory key = poolKeys[params.poolId];
         int256 amountSpecified = int256(params.amountOut);
-        IVault.SwapParams memory swapParams = IVault.SwapParams({
-            zeroForOne: params.zeroForOne, amountSpecified: amountSpecified, useMirror: false, salt: bytes32(0)
-        });
+        IVault.SwapParams memory swapParams =
+            IVault.SwapParams({zeroForOne: params.zeroForOne, amountSpecified: amountSpecified});
         uint256 amount0Max = params.zeroForOne ? params.amountInMax : 0;
         uint256 amount1Max = params.zeroForOne ? 0 : params.amountInMax;
         bytes memory callbackData = abi.encode(msg.sender, params.to, key, swapParams, 0, 0, amount0Max, amount1Max);

@@ -30,9 +30,6 @@ interface IMarginPositionManager is IBasePositionManager {
     /// @notice Thrown when the mirror amount is too high
     error MirrorTooMuch();
 
-    /// @notice Thrown when the borrow amount is too high
-    error BorrowTooMuch();
-
     /// @notice Thrown when the reserves are not enough
     error ReservesNotEnough();
 
@@ -44,6 +41,9 @@ interface IMarginPositionManager is IBasePositionManager {
 
     /// @notice Thrown when the leverage exceeds the maximum allowed
     error ExceedMaxLeverage();
+
+    /// @notice Thrown when the leverage is zero; collateral-only borrowing is not supported
+    error InvalidLeverage();
 
     /// @notice Thrown when the borrow amount exceeds the maximum allowed
     error ExceedBorrowAmountMax();
@@ -204,12 +204,10 @@ interface IMarginPositionManager is IBasePositionManager {
     struct CreateParams {
         /// @notice true: currency1 is marginToken, false: currency0 is marginToken
         bool marginForOne;
-        /// @notice Leverage factor of the margin position.
+        /// @notice Leverage factor of the margin position, from 1 to the maximum leverage. Zero is rejected.
         uint24 leverage;
         /// @notice The amount of margin
         uint256 marginAmount;
-        /// @notice The borrow amount of the margin position.When the parameter is passed in, it is 0.
-        uint256 borrowAmount;
         /// @notice The maximum borrow amount of the margin position.
         uint256 borrowAmountMax;
         /// @notice The address of recipient
@@ -231,12 +229,10 @@ interface IMarginPositionManager is IBasePositionManager {
 
     struct MarginParams {
         uint256 tokenId;
-        /// @notice Leverage factor of the margin position.
+        /// @notice Leverage factor of the margin position, from 1 to the maximum leverage. Zero is rejected.
         uint24 leverage;
         /// @notice The amount of margin
         uint256 marginAmount;
-        /// @notice The borrow amount of the margin position.When the parameter is passed in, it is 0.
-        uint256 borrowAmount;
         /// @notice The maximum borrow amount of the margin position.
         uint256 borrowAmountMax;
         /// @notice Deadline for the transaction

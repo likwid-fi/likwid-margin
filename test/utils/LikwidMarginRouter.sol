@@ -193,7 +193,6 @@ contract LikwidMarginRouter is ERC721Enumerable, IERC721Receiver, ReentrancyGuar
                     tokenId: existing,
                     leverage: params.leverage,
                     marginAmount: params.marginAmount,
-                    borrowAmount: params.borrowAmount,
                     borrowAmountMax: params.borrowAmountMax,
                     deadline: params.deadline
                 })
@@ -207,7 +206,6 @@ contract LikwidMarginRouter is ERC721Enumerable, IERC721Receiver, ReentrancyGuar
                     marginForOne: params.marginForOne,
                     leverage: params.leverage,
                     marginAmount: params.marginAmount,
-                    borrowAmount: params.borrowAmount,
                     borrowAmountMax: params.borrowAmountMax,
                     recipient: address(this),
                     deadline: params.deadline

@@ -4,7 +4,8 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {Pool} from "../../src/libraries/Pool.sol";
 import {BalanceDelta, toBalanceDelta} from "../../src/types/BalanceDelta.sol";
-import {toReserves} from "../../src/types/Reserves.sol";
+import {toReserves, ReservesLibrary, ReservesType} from "../../src/types/Reserves.sol";
+import {toInsuranceFunds} from "../../src/types/InsuranceFunds.sol";
 import {PairPosition} from "../../src/libraries/PairPosition.sol";
 import {Math} from "../../src/libraries/Math.sol";
 
@@ -180,9 +181,7 @@ contract PoolTest is Test {
 
         // --- Action: Swap token0 for token1 ---
         int256 amountIn = -1e18; // Exact input
-        Pool.SwapParams memory swapParams = Pool.SwapParams({
-            sender: address(this), zeroForOne: true, amountSpecified: amountIn, useMirror: false, salt: bytes32(0)
-        });
+        Pool.SwapParams memory swapParams = Pool.SwapParams({zeroForOne: true, amountSpecified: amountIn});
 
         (BalanceDelta swapDelta,, uint24 swapFee, uint256 feeAmount) = pool.swap(swapParams, 0);
 
@@ -208,42 +207,13 @@ contract PoolTest is Test {
 
         // --- Action: Swap for exact output ---
         int256 amountOut = 0.5e18; // Exact output
-        Pool.SwapParams memory swapParams = Pool.SwapParams({
-            sender: address(this), zeroForOne: true, amountSpecified: amountOut, useMirror: false, salt: bytes32(0)
-        });
+        Pool.SwapParams memory swapParams = Pool.SwapParams({zeroForOne: true, amountSpecified: amountOut});
 
         (BalanceDelta swapDelta,,,) = pool.swap(swapParams, 0);
 
         // --- Assertions ---
         assertLt(int256(swapDelta.amount0()), 0, "Amount0 should be negative (sent)");
         assertEq(uint256(int256(swapDelta.amount1())), uint256(amountOut), "Amount1 should equal exact output");
-    }
-
-    function testLend() public {
-        // --- Setup: Add initial liquidity ---
-        uint256 amount0Add = 10e18;
-        uint256 amount1Add = 10e18;
-        bytes32 salt = keccak256("salt");
-        address owner = address(this);
-
-        Pool.ModifyLiquidityParams memory liquidityParams = Pool.ModifyLiquidityParams({
-            owner: owner, amount0: amount0Add, amount1: amount1Add, liquidityDelta: 0, salt: salt
-        });
-
-        pool.modifyLiquidity(liquidityParams);
-
-        // --- Action: Lend token0 ---
-        int128 lendAmount = -1e18;
-        bytes32 lendSalt = keccak256("lend_salt");
-        Pool.LendParams memory lendParams =
-            Pool.LendParams({sender: address(this), lendForOne: false, lendAmount: lendAmount, salt: lendSalt});
-
-        (BalanceDelta lendDelta, uint256 depositCumulativeLast) = pool.lend(lendParams);
-
-        // --- Assertions ---
-        assertLt(int256(lendDelta.amount0()), 0, "Amount0 should be negative (lent)");
-        assertEq(int256(lendDelta.amount1()), 0, "Amount1 should be 0");
-        assertGt(depositCumulativeLast, 0, "Deposit cumulative last should be set");
     }
 
     function testDonate() public {
@@ -284,5 +254,63 @@ contract PoolTest is Test {
         uint8 newPercentage = 50;
         pool.setInsuranceFundPercentage(newPercentage);
         assertEq(pool.slot0.insuranceFundPercentage(), newPercentage, "Insurance fund percentage should be updated");
+    }
+
+    /// Insurance funds above the limit flow back to the pair only. The deposit cumulative is only
+    /// advanced by interest, so anything credited to lendReserves here could never be claimed.
+    function testExcessInsuranceFundsGoToPairOnly() public {
+        pool.setInsuranceFundPercentage(1); // the limit only ratchets up, so lower it before adding reserves
+        pool.modifyLiquidity(
+            Pool.ModifyLiquidityParams({
+                owner: address(this), amount0: 10e18, amount1: 10e18, liquidityDelta: 0, salt: bytes32(0)
+            })
+        );
+        // margin collateral sitting in lendReserves (negative delta = paid into the pool)
+        ReservesLibrary.UpdateParam[] memory collateral = new ReservesLibrary.UpdateParam[](2);
+        collateral[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, toBalanceDelta(-2e18, 0));
+        collateral[1] = ReservesLibrary.UpdateParam(ReservesType.LEND, toBalanceDelta(-2e18, 0));
+        pool.updateReserves(collateral);
+
+        // 1e18 of token0 reaches the insurance fund, far above the 1% limit
+        ReservesLibrary.UpdateParam[] memory incoming = new ReservesLibrary.UpdateParam[](1);
+        incoming[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, toBalanceDelta(-1e18, 0));
+        pool.updateReserves(incoming, toInsuranceFunds(1e18, 0));
+
+        uint256 limit0 = 13e18 / 100; // 1% of real + mirror
+        assertEq(uint256(uint128(pool.insuranceFunds.amount0())), limit0, "fund capped at the limit");
+        assertEq(pool.lendReserves.reserve0(), 2e18, "lendReserves must not receive excess funds");
+        assertEq(pool.pairReserves.reserve0(), 10e18 + 1e18 - limit0, "the whole excess goes to the pair");
+        assertEq(pool.pairReserves.reserve1(), 10e18);
+    }
+
+    /// real + mirror == pair + lend + funds is enforced on every reserve update.
+    function testUpdateReservesRevertsWhenInconsistent() public {
+        pool.modifyLiquidity(
+            Pool.ModifyLiquidityParams({
+                owner: address(this), amount0: 10e18, amount1: 10e18, liquidityDelta: 0, salt: bytes32(0)
+            })
+        );
+        // tokens enter the real reserves but no pair, lend or fund entry accounts for them
+        ReservesLibrary.UpdateParam[] memory params = new ReservesLibrary.UpdateParam[](1);
+        params[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, toBalanceDelta(-1e18, 0));
+        vm.expectRevert(Pool.InconsistentReserves.selector);
+        this.updateReservesExternal(params);
+    }
+
+    function updateReservesExternal(ReservesLibrary.UpdateParam[] memory params) external {
+        pool.updateReserves(params);
+    }
+
+    /// With no pair liquidity there is nowhere to send the excess: it stays in the fund instead of
+    /// being dropped, which would break real + mirror == pair + lend + funds.
+    function testExcessInsuranceFundsStayInFundWithoutPairLiquidity() public {
+        pool.setInsuranceFundPercentage(1);
+        ReservesLibrary.UpdateParam[] memory incoming = new ReservesLibrary.UpdateParam[](1);
+        incoming[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, toBalanceDelta(-1e18, 0));
+        pool.updateReserves(incoming, toInsuranceFunds(1e18, 0));
+
+        assertEq(uint256(uint128(pool.insuranceFunds.amount0())), 1e18);
+        assertEq(pool.pairReserves.reserve0(), 0);
+        assertEq(pool.lendReserves.reserve0(), 0);
     }
 }

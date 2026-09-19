@@ -100,16 +100,11 @@ library MarginPosition {
             marginAmount = Math.mulDiv(self.marginAmount, depositCumulativeLast, self.depositCumulativeLast);
             marginTotal = Math.mulDiv(self.marginTotal, depositCumulativeLast, self.depositCumulativeLast);
             positionValue = marginAmount + marginTotal;
-
-            // margin or borrow
-            if (borrowAmount > 0) {
-                // A position can only be used for either borrow(leverage==0) or margin(leverage>0), but not both.
-                if ((marginTotal > 0 && marginWithoutFee == 0) || (marginTotal == 0 && marginWithoutFee > 0)) {
-                    // when margin, marginWithoutFee should >0
-                    // when borrow, marginWithoutFee should ==0
-                    ChangeMarginAction.selector.revertWith();
-                }
-            }
+        }
+        // Debt may only be taken on together with the leveraged margin it buys (leverage > 0);
+        // collateral-only borrowing is not supported.
+        if (borrowAmount > 0 && marginWithoutFee == 0) {
+            ChangeMarginAction.selector.revertWith();
         }
         if (self.borrowCumulativeLast != 0) {
             debtAmount = Math.mulDivRoundingUp(self.debtAmount, borrowCumulativeLast, self.borrowCumulativeLast);

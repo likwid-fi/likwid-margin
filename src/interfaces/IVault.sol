@@ -93,22 +93,6 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
         uint256 protocolFeeAmount
     );
 
-    /// @notice Emitted for lends between currency0 and currency1
-    /// @param id The abi encoded hash of the pool key struct for the pool that was modified
-    /// @param sender The address that initiated the lend call
-    /// @param lendingForOne False if lending currency0, true if lending currency1
-    /// @param lendingAmount The amount lent, negative for deposit, positive for withdraw
-    /// @param depositCumulativeLast The deposit cumulative at the time of the lend
-    /// @param salt The extra data to make lends unique
-    event Lend(
-        PoolId indexed id,
-        address indexed sender,
-        bool lendingForOne,
-        int128 lendingAmount,
-        uint256 depositCumulativeLast,
-        bytes32 salt
-    );
-
     /// @notice Emitted when margin balance is modified
     /// @param id The abi encoded hash of the pool key struct for the pool that was modified
     /// @param marginType The type of margin operation
@@ -183,9 +167,6 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
         bool zeroForOne;
         /// The desired input amount if negative (exactIn), or the desired output amount if positive (exactOut)
         int256 amountSpecified;
-        /// Whether to use the mirror reserves for the swap
-        bool useMirror;
-        bytes32 salt;
     }
 
     /// @notice Swap against the given pool
@@ -204,21 +185,6 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
     /// @param amount1 The amount of currency1 to donate
     /// @return BalanceDelta The delta of the caller after the donate
     function donate(PoolKey memory key, uint256 amount0, uint256 amount1) external returns (BalanceDelta);
-
-    struct LendParams {
-        /// False if lend token0,true if lend token1
-        bool lendForOne;
-        /// The amount to lend, negative for deposit, positive for withdraw
-        int128 lendAmount;
-        bytes32 salt;
-    }
-
-    /// @notice Lends tokens to a pool.
-    /// @dev Allows a user to lend tokens to a pool and earn interest.
-    /// @param key The key of the pool to lend to.
-    /// @param params The parameters for the lending operation, including the amount to lend.
-    /// @return lendDelta The change in the lender's balance.
-    function lend(PoolKey memory key, LendParams memory params) external returns (BalanceDelta lendDelta);
 
     function marginBalance(PoolKey memory key, MarginBalanceDelta memory params)
         external

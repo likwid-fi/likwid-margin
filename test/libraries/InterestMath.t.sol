@@ -162,4 +162,71 @@ contract InterestMathTest is Test {
         assertTrue(rate0CumulativeLast > rate0CumulativeBefore, "Rate should increase over time");
         assertTrue(rate1CumulativeLast > rate1CumulativeBefore, "Rate should increase over time");
     }
+
+    /// Regression for the on-chain deposit cumulative anomaly (HONEY pool: deposit1Cum = 54.8x).
+    /// With the lend side rounding up, a lendReserve of 1 wei of rounding dust received at least 1 wei
+    /// on every interest update, multiplying the deposit cumulative by (lend + 1) / lend each time:
+    /// 54 updates took it from 1x to 55x. The lend side now rounds down, so dust earns nothing.
+    function test_dustLendReserve_doesNotInflateDepositCumulative() public pure {
+        uint256 Q96 = 2 ** 96;
+        uint256 pairReserve = 224_000_000e18;
+        uint256 lendReserve = 1; // 1 wei of dust
+        uint256 mirrorReserve = 1_000_000e18;
+        uint256 depositCumulative = Q96;
+        uint256 borrowCumulative = Q96;
+        uint256 interestReserve;
+        uint256 pairBefore = pairReserve;
+        uint256 mirrorBefore = mirrorReserve;
+
+        for (uint256 i = 0; i < 54; i++) {
+            uint256 borrowBefore = borrowCumulative;
+            borrowCumulative = borrowCumulative * 1_000_001 / 1_000_000;
+            InterestMath.InterestUpdateResult memory r = InterestMath.updateInterestForOne(
+                InterestMath.InterestUpdateParams({
+                    mirrorReserve: mirrorReserve,
+                    borrowCumulativeLast: borrowCumulative,
+                    borrowCumulativeBefore: borrowBefore,
+                    interestReserve: interestReserve,
+                    pairReserve: pairReserve,
+                    lendReserve: lendReserve,
+                    protocolInterestReserve: 0,
+                    depositCumulativeLast: depositCumulative,
+                    protocolFee: 0
+                })
+            );
+            mirrorReserve = r.newMirrorReserve;
+            pairReserve = r.newPairReserve;
+            lendReserve = r.newLendReserve;
+            depositCumulative = r.newDepositCumulativeLast;
+            interestReserve = r.newInterestReserve;
+        }
+
+        assertEq(lendReserve, 1, "dust must not grow");
+        assertEq(depositCumulative, Q96, "deposit cumulative must not move");
+        assertGt(mirrorReserve, mirrorBefore, "interest did accrue");
+        assertEq(pairReserve - pairBefore, mirrorReserve - mirrorBefore, "all of it went to the pair");
+    }
+
+    /// A real lend reserve still earns its pro-rata share (rounded down) and nothing is lost.
+    function test_lendReserve_earnsProRataRoundedDown() public pure {
+        uint256 Q96 = 2 ** 96;
+        InterestMath.InterestUpdateResult memory r = InterestMath.updateInterestForOne(
+            InterestMath.InterestUpdateParams({
+                mirrorReserve: 1_000e18,
+                borrowCumulativeLast: Q96 * 101 / 100,
+                borrowCumulativeBefore: Q96,
+                interestReserve: 0,
+                pairReserve: 3_000e18,
+                lendReserve: 1_000e18,
+                protocolInterestReserve: 0,
+                depositCumulativeLast: Q96,
+                protocolFee: 0
+            })
+        );
+        uint256 gross = r.newMirrorReserve - 1_000e18;
+        uint256 lendInterest = r.newLendReserve - 1_000e18;
+        assertEq(lendInterest + r.pairInterest, gross, "interest conserved");
+        assertEq(lendInterest, gross / 4, "lend earns 1000 / (3000 + 1000), rounded down");
+        assertEq(r.newDepositCumulativeLast, Q96 * (1_000e18 + lendInterest) / 1_000e18);
+    }
 }

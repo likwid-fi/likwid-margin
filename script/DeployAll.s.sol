@@ -3,7 +3,6 @@ pragma solidity ^0.8.19;
 
 import {Script, console} from "forge-std/Script.sol";
 import {LikwidVault} from "../src/LikwidVault.sol";
-import {LikwidLendPosition} from "../src/LikwidLendPosition.sol";
 import {LikwidMarginPosition} from "../src/LikwidMarginPosition.sol";
 import {LikwidPairPosition} from "../src/LikwidPairPosition.sol";
 import {LikwidHelper} from "../test/utils/LikwidHelper.sol";
@@ -14,7 +13,6 @@ contract DeployAllScript is Script {
     error ManagerNotExist();
 
     LikwidVault vault;
-    LikwidLendPosition lendPosition;
     LikwidMarginPosition marginPosition;
     LikwidPairPosition pairPosition;
     LikwidHelper helper;
@@ -32,8 +30,6 @@ contract DeployAllScript is Script {
 
         vault = new LikwidVault(sender);
         console.log("vault:", address(vault));
-        lendPosition = new LikwidLendPosition(owner, vault);
-        console.log("lendPosition:", address(lendPosition));
         marginPosition = new LikwidMarginPosition(owner, vault);
         console.log("marginPosition:", address(marginPosition));
         pairPosition = new LikwidPairPosition(owner, vault);

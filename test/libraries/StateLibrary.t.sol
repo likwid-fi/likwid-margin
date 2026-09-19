@@ -16,7 +16,6 @@ import {InsuranceFunds} from "../../src/types/InsuranceFunds.sol";
 import {StateLibrary} from "../../src/libraries/StateLibrary.sol";
 import {CurrentStateLibrary} from "../../src/libraries/CurrentStateLibrary.sol";
 import {StageMath} from "../../src/libraries/StageMath.sol";
-import {LendPosition} from "../../src/libraries/LendPosition.sol";
 import {PairPosition} from "../../src/libraries/PairPosition.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
@@ -79,16 +78,11 @@ contract StateLibraryTest is Test, IUnlockCallback {
                 abi.decode(params, (PoolKey, IVault.ModifyLiquidityParams));
             (BalanceDelta delta,) = vault.modifyLiquidity(key, mlParams);
             settleDelta(delta);
-        } else if (selector == this.lend_callback.selector) {
-            (PoolKey memory key, IVault.LendParams memory lendParams) = abi.decode(params, (PoolKey, IVault.LendParams));
-            BalanceDelta delta = vault.lend(key, lendParams);
-            settleDelta(delta);
         }
         return "";
     }
 
     function modifyLiquidity_callback(PoolKey memory, IVault.ModifyLiquidityParams memory) external pure {}
-    function lend_callback(PoolKey memory, IVault.LendParams memory) external pure {}
 
     function settleDelta(BalanceDelta delta) internal {
         if (delta.amount0() < 0) {
@@ -119,54 +113,6 @@ contract StateLibraryTest is Test, IUnlockCallback {
             "total0==(initialLiquidity+1000)/marginState.stageSize()"
         );
         assertEq(total, liquidity, "total==liquidity");
-    }
-
-    function testGetLendPositionStateForZero() public {
-        // 1. Lend to the pool to create a lend position
-        int128 amountToLend = -1 ether;
-        bool lendForOne = false;
-        bytes32 salt = keccak256("my_lend_position");
-
-        token0.mint(address(this), uint256(-int256(amountToLend)));
-
-        IVault.LendParams memory lendParams =
-            IVault.LendParams({lendForOne: lendForOne, lendAmount: amountToLend, salt: salt});
-
-        bytes memory innerData = abi.encode(poolKey, lendParams);
-        bytes memory data = abi.encode(this.lend_callback.selector, innerData);
-        vault.unlock(data);
-
-        // 2. Get the position state using the library function
-        LendPosition.State memory positionState =
-            StateLibrary.getLendPositionState(vault, poolId, address(this), lendForOne, salt);
-
-        // 3. Assert the state is correct
-        assertEq(uint256(positionState.lendAmount), uint256(-int256(amountToLend)), "lendAmount should be correct");
-        assertTrue(positionState.depositCumulativeLast != 0, "depositCumulativeLast should be set");
-    }
-
-    function testGetLendPositionStateForOne() public {
-        // 1. Lend to the pool to create a lend position
-        int128 amountToLend = -1 ether;
-        bool lendForOne = true;
-        bytes32 salt = keccak256("my_lend_position");
-
-        token1.mint(address(this), uint256(-int256(amountToLend)));
-
-        IVault.LendParams memory lendParams =
-            IVault.LendParams({lendForOne: lendForOne, lendAmount: amountToLend, salt: salt});
-
-        bytes memory innerData = abi.encode(poolKey, lendParams);
-        bytes memory data = abi.encode(this.lend_callback.selector, innerData);
-        vault.unlock(data);
-
-        // 2. Get the position state using the library function
-        LendPosition.State memory positionState =
-            StateLibrary.getLendPositionState(vault, poolId, address(this), lendForOne, salt);
-
-        // 3. Assert the state is correct
-        assertEq(uint256(positionState.lendAmount), uint256(-int256(amountToLend)), "lendAmount should be correct");
-        assertTrue(positionState.depositCumulativeLast != 0, "depositCumulativeLast should be set");
     }
 
     function testGetSlot0() public view {

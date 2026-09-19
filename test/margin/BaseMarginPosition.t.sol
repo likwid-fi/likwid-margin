@@ -116,7 +116,6 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
             marginForOne: marginForOne,
             leverage: leverage,
             marginAmount: uint128(marginAmount),
-            borrowAmount: 0,
             borrowAmountMax: 0,
             recipient: address(this),
             deadline: block.timestamp
@@ -136,7 +135,6 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
                 marginForOne: false,
                 leverage: leverage,
                 marginAmount: uint128(marginAmount),
-                borrowAmount: 0,
                 borrowAmountMax: 0,
                 recipient: address(this),
                 deadline: block.timestamp
@@ -161,7 +159,6 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
                 marginForOne: true,
                 leverage: leverage,
                 marginAmount: uint128(marginAmount),
-                borrowAmount: 0,
                 borrowAmountMax: 0,
                 recipient: address(this),
                 deadline: block.timestamp
@@ -302,14 +299,10 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
 
         if (marginForOne) {
             token1.mint(address(this), swapAmount);
-            swapParams = IVault.SwapParams({
-                zeroForOne: false, amountSpecified: -int256(swapAmount), useMirror: false, salt: bytes32(0)
-            });
+            swapParams = IVault.SwapParams({zeroForOne: false, amountSpecified: -int256(swapAmount)});
         } else {
             // zeroForOne = true
-            swapParams = IVault.SwapParams({
-                zeroForOne: true, amountSpecified: -int256(swapAmount), useMirror: false, salt: bytes32(0)
-            });
+            swapParams = IVault.SwapParams({zeroForOne: true, amountSpecified: -int256(swapAmount)});
             if (isNative) {
                 // Fund the test contract with ETH for the upcoming swap settlement
                 deal(address(this), address(this).balance + swapAmount);
@@ -436,7 +429,6 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
             marginForOne: marginForOne,
             leverage: leverage,
             marginAmount: uint128(marginAmount),
-            borrowAmount: 0,
             borrowAmountMax: 0,
             recipient: address(this),
             deadline: block.timestamp
@@ -460,7 +452,6 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
                 marginForOne: false,
                 leverage: leverage,
                 marginAmount: uint128(marginAmount),
-                borrowAmount: 0,
                 borrowAmountMax: 0,
                 recipient: address(this),
                 deadline: block.timestamp
@@ -483,7 +474,6 @@ abstract contract BaseMarginPositionTest is Test, IUnlockCallback {
                 marginForOne: true,
                 leverage: leverage,
                 marginAmount: uint128(marginAmount),
-                borrowAmount: 0,
                 borrowAmountMax: 0,
                 recipient: address(this),
                 deadline: block.timestamp
