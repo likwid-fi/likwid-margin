@@ -199,18 +199,23 @@ library Pool {
         bool zeroForOne;
         // The amount to swap, negative for exact input, positive for exact output
         int256 amountSpecified;
+        // The most of the output paid out of realReserves; the rest moves from the pair to lendReserves
+        // and is owed to the swapper as mirror shares. type(uint256).max for a plain swap.
+        uint256 realOutMax;
     }
 
     /// @notice Swaps tokens in the pool
+    /// @dev The whole output is priced on the pair curve at once; realOutMax only decides how it is delivered.
     /// @param self The pool state
     /// @param params The parameters for the swap
-    /// @return swapDelta The change in balances
+    /// @return swapDelta The change in balances for the whole trade, mirror part included
     /// @return amountToProtocol The amount of fees to be sent to the protocol
     /// @return swapFee The fee for the swap
     /// @return feeAmount The total fee amount for the swap.
+    /// @return mirrorOut The part of the output credited to lendReserves instead of paid out
     function swap(State storage self, SwapParams memory params, uint24 defaultProtocolFee)
         internal
-        returns (BalanceDelta swapDelta, uint256 amountToProtocol, uint24 swapFee, uint256 feeAmount)
+        returns (BalanceDelta swapDelta, uint256 amountToProtocol, uint24 swapFee, uint256 feeAmount, uint256 mirrorOut)
     {
         Reserves _pairReserves = self.pairReserves;
         Reserves _truncatedReserves = self.truncatedReserves;
@@ -251,9 +256,36 @@ library Pool {
 
         swapDelta = toBalanceDelta(amount0Delta, amount1Delta);
         BalanceDelta changeDelta = swapDelta + protocolFeeDelta;
+        if (amountOut > params.realOutMax) {
+            mirrorOut = amountOut - params.realOutMax;
+        }
+        ReservesLibrary.UpdateParam[] memory deltaParams;
+        if (mirrorOut == 0) {
+            deltaParams = new ReservesLibrary.UpdateParam[](2);
+            deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, changeDelta);
+            deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, changeDelta);
+        } else {
+            // the pair pays the whole output; the mirror part stays in the vault as lendReserves
+            BalanceDelta mirrorDelta =
+                params.zeroForOne ? toBalanceDelta(0, mirrorOut.toInt128()) : toBalanceDelta(mirrorOut.toInt128(), 0);
+            deltaParams = new ReservesLibrary.UpdateParam[](3);
+            deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, changeDelta - mirrorDelta);
+            deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, changeDelta);
+            deltaParams[2] = ReservesLibrary.UpdateParam(ReservesType.LEND, BalanceDelta.wrap(0) - mirrorDelta);
+        }
+        self.updateReserves(deltaParams);
+    }
+
+    /// @notice Pays out mirror shares' worth from realReserves and lendReserves
+    /// @param self The pool state
+    /// @param redeemForOne False to redeem currency0, true for currency1
+    /// @param amount The amount to pay out
+    /// @return delta The caller's balance delta, positive in the redeemed currency
+    function redeem(State storage self, bool redeemForOne, uint256 amount) internal returns (BalanceDelta delta) {
+        delta = redeemForOne ? toBalanceDelta(0, amount.toInt128()) : toBalanceDelta(amount.toInt128(), 0);
         ReservesLibrary.UpdateParam[] memory deltaParams = new ReservesLibrary.UpdateParam[](2);
-        deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, changeDelta);
-        deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.PAIR, changeDelta);
+        deltaParams[0] = ReservesLibrary.UpdateParam(ReservesType.REAL, delta);
+        deltaParams[1] = ReservesLibrary.UpdateParam(ReservesType.LEND, delta);
         self.updateReserves(deltaParams);
     }
 

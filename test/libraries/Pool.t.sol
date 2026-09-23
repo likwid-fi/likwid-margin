@@ -181,9 +181,10 @@ contract PoolTest is Test {
 
         // --- Action: Swap token0 for token1 ---
         int256 amountIn = -1e18; // Exact input
-        Pool.SwapParams memory swapParams = Pool.SwapParams({zeroForOne: true, amountSpecified: amountIn});
+        Pool.SwapParams memory swapParams =
+            Pool.SwapParams({zeroForOne: true, amountSpecified: amountIn, realOutMax: type(uint256).max});
 
-        (BalanceDelta swapDelta,, uint24 swapFee, uint256 feeAmount) = pool.swap(swapParams, 0);
+        (BalanceDelta swapDelta,, uint24 swapFee, uint256 feeAmount,) = pool.swap(swapParams, 0);
 
         // --- Assertions ---
         assertLt(int256(swapDelta.amount0()), 0, "Amount0 should be negative (sent)");
@@ -207,9 +208,10 @@ contract PoolTest is Test {
 
         // --- Action: Swap for exact output ---
         int256 amountOut = 0.5e18; // Exact output
-        Pool.SwapParams memory swapParams = Pool.SwapParams({zeroForOne: true, amountSpecified: amountOut});
+        Pool.SwapParams memory swapParams =
+            Pool.SwapParams({zeroForOne: true, amountSpecified: amountOut, realOutMax: type(uint256).max});
 
-        (BalanceDelta swapDelta,,,) = pool.swap(swapParams, 0);
+        (BalanceDelta swapDelta,,,,) = pool.swap(swapParams, 0);
 
         // --- Assertions ---
         assertLt(int256(swapDelta.amount0()), 0, "Amount0 should be negative (sent)");

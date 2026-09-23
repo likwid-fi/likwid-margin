@@ -70,6 +70,43 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
     /// @param fee The swap fee in hundredths of a bip
     event Swap(PoolId indexed id, address indexed sender, int128 amount0, int128 amount1, uint24 fee);
 
+    /// @notice Emitted when part of a swapMirror's output is credited as mirror shares
+    /// @dev The Swap event of the same call reports the whole trade, mirror part included
+    /// @param id The abi encoded hash of the pool key struct for the pool that was swapped in
+    /// @param sender The address that initiated the swap
+    /// @param recipient The address the shares were minted to
+    /// @param mirrorForOne False if the shares are in currency0, true if in currency1
+    /// @param mirrorAmount The part of the output credited to lendReserves instead of paid out
+    /// @param shares The shares minted
+    /// @param depositCumulativeLast The deposit cumulative the shares were priced at
+    event MirrorSwap(
+        PoolId indexed id,
+        address indexed sender,
+        address indexed recipient,
+        bool mirrorForOne,
+        uint256 mirrorAmount,
+        uint256 shares,
+        uint256 depositCumulativeLast
+    );
+
+    /// @notice Emitted when mirror shares are redeemed for real currency
+    /// @param id The abi encoded hash of the pool key struct for the pool redeemed from
+    /// @param sender The address that initiated the redeem and was credited the amount
+    /// @param from The address the shares were burned from
+    /// @param redeemForOne False if currency0 was redeemed, true if currency1
+    /// @param shares The shares burned
+    /// @param amount The amount paid out
+    /// @param depositCumulativeLast The deposit cumulative the shares were priced at
+    event Redeem(
+        PoolId indexed id,
+        address indexed sender,
+        address indexed from,
+        bool redeemForOne,
+        uint256 shares,
+        uint256 amount,
+        uint256 depositCumulativeLast
+    );
+
     /// @notice Emitted for donations
     /// @param id The abi encoded hash of the pool key struct for the pool that was donated to
     /// @param sender The address that initiated the donate call
@@ -178,6 +215,44 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
     function swap(PoolKey memory key, SwapParams memory params)
         external
         returns (BalanceDelta swapDelta, uint24 swapFee, uint256 feeAmount);
+
+    struct SwapMirrorParams {
+        /// Whether to swap token0 for token1 or vice versa
+        bool zeroForOne;
+        /// The desired input amount if negative (exactIn), or the desired output amount if positive (exactOut).
+        /// The output counts both the real and the mirror part.
+        int256 amountSpecified;
+        /// The most of the output paid out of realReserves; the rest is credited as mirror shares.
+        /// 0 for a pure mirror swap.
+        uint256 realOutMax;
+        /// The address the mirror shares are minted to
+        address recipient;
+    }
+
+    /// @notice Swap against the given pool, taking up to realOutMax of the output in real currency and the rest
+    /// as mirror shares: claims on lendReserves that accrue the deposit cumulative and are redeemed with `redeem`.
+    /// @dev The whole output is priced on the pair curve at once, exactly as in `swap`
+    /// @param key The pool to swap in
+    /// @param params The parameters for swapping
+    /// @return realDelta The balance delta of the address swapping; its output side is the real part only
+    /// @return mirrorOut The part of the output credited as mirror shares
+    /// @return shares The mirror shares minted to params.recipient
+    /// @return swapFee The cost of swap transactions is measured in parts per million (ppm) of the swapped amount
+    /// @return feeAmount The amount of lp fee charged for the swap
+    function swapMirror(PoolKey memory key, SwapMirrorParams memory params)
+        external
+        returns (BalanceDelta realDelta, uint256 mirrorOut, uint256 shares, uint24 swapFee, uint256 feeAmount);
+
+    /// @notice Burn mirror shares and credit their worth in real currency to the caller
+    /// @dev Reverts with NotEnoughReserves while realReserves cannot cover the amount
+    /// @param key The pool the shares belong to
+    /// @param redeemForOne False to redeem currency0 shares, true for currency1
+    /// @param from The address to burn the shares from; the caller needs to be it, its operator or approved
+    /// @param shares The shares to burn
+    /// @return amount The amount credited to the caller
+    function redeem(PoolKey memory key, bool redeemForOne, address from, uint256 shares)
+        external
+        returns (uint256 amount);
 
     /// @notice Donate the given currency amounts to the insurance funds of a pool
     /// @param key The key of the pool to donate to

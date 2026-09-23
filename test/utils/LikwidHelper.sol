@@ -29,6 +29,7 @@ import {SwapMath} from "../../src/libraries/SwapMath.sol";
 import {StageMath} from "../../src/libraries/StageMath.sol";
 import {InterestMath} from "../../src/libraries/InterestMath.sol";
 import {MarginPosition} from "../../src/libraries/MarginPosition.sol";
+import {MirrorShares} from "../../src/libraries/MirrorShares.sol";
 
 contract LikwidHelper is Owned, IUnlockCallback, IERC721Receiver, ERC721 {
     using MarginPosition for MarginPosition.State;
@@ -245,6 +246,17 @@ contract LikwidHelper is Owned, IUnlockCallback, IERC721Receiver, ERC721 {
         rate = borrowForOne
             ? InterestMath.getBorrowRateByReserves(_state.marginState, realReserve1 + mirrorReserve1, mirrorReserve1)
             : InterestMath.getBorrowRateByReserves(_state.marginState, realReserve0 + mirrorReserve0, mirrorReserve0);
+    }
+
+    /// @notice The vault ERC6909 id of a pool's mirror shares
+    function getMirrorShareId(PoolId poolId, bool forOne) external pure returns (uint256) {
+        return MirrorShares.toId(poolId, forOne);
+    }
+
+    /// @notice What mirror shares redeem for right now, interest included
+    function getMirrorShareAmount(PoolId poolId, bool forOne, uint256 shares) external view returns (uint256) {
+        PoolState memory _state = CurrentStateLibrary.getState(vault, poolId);
+        return MirrorShares.toAmount(shares, forOne ? _state.deposit1CumulativeLast : _state.deposit0CumulativeLast);
     }
 
     function getStageLiquidities(PoolId poolId) external view returns (uint128[][] memory liquidities) {

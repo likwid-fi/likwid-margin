@@ -59,6 +59,17 @@ contract MockVault is IVault {
         return (BalanceDelta.wrap(0), 0, 0);
     }
 
+    function swapMirror(PoolKey calldata, IVault.SwapMirrorParams calldata)
+        external
+        returns (BalanceDelta, uint256, uint256, uint24, uint256)
+    {
+        return (BalanceDelta.wrap(0), 0, 0, 0, 0);
+    }
+
+    function redeem(PoolKey calldata, bool, address, uint256) external returns (uint256) {
+        return 0;
+    }
+
     function donate(PoolKey calldata, uint256, uint256) external returns (BalanceDelta) {
         return BalanceDelta.wrap(0);
     }

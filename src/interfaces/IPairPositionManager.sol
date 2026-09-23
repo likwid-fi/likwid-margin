@@ -112,6 +112,84 @@ interface IPairPositionManager is IERC721 {
         payable
         returns (uint24 swapFee, uint256 feeAmount, uint256 amountIn);
 
+    struct SwapMirrorInputParams {
+        PoolId poolId;
+        bool zeroForOne;
+        /// Receives both the real output and the mirror shares
+        address to;
+        uint256 amountIn;
+        /// Minimum of the whole output, real and mirror together
+        uint256 amountOutMin;
+        /// The most of the output taken in real currency; the rest comes as mirror shares. 0 for pure mirror.
+        uint256 realOutMax;
+        uint256 deadline;
+    }
+
+    /// @notice Swaps an exact input, taking up to realOutMax of the output in real currency and the rest as
+    /// vault mirror shares
+    /// @param params The parameters for the swap.
+    /// @return swapFee The fee paid for the swap.
+    /// @return feeAmount The amount of the fee.
+    /// @return realOut The output paid out in real currency.
+    /// @return mirrorOut The output credited as mirror shares.
+    /// @return shares The mirror shares minted to params.to.
+    function exactInputMirror(SwapMirrorInputParams calldata params)
+        external
+        payable
+        returns (uint24 swapFee, uint256 feeAmount, uint256 realOut, uint256 mirrorOut, uint256 shares);
+
+    struct SwapMirrorOutputParams {
+        PoolId poolId;
+        bool zeroForOne;
+        /// Receives both the real output and the mirror shares
+        address to;
+        uint256 amountInMax;
+        /// The whole output, real and mirror together
+        uint256 amountOut;
+        /// The most of the output taken in real currency; the rest comes as mirror shares. 0 for pure mirror.
+        uint256 realOutMax;
+        uint256 deadline;
+    }
+
+    /// @notice Swaps for an exact output, taking up to realOutMax of it in real currency and the rest as vault
+    /// mirror shares
+    /// @param params The parameters for the swap.
+    /// @return swapFee The fee paid for the swap.
+    /// @return feeAmount The amount of the fee.
+    /// @return amountIn The amount of input tokens paid.
+    /// @return realOut The output paid out in real currency.
+    /// @return mirrorOut The output credited as mirror shares.
+    /// @return shares The mirror shares minted to params.to.
+    function exactOutputMirror(SwapMirrorOutputParams calldata params)
+        external
+        payable
+        returns (
+            uint24 swapFee,
+            uint256 feeAmount,
+            uint256 amountIn,
+            uint256 realOut,
+            uint256 mirrorOut,
+            uint256 shares
+        );
+
+    /// @notice Redeems the caller's vault mirror shares for real currency
+    /// @dev The caller must make this contract an operator of, or approve it for, the shares on the vault
+    /// @param poolId The pool the shares belong to
+    /// @param redeemForOne False to redeem currency0 shares, true for currency1
+    /// @param shares The shares to redeem, type(uint256).max for the caller's whole balance
+    /// @param to The address to send the currency to
+    /// @param amountMin The minimum amount to receive
+    /// @param deadline Deadline for the transaction
+    /// @return amount The amount sent to `to`
+    function redeemMirror(
+        PoolId poolId,
+        bool redeemForOne,
+        uint256 shares,
+        address to,
+        uint256 amountMin,
+        uint256 deadline
+    ) external returns (uint256 amount);
+
     /// @notice Donate to the insurance fund of a given pool
     /// @param poolId The ID of the pool to donate to
     /// @param amount0 The amount of token0 to donate

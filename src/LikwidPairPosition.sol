@@ -11,6 +11,7 @@ import {BalanceDelta} from "./types/BalanceDelta.sol";
 import {IVault} from "./interfaces/IVault.sol";
 import {IPairPositionManager} from "./interfaces/IPairPositionManager.sol";
 import {PairPosition} from "./libraries/PairPosition.sol";
+import {MirrorShares} from "./libraries/MirrorShares.sol";
 import {StateLibrary} from "./libraries/StateLibrary.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
 import {CurrencyPoolLibrary} from "./libraries/CurrencyPoolLibrary.sol";
@@ -26,7 +27,9 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
     enum Actions {
         MODIFY_LIQUIDITY,
         SWAP,
-        DONATE
+        DONATE,
+        SWAP_MIRROR,
+        REDEEM_MIRROR
     }
 
     function _unlockCallback(bytes calldata data) internal override returns (bytes memory) {
@@ -38,6 +41,10 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
             return _handleSwap(params);
         } else if (action == Actions.DONATE) {
             return _handleDonate(params);
+        } else if (action == Actions.SWAP_MIRROR) {
+            return _handleSwapMirror(params);
+        } else if (action == Actions.REDEEM_MIRROR) {
+            return _handleRedeemMirror(params);
         } else {
             InvalidCallback.selector.revertWith();
         }
@@ -211,6 +218,124 @@ contract LikwidPairPosition is IPairPositionManager, BasePositionManager {
             _processDelta(sender, recipient, key, delta, amount0Min, amount1Min, amount0Max, amount1Max);
 
         return abi.encode(swapFee, feeAmount, amount0, amount1);
+    }
+
+    /// @inheritdoc IPairPositionManager
+    function exactInputMirror(SwapMirrorInputParams calldata params)
+        external
+        payable
+        ensure(params.deadline)
+        returns (uint24 swapFee, uint256 feeAmount, uint256 realOut, uint256 mirrorOut, uint256 shares)
+    {
+        IVault.SwapMirrorParams memory swapParams = IVault.SwapMirrorParams({
+            zeroForOne: params.zeroForOne,
+            amountSpecified: -int256(params.amountIn),
+            realOutMax: params.realOutMax,
+            recipient: params.to
+        });
+        (swapFee, feeAmount,, realOut, mirrorOut, shares) =
+            _swapMirror(params.poolId, params.to, swapParams, params.amountOutMin, 0);
+    }
+
+    /// @inheritdoc IPairPositionManager
+    function exactOutputMirror(SwapMirrorOutputParams calldata params)
+        external
+        payable
+        ensure(params.deadline)
+        returns (
+            uint24 swapFee,
+            uint256 feeAmount,
+            uint256 amountIn,
+            uint256 realOut,
+            uint256 mirrorOut,
+            uint256 shares
+        )
+    {
+        IVault.SwapMirrorParams memory swapParams = IVault.SwapMirrorParams({
+            zeroForOne: params.zeroForOne,
+            amountSpecified: int256(params.amountOut),
+            realOutMax: params.realOutMax,
+            recipient: params.to
+        });
+        (swapFee, feeAmount, amountIn, realOut, mirrorOut, shares) =
+            _swapMirror(params.poolId, params.to, swapParams, 0, params.amountInMax);
+    }
+
+    function _swapMirror(
+        PoolId poolId,
+        address to,
+        IVault.SwapMirrorParams memory swapParams,
+        uint256 amountOutMin,
+        uint256 amountInMax
+    )
+        internal
+        returns (
+            uint24 swapFee,
+            uint256 feeAmount,
+            uint256 amountIn,
+            uint256 realOut,
+            uint256 mirrorOut,
+            uint256 shares
+        )
+    {
+        PoolKey memory key = poolKeys[poolId];
+        bytes memory callbackData = abi.encode(msg.sender, to, key, swapParams, amountInMax);
+        bytes memory result = vault.unlock(abi.encode(Actions.SWAP_MIRROR, callbackData));
+        (swapFee, feeAmount, amountIn, realOut, mirrorOut, shares) =
+            abi.decode(result, (uint24, uint256, uint256, uint256, uint256, uint256));
+        if (realOut + mirrorOut < amountOutMin) PriceSlippageTooHigh.selector.revertWith();
+    }
+
+    function _handleSwapMirror(bytes memory _data) internal returns (bytes memory) {
+        (
+            address sender,
+            address recipient,
+            PoolKey memory key,
+            IVault.SwapMirrorParams memory params,
+            uint256 amountInMax
+        ) = abi.decode(_data, (address, address, PoolKey, IVault.SwapMirrorParams, uint256));
+
+        (BalanceDelta delta, uint256 mirrorOut, uint256 shares, uint24 swapFee, uint256 feeAmount) =
+            vault.swapMirror(key, params);
+
+        (uint256 amount0Max, uint256 amount1Max) =
+            params.zeroForOne ? (amountInMax, uint256(0)) : (uint256(0), amountInMax);
+        (uint256 amount0, uint256 amount1) = _processDelta(sender, recipient, key, delta, 0, 0, amount0Max, amount1Max);
+        (uint256 amountIn, uint256 realOut) = params.zeroForOne ? (amount0, amount1) : (amount1, amount0);
+
+        return abi.encode(swapFee, feeAmount, amountIn, realOut, mirrorOut, shares);
+    }
+
+    /// @inheritdoc IPairPositionManager
+    function redeemMirror(
+        PoolId poolId,
+        bool redeemForOne,
+        uint256 shares,
+        address to,
+        uint256 amountMin,
+        uint256 deadline
+    ) external ensure(deadline) returns (uint256 amount) {
+        PoolKey memory key = poolKeys[poolId];
+        if (shares == type(uint256).max) {
+            shares = vault.balanceOf(msg.sender, MirrorShares.toId(poolId, redeemForOne));
+        }
+        bytes memory callbackData = abi.encode(msg.sender, to, key, redeemForOne, shares);
+        bytes memory result = vault.unlock(abi.encode(Actions.REDEEM_MIRROR, callbackData));
+        amount = abi.decode(result, (uint256));
+        if (amount < amountMin) PriceSlippageTooHigh.selector.revertWith();
+    }
+
+    function _handleRedeemMirror(bytes memory _data) internal returns (bytes memory) {
+        (address sender, address recipient, PoolKey memory key, bool redeemForOne, uint256 shares) =
+            abi.decode(_data, (address, address, PoolKey, bool, uint256));
+
+        uint256 amount = vault.redeem(key, redeemForOne, sender, shares);
+        Currency currency = redeemForOne ? key.currency1 : key.currency0;
+        if (amount > 0) {
+            currency.take(vault, recipient, amount, false);
+        }
+
+        return abi.encode(amount);
     }
 
     function donate(PoolId poolId, uint256 amount0, uint256 amount1, uint256 deadline) external ensure(deadline) {

@@ -5,7 +5,7 @@ pragma solidity 0.8.28;
 import {Currency, CurrencyLibrary} from "./types/Currency.sol";
 import {PoolKey} from "./types/PoolKey.sol";
 import {MarginBalanceDelta} from "./types/MarginBalanceDelta.sol";
-import {BalanceDelta, BalanceDeltaLibrary} from "./types/BalanceDelta.sol";
+import {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from "./types/BalanceDelta.sol";
 import {PoolId} from "./types/PoolId.sol";
 import {FeeTypes} from "./types/FeeTypes.sol";
 import {MarginActions} from "./types/MarginActions.sol";
@@ -14,6 +14,7 @@ import {IUnlockCallback} from "./interfaces/callback/IUnlockCallback.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
 import {CurrencyGuard} from "./libraries/CurrencyGuard.sol";
 import {Pool} from "./libraries/Pool.sol";
+import {MirrorShares} from "./libraries/MirrorShares.sol";
 import {ERC6909Claims} from "./base/ERC6909Claims.sol";
 import {NoDelegateCall} from "./base/NoDelegateCall.sol";
 import {ProtocolFees} from "./base/ProtocolFees.sol";
@@ -116,16 +117,68 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         noDelegateCall
         returns (BalanceDelta swapDelta, uint24 swapFee, uint256 feeAmount)
     {
-        if (params.amountSpecified == 0) AmountCannotBeZero.selector.revertWith();
+        (swapDelta,,, swapFee, feeAmount) = _swap(
+            key,
+            IVault.SwapMirrorParams({
+                zeroForOne: params.zeroForOne,
+                amountSpecified: params.amountSpecified,
+                realOutMax: type(uint256).max,
+                recipient: address(0)
+            })
+        );
+    }
+
+    /// @inheritdoc IVault
+    function swapMirror(PoolKey memory key, IVault.SwapMirrorParams memory params)
+        external
+        onlyWhenUnlocked
+        noDelegateCall
+        returns (BalanceDelta realDelta, uint256 mirrorOut, uint256 shares, uint24 swapFee, uint256 feeAmount)
+    {
+        return _swap(key, params);
+    }
+
+    /// @inheritdoc IVault
+    function redeem(PoolKey memory key, bool redeemForOne, address from, uint256 shares)
+        external
+        onlyWhenUnlocked
+        noDelegateCall
+        returns (uint256 amount)
+    {
+        if (shares == 0) AmountCannotBeZero.selector.revertWith();
+
+        PoolId id = key.toId();
+        Pool.State storage pool = _getAndUpdatePool(key);
+        uint256 depositCumulativeLast = redeemForOne ? pool.deposit1CumulativeLast : pool.deposit0CumulativeLast;
+        amount = MirrorShares.toAmount(shares, depositCumulativeLast);
+        _burnFrom(from, MirrorShares.toId(id, redeemForOne), shares);
+
+        BalanceDelta delta = pool.redeem(redeemForOne, amount);
+        _appendPoolBalanceDelta(key, msg.sender, delta);
+
+        emit Redeem(id, msg.sender, from, redeemForOne, shares, amount, depositCumulativeLast);
+    }
+
+    /// @notice Runs a swap, books its fees, mints any mirror shares and appends the caller's real delta
+    /// @dev swap and swapMirror share this body so the swap code is compiled once (inlined into both, it cost
+    /// about 900 bytes of runtime code)
+    function _swap(PoolKey memory key, IVault.SwapMirrorParams memory params)
+        internal
+        returns (BalanceDelta realDelta, uint256 mirrorOut, uint256 shares, uint24 swapFee, uint256 feeAmount)
+    {
+        if (params.amountSpecified == 0) {
+            AmountCannotBeZero.selector.revertWith();
+        }
 
         PoolId id = key.toId();
         Pool.State storage pool = _getAndUpdatePool(key);
         uint256 amountToProtocol;
-        (swapDelta, amountToProtocol, swapFee, feeAmount) = pool.swap(
-            Pool.SwapParams({zeroForOne: params.zeroForOne, amountSpecified: params.amountSpecified}),
+        (realDelta, amountToProtocol, swapFee, feeAmount, mirrorOut) = pool.swap(
+            Pool.SwapParams({
+                zeroForOne: params.zeroForOne, amountSpecified: params.amountSpecified, realOutMax: params.realOutMax
+            }),
             defaultProtocolFee
         );
-        _appendPoolBalanceDelta(key, msg.sender, swapDelta);
 
         Currency feeCurrency = params.zeroForOne ? key.currency0 : key.currency1;
         if (feeAmount > 0 || amountToProtocol > 0) {
@@ -135,7 +188,19 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
             _updateProtocolFees(feeCurrency, amountToProtocol);
         }
 
-        emit Swap(id, msg.sender, swapDelta.amount0(), swapDelta.amount1(), swapFee);
+        // the whole trade, mirror part included
+        emit Swap(id, msg.sender, realDelta.amount0(), realDelta.amount1(), swapFee);
+
+        if (mirrorOut > 0) {
+            bool mirrorForOne = params.zeroForOne;
+            realDelta = realDelta
+                - (mirrorForOne ? toBalanceDelta(0, mirrorOut.toInt128()) : toBalanceDelta(mirrorOut.toInt128(), 0));
+            uint256 depositCumulativeLast = mirrorForOne ? pool.deposit1CumulativeLast : pool.deposit0CumulativeLast;
+            shares = MirrorShares.toShares(mirrorOut, depositCumulativeLast);
+            _mint(params.recipient, MirrorShares.toId(id, mirrorForOne), shares);
+            emit MirrorSwap(id, msg.sender, params.recipient, mirrorForOne, mirrorOut, shares, depositCumulativeLast);
+        }
+        _appendPoolBalanceDelta(key, msg.sender, realDelta);
     }
 
     function donate(PoolKey memory key, uint256 amount0, uint256 amount1)
