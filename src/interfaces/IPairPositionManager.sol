@@ -121,6 +121,7 @@ interface IPairPositionManager is IERC721 {
         /// Minimum of the whole output, real and mirror together
         uint256 amountOutMin;
         /// The most of the output taken in real currency; the rest comes as mirror shares. 0 for pure mirror.
+        /// Capped at the pool's real reserve, so type(uint256).max means "as much real as there is".
         uint256 realOutMax;
         uint256 deadline;
     }
@@ -147,6 +148,7 @@ interface IPairPositionManager is IERC721 {
         /// The whole output, real and mirror together
         uint256 amountOut;
         /// The most of the output taken in real currency; the rest comes as mirror shares. 0 for pure mirror.
+        /// Capped at the pool's real reserve, so type(uint256).max means "as much real as there is".
         uint256 realOutMax;
         uint256 deadline;
     }

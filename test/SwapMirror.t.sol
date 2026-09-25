@@ -701,6 +701,98 @@ contract SwapMirrorTest is Test {
         _redeem(true, shares + 1);
     }
 
+    // ==================== realOutMax is a cap (audit) ====================
+
+    /// Borrow token1 until the cap stops it, then sell token0 until plain swaps run out of real token1.
+    function _realToken1NearlyGone() internal returns (uint128 real1) {
+        for (uint256 i = 0; i < 60; i++) {
+            skip(1 hours);
+            token0.mint(address(this), 0.4e18);
+            try marginPositionManager.addMargin(
+                key,
+                IMarginPositionManager.CreateParams({
+                    marginForOne: false,
+                    leverage: 2,
+                    marginAmount: 0.4e18,
+                    borrowAmountMax: 0,
+                    recipient: address(this),
+                    deadline: block.timestamp
+                })
+            ) {}
+            catch {
+                break;
+            }
+        }
+        for (uint256 i = 0; i < 400; i++) {
+            skip(1 hours);
+            token0.mint(address(this), 0.2e18);
+            try pairPositionManager.exactInput(
+                IPairPositionManager.SwapInputParams({
+                    poolId: id,
+                    zeroForOne: true,
+                    to: address(this),
+                    amountIn: 0.2e18,
+                    amountOutMin: 0,
+                    deadline: block.timestamp
+                })
+            ) {}
+            catch {
+                break;
+            }
+        }
+        real1 = _real1();
+        assertLt(real1, _quoteMirror(true, 20e18), "a 20e18 swap should want more than the real token1 left");
+    }
+
+    /// Pure-mirror quote, for when a plain swap cannot run
+    function _quoteMirror(bool zeroForOne, uint256 amountIn) internal returns (uint256 amountOut) {
+        uint256 snapshot = vm.snapshotState();
+        (, amountOut,) = _mirrorIn(zeroForOne, amountIn, 0);
+        vm.revertToState(snapshot);
+    }
+
+    /// Asking for as much real as possible takes what there is and mirrors the rest instead of reverting.
+    function testRealOutMax_CappedAtAvailableReal() public {
+        uint128 real1 = _realToken1NearlyGone();
+        uint256 whole = _quoteMirror(true, 20e18);
+
+        (uint256 realOut, uint256 mirrorOut,) = _mirrorIn(true, 20e18, type(uint256).max);
+
+        assertEq(realOut, real1);
+        assertEq(realOut + mirrorOut, whole);
+        assertEq(_real1(), 0);
+    }
+
+    /// A router that passes the real reserve it read cannot be made to revert by someone lowering it first.
+    function testRealOutMax_FrontrunCannotRevert() public {
+        uint128 real1 = _realToken1NearlyGone();
+        _plainIn(true, 1e12);
+        uint128 real1Now = _real1();
+        assertLt(real1Now, real1);
+
+        (uint256 realOut, uint256 mirrorOut,) = _mirrorIn(true, 20e18, real1);
+
+        assertEq(realOut, real1Now);
+        assertGt(mirrorOut, 0);
+    }
+
+    /// Plain swaps keep reverting on a shortage: they never turn into mirror swaps.
+    function testPlainSwap_StillRevertsWhenRealShort() public {
+        _realToken1NearlyGone();
+        token0.mint(address(this), 20e18);
+        vm.expectRevert(ReservesLibrary.NotEnoughReserves.selector);
+        pairPositionManager.exactInput(
+            IPairPositionManager.SwapInputParams({
+                poolId: id,
+                zeroForOne: true,
+                to: address(this),
+                amountIn: 20e18,
+                amountOutMin: 0,
+                deadline: block.timestamp
+            })
+        );
+    }
+
     // ==================== share ids ====================
 
     function testShareIdsDisjointFromCurrencyClaims() public view {

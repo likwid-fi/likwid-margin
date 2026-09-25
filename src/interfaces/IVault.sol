@@ -150,6 +150,14 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
         InsuranceFunds insuranceFunds
     );
 
+    /// @notice Emitted when one insurance fund's surplus buys the other's shortfall from the pair on its curve
+    /// @dev Moves the pair price; only insurance funds and pair reserves change
+    /// @param id The abi encoded hash of the pool key struct for the pool
+    /// @param zeroForOne True if the currency0 fund paid currency0 for currency1, false for the other way round
+    /// @param amountIn The amount the surplus fund paid into the pair
+    /// @param amountOut The amount the short fund took from the pair
+    event InsuranceFundsSwap(PoolId indexed id, bool zeroForOne, uint256 amountIn, uint256 amountOut);
+
     /// @notice Emitted when interest is updated for a pool
     /// @param id The abi encoded hash of the pool key struct for the pool that was modified
     /// @param realReserves The real reserves of the pool
@@ -223,7 +231,7 @@ interface IVault is IERC6909Claims, IMarginBase, IExtsload, IExttload {
         /// The output counts both the real and the mirror part.
         int256 amountSpecified;
         /// The most of the output paid out of realReserves; the rest is credited as mirror shares.
-        /// 0 for a pure mirror swap.
+        /// 0 for a pure mirror swap. Capped at the real reserve the pool holds, so a shortage never reverts.
         uint256 realOutMax;
         /// The address the mirror shares are minted to
         address recipient;

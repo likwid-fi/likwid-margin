@@ -355,6 +355,54 @@ library Pool {
             self.updateReserves(deltaParams, InsuranceFunds.wrap(BalanceDelta.unwrap(params.fundsDelta)));
     }
 
+    /// @notice When one insurance fund is short and the other has a surplus, the surplus buys the shortfall from
+    /// the pair on the x * y = k curve, without fees
+    /// @dev Only insurance funds and pair reserves move, by offsetting amounts in each currency, so
+    /// real + mirror == pair + lend + funds still holds. Fills the short side to 0 if the surplus covers it,
+    /// otherwise spends the whole surplus. Pricing on the curve keeps k from falling: the fund pays the slippage,
+    /// so the LPs cannot be drained by whoever arbitrages the price back, and donating in order to trigger it
+    /// always loses. Rounds in the pair's favour and never reverts, since it runs on the liquidation path.
+    /// @param self The pool state
+    /// @return zeroForOne True if the currency0 fund paid for currency1, false for the other way round
+    /// @return amountIn What the surplus fund paid into the pair
+    /// @return amountOut What the short fund got from the pair; 0 if nothing was done
+    function rebalanceInsuranceFunds(State storage self)
+        internal
+        returns (bool zeroForOne, uint256 amountIn, uint256 amountOut)
+    {
+        (int128 fund0, int128 fund1) = self.insuranceFunds.unpack();
+        if (fund0 < 0 && fund1 > 0) {
+            zeroForOne = false;
+        } else if (fund0 > 0 && fund1 < 0) {
+            zeroForOne = true;
+        } else {
+            return (zeroForOne, 0, 0);
+        }
+        (uint128 pair0, uint128 pair1) = self.pairReserves.reserves();
+        (uint256 reserveIn, uint256 reserveOut, uint256 surplus, uint256 shortfall) = zeroForOne
+            ? (uint256(pair0), uint256(pair1), uint256(int256(fund0)), uint256(-int256(fund1)))
+            : (uint256(pair1), uint256(pair0), uint256(int256(fund1)), uint256(-int256(fund0)));
+        if (reserveIn == 0 || reserveOut <= 1) return (zeroForOne, 0, 0);
+
+        amountOut = shortfall < reserveOut ? shortfall : reserveOut - 1;
+        amountIn = Math.mulDivRoundingUp(reserveIn, amountOut, reserveOut - amountOut);
+        if (amountIn > surplus) {
+            amountIn = surplus;
+            amountOut = Math.mulDiv(surplus, reserveOut, reserveIn + surplus);
+            if (amountOut == 0) return (zeroForOne, 0, 0);
+        }
+
+        int128 fundIn = amountIn.toInt128();
+        int128 fundOut = amountOut.toInt128();
+        if (zeroForOne) {
+            self.insuranceFunds = toInsuranceFunds(fund0 - fundIn, fund1 + fundOut);
+            self.pairReserves = toReserves(pair0 + amountIn.toUint128(), pair1 - amountOut.toUint128());
+        } else {
+            self.insuranceFunds = toInsuranceFunds(fund0 + fundOut, fund1 - fundIn);
+            self.pairReserves = toReserves(pair0 - amountOut.toUint128(), pair1 + amountIn.toUint128());
+        }
+    }
+
     /// @notice Reverts if the given pool has not been initialized
     /// @param self The pool state
     function checkPoolInitialized(State storage self) internal view {

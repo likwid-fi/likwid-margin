@@ -135,6 +135,9 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         noDelegateCall
         returns (BalanceDelta realDelta, uint256 mirrorOut, uint256 shares, uint24 swapFee, uint256 feeAmount)
     {
+        // a cap, not a demand: real the pool is short of comes as shares instead of reverting
+        uint256 realAvailable = _pools[key.toId()].realReserves.reserve01(params.zeroForOne);
+        if (params.realOutMax > realAvailable) params.realOutMax = realAvailable;
         return _swap(key, params);
     }
 
@@ -237,6 +240,10 @@ contract LikwidVault is IVault, ProtocolFees, NoDelegateCall, ERC6909Claims, Ext
         uint256 protocolInterest1;
         (marginDelta, marginFeesToProtocol, swapFeesToProtocol, protocolInterest0, protocolInterest1) =
             pool.margin(params, defaultProtocolFee);
+        {
+            (bool zeroForOne, uint256 amountIn, uint256 amountOut) = pool.rebalanceInsuranceFunds();
+            if (amountOut > 0) emit InsuranceFundsSwap(id, zeroForOne, amountIn, amountOut);
+        }
 
         bool isMargin = params.action == MarginActions.MARGIN;
         (Currency marginCurrency, Currency borrowCurrency) =
