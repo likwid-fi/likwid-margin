@@ -215,4 +215,60 @@ contract PriceMathTest is Test {
         assertEq(result.reserve0(), destReserves.reserve0());
         assertEq(result.reserve1(), destReserves.reserve1());
     }
+
+    // ==================== liveness (audit) ====================
+
+    /// A large reserve0 and a long idle period used to overflow the unused upper bound and revert.
+    function testTransferReserves_longIdleLargeReserve0_followsPair() public pure {
+        Reserves origin = toReserves(1e30, 100e18);
+        Reserves dest = toReserves(1.1e30, 91e18);
+        Reserves result = PriceMath.transferReserves(origin, dest, 336_790, 3000);
+        assertEq(result.reserve0(), dest.reserve0());
+        assertEq(result.reserve1(), dest.reserve1());
+        // and far beyond
+        result = PriceMath.transferReserves(origin, dest, 10 * 365 days, 3000);
+        assertEq(result.reserve0(), dest.reserve0());
+    }
+
+    /// Within the allowed move the clamp still applies, also for a large reserve0.
+    function testTransferReserves_largeReserve0_stillClamped() public pure {
+        Reserves origin = toReserves(1e30, 100e18);
+        Reserves dest = toReserves(0.5e30, 100e18); // price0 doubled
+        Reserves result = PriceMath.transferReserves(origin, dest, 10, 3000); // 30% allowed
+        assertGt(result.reserve0(), dest.reserve0());
+        assertEq(result.reserve1(), dest.reserve1());
+    }
+
+    /// A clamp that rounds reserve0 down to 0 keeps 1 instead, so the next update is still speed-limited.
+    function testTransferReserves_neverRoundsReserve0ToZero() public pure {
+        Reserves origin = toReserves(1, 1e9);
+        Reserves dest = toReserves(1, 1);
+        Reserves result = PriceMath.transferReserves(origin, dest, 1, 3000);
+        assertEq(result.reserve0(), 1);
+        assertEq(result.reserve1(), 1);
+    }
+
+    /// An origin ratio so extreme that its price rounds to 0 follows the pair instead of dividing by zero.
+    function testTransferReserves_extremeOriginRatio_followsPair() public pure {
+        Reserves origin = toReserves(type(uint128).max, 1);
+        Reserves dest = toReserves(1e18, 1e18);
+        Reserves result = PriceMath.transferReserves(origin, dest, 1, 3000);
+        assertEq(result.reserve0(), dest.reserve0());
+        assertEq(result.reserve1(), dest.reserve1());
+    }
+
+    function testFuzz_TransferReserves_neverReverts(
+        uint128 o0,
+        uint128 o1,
+        uint128 d0,
+        uint128 d1,
+        uint32 timeElapsed,
+        uint24 speed
+    ) public pure {
+        Reserves result = PriceMath.transferReserves(toReserves(o0, o1), toReserves(d0, d1), timeElapsed, speed);
+        if (d0 > 0 && d1 > 0) {
+            assertGt(result.reserve0(), 0);
+            assertEq(result.reserve1(), d1);
+        }
+    }
 }
