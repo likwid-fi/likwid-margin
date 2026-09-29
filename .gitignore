@@ -8,6 +8,7 @@ out/
 /broadcast/*/31337/
 /broadcast/*/11155111/
 /broadcast/**/dry-run/
+/broadcast/**/run-*.json
 
 # Docs
 docs/
